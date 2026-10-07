@@ -1,4 +1,6 @@
 """
+filtrado_espectral.py  --  Tarea 1, seccion 2.4 (Reduccion espectral FFT/IFFT)
+
 Cadena: bloque -> ventana -> FFT -> estimacion/modificacion espectral -> IFFT
         -> reconstruccion por solapamiento (overlap-add) -> salida
 
@@ -46,7 +48,7 @@ def _trocear(x: np.ndarray, N: int, hop: int):
 
 
 # ----------------------------------------------------------------------------
-# Calculo de ganancias espectrales 
+# Calculo de ganancias espectrales (reales, una por bin de rfft)
 # ----------------------------------------------------------------------------
 
 def estimar_piso_ruido(mag: np.ndarray, ancho_suavizado: int = 31) -> np.ndarray:
@@ -166,3 +168,95 @@ def filtrar_espectral(x, fs, N=1024, metodo="picos", solape=0.5, **params):
     info = {"ganancias": G, "fraccion_modificada": float(np.mean(G < 0.99)),
             "N": N, "hop": hop}
     return y, info
+
+
+# ----------------------------------------------------------------------------
+# Verificaciones y metricas 
+# ----------------------------------------------------------------------------
+
+def verificar_simetria_conjugada(bloque: np.ndarray, G_rfft: np.ndarray) -> float:
+    """
+    Aplica G (por bin de rfft) en una FFT COMPLETA reconstruyendo la mitad
+    negativa como conjugado, y devuelve la parte imaginaria maxima tras la IFFT.
+    Un valor ~1e-16 confirma que la salida es real.
+    """
+    N = len(bloque)
+    X = np.fft.fft(bloque)
+    Gf = np.concatenate([G_rfft, G_rfft[-2:0:-1]])      # G[N-k] = G[k]
+    y = np.fft.ifft(X * Gf)
+    return float(np.max(np.abs(y.imag)))
+
+
+def mse(s, s_hat):
+    s, s_hat = np.asarray(s), np.asarray(s_hat)
+    return float(np.mean((s - s_hat) ** 2))
+
+
+def snr_db(s, s_hat):
+    s, s_hat = np.asarray(s), np.asarray(s_hat)
+    return float(10 * np.log10(np.sum(s ** 2) / np.sum((s - s_hat) ** 2)))
+
+
+def energia_util_conservada(s_limpia, s_hat):
+    """% de la energia de la senal limpia presente en la salida (proyeccion)."""
+    s_limpia, s_hat = np.asarray(s_limpia), np.asarray(s_hat)
+    return float(100 * np.sum(s_hat ** 2) / np.sum(s_limpia ** 2))
+
+
+def atenuacion_db(x_in, x_out, fs, f0, ancho=5.0):
+    """Atenuacion [dB] de la banda f0 +/- ancho entre entrada y salida."""
+    def pot(x):
+        X = np.fft.rfft(x * np.hanning(len(x)))
+        f = np.fft.rfftfreq(len(x), 1 / fs)
+        return np.sum(np.abs(X[(f >= f0 - ancho) & (f <= f0 + ancho)]) ** 2)
+    return float(10 * np.log10(pot(x_in) / max(pot(x_out), 1e-30)))
+
+
+def barrido_compromiso(s, x, fs, metodo, nombre_param, valores, N=1024, **fijos):
+    """
+    Barre un parametro y devuelve lista de dicts con MSE, SNR y energia util.
+    Sirve para mostrar el compromiso ruido vs distorsion (requisito 2.4 f).
+    """
+    filas = []
+    for v in valores:
+        y, _ = filtrar_espectral(x, fs, N, metodo, **{**fijos, nombre_param: v})
+        filas.append({nombre_param: v, "mse": mse(s, y), "snr_db": snr_db(s, y),
+                      "energia_util_%": energia_util_conservada(s, y)})
+    return filas
+
+
+# ----------------------------------------------------------------------------
+# Demo / autoprueba:  python filtrado_espectral.py
+# ----------------------------------------------------------------------------
+if __name__ == "__main__":
+    fs, dur = 8000, 2.0
+    t = np.arange(int(fs * dur)) / fs
+    limpia = (1.0 * np.sin(2 * np.pi * 300 * t) + 0.7 * np.sin(2 * np.pi * 700 * t)
+              + 0.5 * np.sin(2 * np.pi * 1100 * t))
+    rng = np.random.default_rng(1)
+    interf = 0.8 * np.sin(2 * np.pi * 2150 * t)            # separada de la banda util
+    blanco = 0.3 * rng.standard_normal(len(t))
+    x = limpia + interf + blanco
+    print(f"SNR entrada: {snr_db(limpia, x):.2f} dB")
+
+    # 1) reconstruccion perfecta con ganancia 1
+    y0, _ = filtrar_espectral(x, fs, 1024, "top_k", k=513)
+    print(f"Error de reconstruccion (G=1): {np.max(np.abs(y0 - x)):.2e}")
+
+    # 2) simetria conjugada
+    N = 1024
+    print(f"Max |Im| tras IFFT: {verificar_simetria_conjugada(x[:N], np.ones(N//2+1)):.2e}")
+
+    # 3) metodos
+    for nombre, kw in [("picos", dict(umbral=6, ancho_bins=2, banda_util=(200, 1300))),
+                       ("resta", dict(alpha=1.5)),
+                       ("top_k", dict(k=12))]:
+        y, info = filtrar_espectral(x, fs, N, nombre, **kw)
+        print(f"{nombre:6s} SNR={snr_db(limpia, y):6.2f} dB  dSNR={snr_db(limpia, y)-snr_db(limpia, x):+6.2f}  "
+              f"MSE={mse(limpia, y):.4f}  E_util={energia_util_conservada(limpia, y):6.1f} %  "
+              f"atenuacion 2150 Hz={atenuacion_db(x, y, fs, 2150):5.1f} dB")
+
+    # 4) compromiso: resta con alpha creciente
+    print("\nCompromiso (resta, alpha creciente):")
+    for fila in barrido_compromiso(limpia, x, fs, "resta", "alpha", [0.5, 1, 2, 4, 8]):
+        print({k: round(v, 3) for k, v in fila.items()})
