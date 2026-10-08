@@ -1,0 +1,19 @@
+{
+    "caso": 3,
+    "frecuencia_muestreo_Hz": 8000,
+    "numero_muestras": 8192,
+    "resolucion_frecuencial_Hz": 0.9765625,
+    "tipo_ruido": "Ruido de banda limitada",
+    "banda_configurada_Hz": [
+        900,
+        1300
+    ],
+    "ventana_suavizado": 101,
+    "umbral_relativo": 0.1,
+    "banda_detectada_Hz": [
+        870.1171875,
+        1327.1484375
+    ],
+    "error_limite_inferior_Hz": 29.8828125,
+    "error_limite_superior_Hz": 27.1484375
+}
