@@ -190,3 +190,202 @@ def roc_causal(b, a):
         return 0.0
 
     return float(np.max(np.abs(polos)))
+
+
+def analizar_respuesta_frecuencia(b, a, fs, puntos=4096):
+    """
+    Calcula la respuesta en frecuencia de un filtro digital.
+
+    Parámetros
+    ----------
+    b : array_like
+        Coeficientes del numerador.
+    a : array_like
+        Coeficientes del denominador.
+    fs : float
+        Frecuencia de muestreo en Hz.
+    puntos : int
+        Cantidad de puntos utilizados para evaluar la respuesta.
+
+    Retorna
+    -------
+    frecuencia : numpy.ndarray
+        Frecuencias en Hz.
+    magnitud_db : numpy.ndarray
+        Magnitud de H(e^jw) en dB.
+    fase : numpy.ndarray
+        Fase desenrollada en radianes.
+    frecuencia_gd : numpy.ndarray
+        Frecuencias correspondientes al retardo de grupo.
+    retardo_grupo : numpy.ndarray
+        Retardo de grupo expresado en muestras.
+    """
+
+    from scipy.signal import freqz, group_delay
+
+    b = np.asarray(b, dtype=np.float64)
+    a = np.asarray(a, dtype=np.float64)
+
+    frecuencia, h = freqz(
+        b,
+        a,
+        worN=puntos,
+        fs=fs
+    )
+
+    magnitud = np.abs(h)
+
+    # Evita log10(0)
+    magnitud_db = 20.0 * np.log10(
+        np.maximum(magnitud, np.finfo(np.float64).tiny)
+    )
+
+    fase = np.unwrap(np.angle(h))
+
+    frecuencia_gd, retardo_grupo = group_delay(
+        (b, a),
+        w=puntos,
+        fs=fs
+    )
+
+    return (
+        frecuencia,
+        magnitud_db,
+        fase,
+        frecuencia_gd,
+        retardo_grupo,
+    )
+
+
+def graficar_polos_ceros(b, a, titulo="Diagrama de polos y ceros"):
+    """
+    Genera el diagrama de polos y ceros incluyendo el círculo unitario.
+
+    Retorna
+    -------
+    fig, ax
+        Objetos de Matplotlib para poder mostrar o guardar la figura.
+    """
+
+    import matplotlib.pyplot as plt
+
+    ceros, polos = obtener_polos_ceros(b, a)
+
+    fig, ax = plt.subplots(figsize=(6, 6))
+
+    # Círculo unitario
+    angulo = np.linspace(0.0, 2.0 * np.pi, 500)
+
+    ax.plot(
+        np.cos(angulo),
+        np.sin(angulo),
+        "--",
+        label="Círculo unitario"
+    )
+
+    # Ejes real e imaginario
+    ax.axhline(0.0, linewidth=0.8)
+    ax.axvline(0.0, linewidth=0.8)
+
+    if len(ceros) > 0:
+        ax.plot(
+            np.real(ceros),
+            np.imag(ceros),
+            "o",
+            fillstyle="none",
+            markersize=9,
+            label="Ceros"
+        )
+
+    if len(polos) > 0:
+        ax.plot(
+            np.real(polos),
+            np.imag(polos),
+            "x",
+            markersize=9,
+            label="Polos"
+        )
+
+    valores = [1.0]
+
+    if len(ceros) > 0:
+        valores.extend(np.abs(ceros))
+
+    if len(polos) > 0:
+        valores.extend(np.abs(polos))
+
+    limite = max(valores) + 0.25
+
+    ax.set_xlim(-limite, limite)
+    ax.set_ylim(-limite, limite)
+
+    ax.set_aspect("equal", adjustable="box")
+
+    ax.set_xlabel("Parte real")
+    ax.set_ylabel("Parte imaginaria")
+    ax.set_title(titulo)
+    ax.grid(True)
+    ax.legend()
+
+    return fig, ax
+
+
+def graficar_respuesta_frecuencia(
+    b,
+    a,
+    fs,
+    puntos=4096,
+    titulo="Filtro digital"
+):
+    """
+    Genera gráficas independientes de magnitud, fase y retardo de grupo.
+
+    Retorna
+    -------
+    figuras : tuple
+        Tupla con las tres figuras generadas.
+    """
+
+    import matplotlib.pyplot as plt
+
+    (
+        frecuencia,
+        magnitud_db,
+        fase,
+        frecuencia_gd,
+        retardo_grupo,
+    ) = analizar_respuesta_frecuencia(
+        b,
+        a,
+        fs,
+        puntos
+    )
+
+    # Magnitud
+    fig_mag, ax_mag = plt.subplots()
+
+    ax_mag.plot(frecuencia, magnitud_db)
+    ax_mag.set_xlabel("Frecuencia [Hz]")
+    ax_mag.set_ylabel("Magnitud [dB]")
+    ax_mag.set_title(f"{titulo} - Magnitud")
+    ax_mag.grid(True)
+
+    # Fase
+    fig_fase, ax_fase = plt.subplots()
+
+    ax_fase.plot(frecuencia, fase)
+    ax_fase.set_xlabel("Frecuencia [Hz]")
+    ax_fase.set_ylabel("Fase [rad]")
+    ax_fase.set_title(f"{titulo} - Fase")
+    ax_fase.grid(True)
+
+    # Retardo de grupo
+    fig_gd, ax_gd = plt.subplots()
+
+    ax_gd.plot(frecuencia_gd, retardo_grupo)
+    ax_gd.set_xlabel("Frecuencia [Hz]")
+    ax_gd.set_ylabel("Retardo de grupo [muestras]")
+    ax_gd.set_title(f"{titulo} - Retardo de grupo")
+    ax_gd.grid(True)
+
+    return fig_mag, fig_fase, fig_gd
