@@ -502,3 +502,159 @@ def aplicar_filtro_manual_bloque(x, b, a, estado=None):
     }
 
     return y, estado_final
+
+
+def disenar_fir_kaiser(
+    fs,
+    frecuencia_paso,
+    frecuencia_rechazo,
+    atenuacion_db=40.0,
+    margen_db=5.0
+):
+    """
+    Diseña un filtro FIR pasa bajas mediante ventana Kaiser.
+
+    Se agrega un pequeño margen de diseño a la atenuación solicitada
+    para compensar la naturaleza aproximada de kaiserord.
+
+    Retorna
+    -------
+    b : numpy.ndarray
+        Coeficientes FIR.
+    a : numpy.ndarray
+        Denominador [1].
+    orden : int
+        Orden del filtro.
+    """
+
+    from scipy.signal import firwin, kaiserord
+
+    if not 0 < frecuencia_paso < frecuencia_rechazo < fs / 2:
+        raise ValueError("Las frecuencias de diseño no son válidas.")
+
+    ancho_transicion = (
+        frecuencia_rechazo - frecuencia_paso
+    ) / (fs / 2)
+
+    num_taps, beta = kaiserord(
+        atenuacion_db + margen_db,
+        ancho_transicion
+    )
+
+    # Para un pasa bajas FIR de tipo I conviene un número impar de taps.
+    if num_taps % 2 == 0:
+        num_taps += 1
+
+    frecuencia_corte = (
+        frecuencia_paso + frecuencia_rechazo
+    ) / 2
+
+    b = firwin(
+        num_taps,
+        cutoff=frecuencia_corte,
+        window=("kaiser", beta),
+        fs=fs,
+        pass_zero="lowpass"
+    )
+
+    a = np.array([1.0])
+
+    orden = num_taps - 1
+
+    return b, a, orden
+
+
+def disenar_iir_butterworth(
+    fs,
+    frecuencia_paso,
+    frecuencia_rechazo,
+    rizado_db=1.0,
+    atenuacion_db=40.0
+):
+    """
+    Diseña un filtro IIR Butterworth pasa bajas.
+
+    Retorna
+    -------
+    b : numpy.ndarray
+        Coeficientes del numerador.
+    a : numpy.ndarray
+        Coeficientes del denominador.
+    orden : int
+        Orden calculado.
+    """
+
+    from scipy.signal import buttord, butter
+
+    if not 0 < frecuencia_paso < frecuencia_rechazo < fs / 2:
+        raise ValueError("Las frecuencias de diseño no son válidas.")
+
+    orden, frecuencia_natural = buttord(
+        frecuencia_paso,
+        frecuencia_rechazo,
+        rizado_db,
+        atenuacion_db,
+        fs=fs
+    )
+
+    b, a = butter(
+        orden,
+        frecuencia_natural,
+        btype="low",
+        fs=fs
+    )
+
+    return b, a, orden
+
+
+def evaluar_especificaciones(
+    b,
+    a,
+    fs,
+    frecuencia_paso,
+    frecuencia_rechazo,
+    puntos=65536
+):
+    """
+    Mide el comportamiento real del filtro diseñado.
+
+    Retorna un diccionario con:
+    - rizado de banda de paso;
+    - pérdida máxima en banda de paso;
+    - atenuación mínima en banda de rechazo.
+    """
+
+    from scipy.signal import freqz
+
+    frecuencia, h = freqz(
+        b,
+        a,
+        worN=puntos,
+        fs=fs
+    )
+
+    magnitud_db = 20.0 * np.log10(
+        np.maximum(
+            np.abs(h),
+            np.finfo(np.float64).tiny
+        )
+    )
+
+    banda_paso = frecuencia <= frecuencia_paso
+    banda_rechazo = frecuencia >= frecuencia_rechazo
+
+    max_paso = np.max(magnitud_db[banda_paso])
+    min_paso = np.min(magnitud_db[banda_paso])
+
+    rizado_db = max_paso - min_paso
+    perdida_paso_db = -min_paso
+
+    atenuacion_rechazo_db = -np.max(
+        magnitud_db[banda_rechazo]
+    )
+
+    return {
+        "rizado_paso_db": float(rizado_db),
+        "perdida_max_paso_db": float(perdida_paso_db),
+        "atenuacion_rechazo_db": float(atenuacion_rechazo_db),
+    }
