@@ -389,3 +389,116 @@ def graficar_respuesta_frecuencia(
     ax_gd.grid(True)
 
     return fig_mag, fig_fase, fig_gd
+
+
+def aplicar_filtro_manual_bloque(x, b, a, estado=None):
+    """
+    Aplica la ecuación de diferencias a un bloque de muestras
+    conservando el estado entre llamadas.
+
+    Parámetros
+    ----------
+    x : array_like
+        Bloque de entrada.
+    b : array_like
+        Coeficientes del numerador.
+    a : array_like
+        Coeficientes del denominador.
+    estado : dict o None
+        Estado proveniente del bloque anterior.
+
+        Contiene:
+            "x_prev": muestras anteriores de entrada.
+            "y_prev": muestras anteriores de salida.
+
+        Si es None, se asume reposo inicial.
+
+    Retorna
+    -------
+    y : numpy.ndarray
+        Salida correspondiente al bloque.
+    estado : dict
+        Estado final que debe utilizarse en el siguiente bloque.
+    """
+
+    x = np.asarray(x, dtype=np.float64)
+    b = np.asarray(b, dtype=np.float64)
+    a = np.asarray(a, dtype=np.float64)
+
+    if x.ndim != 1:
+        raise ValueError("x debe ser un arreglo unidimensional.")
+
+    if b.ndim != 1 or len(b) == 0:
+        raise ValueError("b debe contener al menos un coeficiente.")
+
+    if a.ndim != 1 or len(a) == 0:
+        raise ValueError("a debe contener al menos un coeficiente.")
+
+    if a[0] == 0:
+        raise ValueError("a[0] no puede ser cero.")
+
+    memoria_x = len(b) - 1
+    memoria_y = len(a) - 1
+
+    if estado is None:
+        x_prev = np.zeros(memoria_x, dtype=np.float64)
+        y_prev = np.zeros(memoria_y, dtype=np.float64)
+    else:
+        x_prev = np.asarray(
+            estado["x_prev"],
+            dtype=np.float64
+        ).copy()
+
+        y_prev = np.asarray(
+            estado["y_prev"],
+            dtype=np.float64
+        ).copy()
+
+        if len(x_prev) != memoria_x:
+            raise ValueError(
+                "El estado de entrada no coincide con el filtro."
+            )
+
+        if len(y_prev) != memoria_y:
+            raise ValueError(
+                "El estado de salida no coincide con el filtro."
+            )
+
+    y = np.zeros(len(x), dtype=np.float64)
+
+    for n, muestra in enumerate(x):
+
+        suma_entrada = b[0] * muestra
+
+        for k in range(1, len(b)):
+            suma_entrada += b[k] * x_prev[k - 1]
+
+        suma_salida = 0.0
+
+        for k in range(1, len(a)):
+            suma_salida += a[k] * y_prev[k - 1]
+
+        salida = (suma_entrada - suma_salida) / a[0]
+
+        y[n] = salida
+
+        # Actualizar memorias: la posición 0 contiene
+        # siempre la muestra más reciente.
+        if memoria_x > 0:
+            if memoria_x > 1:
+                x_prev[1:] = x_prev[:-1].copy()
+
+            x_prev[0] = muestra
+
+        if memoria_y > 0:
+            if memoria_y > 1:
+                y_prev[1:] = y_prev[:-1].copy()
+
+            y_prev[0] = salida
+
+    estado_final = {
+        "x_prev": x_prev,
+        "y_prev": y_prev,
+    }
+
+    return y, estado_final
