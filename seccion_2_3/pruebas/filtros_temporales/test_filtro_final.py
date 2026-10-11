@@ -37,7 +37,7 @@ TOLERANCIA = 1e-12
 def cargar_caso(numero):
 
     ruta = (
-        RAIZ
+        RAIZ.parent
         / "seccion_2_2"
         / "2_2_generacionsenales"
         / "pruebas"
