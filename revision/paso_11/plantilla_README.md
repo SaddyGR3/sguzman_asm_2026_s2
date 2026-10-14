@@ -9,8 +9,7 @@ Autores:
 - Válerin Calderón Bran — 2020033313
 - Luis Castro Montenegro — 2013083843
 
-Versión de entrega: etiqueta `tarea1_prototipo`, rama `integracion-tarea1`.
-[Consultar la versión etiquetada](https://github.com/SaddyGR3/sguzman_asm_2026_s2/tree/tarea1_prototipo).
+El informe de este paquete incluye la revisión de redacción del 14 de octubre de 2026. La etiqueta local `tarea1_prototipo` corresponde al cierre anterior; deberá actualizarse tras revisar estos cambios, antes de publicar.
 La carpeta y el ZIP se denominan `tarea1`, sin número de grupo.
 
 ## Contenido

@@ -2,6 +2,9 @@
 .venv/
 venv/
 
+# Materiales de contexto locales
+/[Cc]ontexto/
+
 # Archivos temporales de Python
 __pycache__/
 *.pyc

@@ -2,9 +2,9 @@
   "estado": "paquete_final_verificado",
   "archivos": 123,
   "zip": "entrega/tarea1.zip",
-  "bytes_zip": 33048850,
-  "sha256_zip": "5f991c3de57c960433eccb00472fb91387d92c50c0487c7522b4521094cb4f8d",
-  "sha256_pdf": "9c8499548dad6579ac8f5d155034d4a037ee15a31ae0f90483df78ef36aa35a8",
+  "bytes_zip": 33046617,
+  "sha256_zip": "ae66e4b5b91edf82f0b6689a92aff80e40f0b691b17319cf9c5bb5d81280322b",
+  "sha256_pdf": "58aeafcc0f10345a1f38cf4a701bd23bf827142189d9cf348e4ba3211d3b73f2",
   "sha256_notebook": "5a0f284f4eadbae4c0aa7cb83d9225922d28cbe3b6dcddc3c4cc7cf41451574f",
   "error_max_calidad_vs_informe": 0.0,
   "regeneracion_desde_cero": {
