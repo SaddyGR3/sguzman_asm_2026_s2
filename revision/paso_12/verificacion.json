@@ -1,0 +1,34 @@
+{
+  "estado": "paquete_final_verificado",
+  "archivos": 123,
+  "zip": "entrega/tarea1.zip",
+  "bytes_zip": 33048850,
+  "sha256_zip": "5f991c3de57c960433eccb00472fb91387d92c50c0487c7522b4521094cb4f8d",
+  "sha256_pdf": "9c8499548dad6579ac8f5d155034d4a037ee15a31ae0f90483df78ef36aa35a8",
+  "sha256_notebook": "5a0f284f4eadbae4c0aa7cb83d9225922d28cbe3b6dcddc3c4cc7cf41451574f",
+  "error_max_calidad_vs_informe": 0.0,
+  "regeneracion_desde_cero": {
+    "resultados_eliminados": true,
+    "casos_NPZ_WAV_metadatos_eliminados": true,
+    "configuraciones_agregadas_eliminadas": true,
+    "repositorio_original_no_importado": true
+  },
+  "zip_crc_e_integridad": "correctos",
+  "pendientes": [],
+  "fecha_local": "2026-10-14",
+  "autores": {
+    "Saddy Guzman Rojas": "2023088184",
+    "David García Cruz": "2024115575",
+    "Válerin Calderón Bran": "2020033313",
+    "Luis Castro Montenegro": "2013083843"
+  },
+  "campo_grupo": "eliminado por instruccion del usuario",
+  "pdf_paginas": 29,
+  "revision_visual": "portada y página de cierre revisadas; resto del informe conserva su revisión anterior",
+  "celdas_python_ejecutadas": 7,
+  "scripts_temporales": 8,
+  "pruebas_espectrales": 4,
+  "pruebas_comparacion": 9,
+  "tag_previsto": "tarea1_prototipo",
+  "rama": "integracion-tarea1"
+}

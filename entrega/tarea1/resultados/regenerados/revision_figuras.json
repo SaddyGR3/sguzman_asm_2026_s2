@@ -1,0 +1,200 @@
+{
+  "estado_numerico": "verificado",
+  "revision_visual": "pendiente",
+  "filas_csv_json_verificadas": 9,
+  "errores": {
+    "caso_1/entrada": {
+      "error_descomposicion_max": 1.6653345369377348e-16,
+      "diferencias_metricas": {
+        "mse": 0.0,
+        "snr_salida_db": 0.0,
+        "snr_entrada_db": 0.0,
+        "delta_snr_db": 0.0,
+        "mse_directo": 0.0,
+        "snr_salida_directo_db": 0.0,
+        "snr_entrada_directo_db": 0.0,
+        "delta_snr_directo_db": 0.0,
+        "energia_util_conservada_pct": 0.0,
+        "energia_total_salida_pct": 0.0,
+        "atenuacion_ruido_total_db": 0.0,
+        "atenuacion_interferencia_banda_db": 0.0,
+        "ganancia_util_300_Hz_db": 0.0,
+        "ganancia_util_700_Hz_db": 0.0,
+        "ganancia_util_1100_Hz_db": 0.0
+      }
+    },
+    "caso_1/temporal_fir": {
+      "error_descomposicion_max": 3.784949784146896e-16,
+      "diferencias_metricas": {
+        "mse": 0.0,
+        "snr_salida_db": 0.0,
+        "snr_entrada_db": 0.0,
+        "delta_snr_db": 0.0,
+        "mse_directo": 0.0,
+        "snr_salida_directo_db": 0.0,
+        "snr_entrada_directo_db": 0.0,
+        "delta_snr_directo_db": 0.0,
+        "energia_util_conservada_pct": 0.0,
+        "energia_total_salida_pct": 0.0,
+        "atenuacion_ruido_total_db": 0.0,
+        "atenuacion_interferencia_banda_db": 0.0,
+        "ganancia_util_300_Hz_db": 0.0,
+        "ganancia_util_700_Hz_db": 0.0,
+        "ganancia_util_1100_Hz_db": 0.0
+      }
+    },
+    "caso_1/espectral": {
+      "error_descomposicion_max": 3.4932993997482953e-16,
+      "diferencias_metricas": {
+        "mse": 0.0,
+        "snr_salida_db": 0.0,
+        "snr_entrada_db": 0.0,
+        "delta_snr_db": 0.0,
+        "mse_directo": 0.0,
+        "snr_salida_directo_db": 0.0,
+        "snr_entrada_directo_db": 0.0,
+        "delta_snr_directo_db": 0.0,
+        "energia_util_conservada_pct": 0.0,
+        "energia_total_salida_pct": 0.0,
+        "atenuacion_ruido_total_db": 0.0,
+        "atenuacion_interferencia_banda_db": 0.0,
+        "ganancia_util_300_Hz_db": 0.0,
+        "ganancia_util_700_Hz_db": 0.0,
+        "ganancia_util_1100_Hz_db": 0.0
+      }
+    },
+    "caso_2/entrada": {
+      "error_descomposicion_max": 1.1102230246251565e-16,
+      "diferencias_metricas": {
+        "mse": 0.0,
+        "snr_salida_db": 0.0,
+        "snr_entrada_db": 0.0,
+        "delta_snr_db": 0.0,
+        "mse_directo": 0.0,
+        "snr_salida_directo_db": 0.0,
+        "snr_entrada_directo_db": 0.0,
+        "delta_snr_directo_db": 0.0,
+        "energia_util_conservada_pct": 0.0,
+        "energia_total_salida_pct": 0.0,
+        "atenuacion_ruido_total_db": 0.0,
+        "ganancia_util_300_Hz_db": 0.0,
+        "ganancia_util_700_Hz_db": 0.0,
+        "ganancia_util_1100_Hz_db": 0.0
+      }
+    },
+    "caso_2/temporal_fir": {
+      "error_descomposicion_max": 3.3306690738754696e-16,
+      "diferencias_metricas": {
+        "mse": 0.0,
+        "snr_salida_db": 0.0,
+        "snr_entrada_db": 0.0,
+        "delta_snr_db": 0.0,
+        "mse_directo": 0.0,
+        "snr_salida_directo_db": 0.0,
+        "snr_entrada_directo_db": 0.0,
+        "delta_snr_directo_db": 0.0,
+        "energia_util_conservada_pct": 0.0,
+        "energia_total_salida_pct": 0.0,
+        "atenuacion_ruido_total_db": 0.0,
+        "ganancia_util_300_Hz_db": 0.0,
+        "ganancia_util_700_Hz_db": 0.0,
+        "ganancia_util_1100_Hz_db": 0.0
+      }
+    },
+    "caso_2/espectral": {
+      "error_descomposicion_max": 2.0469737016526324e-16,
+      "diferencias_metricas": {
+        "mse": 0.0,
+        "snr_salida_db": 0.0,
+        "snr_entrada_db": 0.0,
+        "delta_snr_db": 0.0,
+        "mse_directo": 0.0,
+        "snr_salida_directo_db": 0.0,
+        "snr_entrada_directo_db": 0.0,
+        "delta_snr_directo_db": 0.0,
+        "energia_util_conservada_pct": 0.0,
+        "energia_total_salida_pct": 0.0,
+        "atenuacion_ruido_total_db": 0.0,
+        "ganancia_util_300_Hz_db": 0.0,
+        "ganancia_util_700_Hz_db": 0.0,
+        "ganancia_util_1100_Hz_db": 0.0
+      }
+    },
+    "caso_3/entrada": {
+      "error_descomposicion_max": 1.6653345369377348e-16,
+      "diferencias_metricas": {
+        "mse": 0.0,
+        "snr_salida_db": 0.0,
+        "snr_entrada_db": 0.0,
+        "delta_snr_db": 0.0,
+        "mse_directo": 0.0,
+        "snr_salida_directo_db": 0.0,
+        "snr_entrada_directo_db": 0.0,
+        "delta_snr_directo_db": 0.0,
+        "energia_util_conservada_pct": 0.0,
+        "energia_total_salida_pct": 0.0,
+        "atenuacion_ruido_total_db": 0.0,
+        "atenuacion_interferencia_banda_db": 0.0,
+        "ganancia_util_300_Hz_db": 0.0,
+        "ganancia_util_700_Hz_db": 0.0,
+        "ganancia_util_1100_Hz_db": 0.0
+      }
+    },
+    "caso_3/temporal_fir": {
+      "error_descomposicion_max": 4.996003610813204e-16,
+      "diferencias_metricas": {
+        "mse": 0.0,
+        "snr_salida_db": 0.0,
+        "snr_entrada_db": 0.0,
+        "delta_snr_db": 0.0,
+        "mse_directo": 0.0,
+        "snr_salida_directo_db": 0.0,
+        "snr_entrada_directo_db": 0.0,
+        "delta_snr_directo_db": 0.0,
+        "energia_util_conservada_pct": 0.0,
+        "energia_total_salida_pct": 0.0,
+        "atenuacion_ruido_total_db": 0.0,
+        "atenuacion_interferencia_banda_db": 0.0,
+        "ganancia_util_300_Hz_db": 0.0,
+        "ganancia_util_700_Hz_db": 0.0,
+        "ganancia_util_1100_Hz_db": 0.0
+      }
+    },
+    "caso_3/espectral": {
+      "error_descomposicion_max": 2.463307335887066e-16,
+      "diferencias_metricas": {
+        "mse": 0.0,
+        "snr_salida_db": 0.0,
+        "snr_entrada_db": 0.0,
+        "delta_snr_db": 0.0,
+        "mse_directo": 0.0,
+        "snr_salida_directo_db": 0.0,
+        "snr_entrada_directo_db": 0.0,
+        "delta_snr_directo_db": 0.0,
+        "energia_util_conservada_pct": 0.0,
+        "energia_total_salida_pct": 0.0,
+        "atenuacion_ruido_total_db": 0.0,
+        "atenuacion_interferencia_banda_db": 0.0,
+        "ganancia_util_300_Hz_db": 0.0,
+        "ganancia_util_700_Hz_db": 0.0,
+        "ganancia_util_1100_Hz_db": 0.0
+      }
+    }
+  },
+  "sha256_graficador": "b2f55fec2608e065720f21b1a52b32c197fa4c6c99c2ccc9f588ed75ee7699d4",
+  "sha256_resultados_json": "dcdd60903858660aefe60c6fbec6dec92dbee880d4c7d7fc80d79d3d26f33c3b",
+  "sha256_figuras": {
+    "figuras/caso_1_comparacion.png": "406f4f98055f21658689403485f773740396fcf3284fd144d1803b833ef9016b",
+    "figuras/caso_1_comparacion.svg": "9f3653bd5ba935719cf6544afddc8cb96246beb91b79e5a353eafebda1f2cb89",
+    "figuras/caso_2_comparacion.png": "5ecdac50a95fd7d9dd3c778c4537d7882ace759615a43daa55d2f1d7d400e707",
+    "figuras/caso_2_comparacion.svg": "ab0033f859cfe3929b0e80e44120a88c8aedb1fd079cc7e16bd5fe054e8cd658",
+    "figuras/caso_3_comparacion.png": "6017cc228a59a26b7dbf955f8fc3f141d0b8bf80787ec61b856a5a6929930668",
+    "figuras/caso_3_comparacion.svg": "e580441e87493d54699ecf06316762ffff1a14ba0001bfbf40b9d1ae433baea5",
+    "figuras/resumen_calidad.png": "bec03b38a2bb9530a885f0eab12f6f1b62e7a06cdeb6cd49bb0ef87823f54b55",
+    "figuras/resumen_calidad.svg": "0382ef7b94c55f8d6b26667376b71d3dfce13763ac409e956894414d3fed716b",
+    "figuras/energia_y_tonos.png": "05526b944f24ec6ed958f6ee3687be3e68d09b6152a2d29018c7b827fece40ab",
+    "figuras/energia_y_tonos.svg": "d2e1234ede7260ff73be8ff4421c58250f00271c63c11a21b0c32ee451047978",
+    "figuras/recursos_pc.png": "b1a6a9c24a41c741cfa86694df41489f5747a90df3603e1ccb3297de53c48f91",
+    "figuras/recursos_pc.svg": "b8a261a4c7a93f9aabf7c2a8f602ec510a208e7c37a32ec91dacc79b7dfc6b23"
+  }
+}

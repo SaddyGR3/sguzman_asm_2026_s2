@@ -1,0 +1,258 @@
+{
+  "configuracion_metodos": {
+    "picos": {
+      "umbral": 6.0,
+      "ancho_bins": 6,
+      "atenuacion_db": 60.0,
+      "banda_util": [
+        0.0,
+        1200.0
+      ]
+    },
+    "resta": {
+      "alpha": 3.0,
+      "g_min": 0.05,
+      "proteger_tonos": true,
+      "banda_util": [
+        0.0,
+        1200.0
+      ],
+      "umbral_tono": 2.5,
+      "ancho_tono_bins": 1
+    },
+    "top_k": {
+      "k": 12
+    }
+  },
+  "nota_metricas": "SNR y MSE directos contra limpia, sin compensar retardo; la energia de salida incluye ruido residual.",
+  "casos": [
+    {
+      "caso": 1,
+      "tipo_ruido": "tonal",
+      "archivo_entrada": "pruebas/caso_1/muestras_exactas.npz",
+      "fs_Hz": 8000,
+      "N": 1024,
+      "delta_f_Hz": 7.8125,
+      "hop": 512,
+      "snr_entrada_db": 1.2536257065192713e-14,
+      "metodo_elegido": "picos",
+      "metodos": {
+        "picos": {
+          "snr_salida_db": 30.3142122912277,
+          "mse": 5.2300658109241864e-05,
+          "energia_salida_respecto_limpia_pct": 100.09303518861323,
+          "ganancia_tonos_db": {
+            "300": -0.0002362852717143778,
+            "700": -2.215146917378114e-06,
+            "1100": -0.004087851436803168
+          },
+          "fraccion_bins_modificados": 0.04942093796582961,
+          "tiempo_ms": 1.0172620004595956,
+          "delta_snr_db": 30.314212291227687,
+          "atenuacion_interferencia_db": 59.32708728283486
+        },
+        "resta": {
+          "snr_salida_db": 0.14470978257927025,
+          "mse": 0.054382279119104655,
+          "energia_salida_respecto_limpia_pct": 196.58355086541798,
+          "ganancia_tonos_db": {
+            "300": -0.0028595696472506114,
+            "700": -0.0019833179648199467,
+            "1100": -0.019865374606914024
+          },
+          "fraccion_bins_modificados": 0.9824561403508771,
+          "tiempo_ms": 1.3644489990838338,
+          "tonos_protegidos_Hz": [
+            296.875,
+            703.125,
+            1101.5625
+          ],
+          "delta_snr_db": 0.1447097825792577,
+          "atenuacion_interferencia_db": 0.13251933866958648
+        },
+        "top_k": {
+          "snr_salida_db": 0.028476938581795445,
+          "mse": 0.055857396436118104,
+          "energia_salida_respecto_limpia_pct": 197.53631295183217,
+          "ganancia_tonos_db": {
+            "300": -0.022959815188568045,
+            "700": -0.061928666220868706,
+            "1100": -0.4540975784164176
+          },
+          "fraccion_bins_modificados": 0.9766081871345029,
+          "tiempo_ms": 0.5523859999811975,
+          "delta_snr_db": 0.02847693858178291,
+          "atenuacion_interferencia_db": 0.012411308291372943
+        }
+      }
+    },
+    {
+      "caso": 2,
+      "tipo_ruido": "blanco",
+      "archivo_entrada": "pruebas/caso_2/muestras_exactas.npz",
+      "fs_Hz": 8000,
+      "N": 1024,
+      "delta_f_Hz": 7.8125,
+      "hop": 512,
+      "snr_entrada_db": 5.000000000000009,
+      "metodo_elegido": "resta",
+      "metodos": {
+        "picos": {
+          "snr_salida_db": 5.000000000000009,
+          "mse": 0.010991303949554984,
+          "energia_salida_respecto_limpia_pct": 132.22171958515798,
+          "ganancia_tonos_db": {
+            "300": 0.009768384890638485,
+            "700": 0.07279868040208923,
+            "1100": -0.02351031644522609
+          },
+          "fraccion_bins_modificados": 0.0,
+          "tiempo_ms": 0.9317830008512828,
+          "delta_snr_db": 0.0
+        },
+        "resta": {
+          "snr_salida_db": 20.730613767974777,
+          "mse": 0.00029375674077435044,
+          "energia_salida_respecto_limpia_pct": 100.18758481329486,
+          "ganancia_tonos_db": {
+            "300": -0.0114325877962616,
+            "700": 0.038718100385375966,
+            "1100": -0.08552338998380817
+          },
+          "fraccion_bins_modificados": 0.9824561403508771,
+          "tiempo_ms": 1.9281439999758732,
+          "tonos_protegidos_Hz": [
+            296.875,
+            703.125,
+            1101.5625
+          ],
+          "delta_snr_db": 15.730613767974768
+        },
+        "top_k": {
+          "snr_salida_db": 17.75044670441021,
+          "mse": 0.0005834512134485913,
+          "energia_salida_respecto_limpia_pct": 101.03899498618505,
+          "ganancia_tonos_db": {
+            "300": -0.0063268516048375165,
+            "700": 0.05553081544469727,
+            "1100": -0.25748720569249994
+          },
+          "fraccion_bins_modificados": 0.9766081871345029,
+          "tiempo_ms": 0.47557799916830845,
+          "delta_snr_db": 12.7504467044102
+        }
+      }
+    },
+    {
+      "caso": 3,
+      "tipo_ruido": "banda",
+      "archivo_entrada": "pruebas/caso_3/muestras_exactas.npz",
+      "fs_Hz": 8000,
+      "N": 1024,
+      "delta_f_Hz": 7.8125,
+      "hop": 512,
+      "snr_entrada_db": 3.000000000000029,
+      "metodo_elegido": "resta",
+      "metodos": {
+        "picos": {
+          "snr_salida_db": 3.0004812977686535,
+          "mse": 0.018383289847366736,
+          "energia_salida_respecto_limpia_pct": 151.837066962695,
+          "ganancia_tonos_db": {
+            "300": 0.0026662321954194013,
+            "700": -0.008144359542978243,
+            "1100": 1.0575372027686774
+          },
+          "fraccion_bins_modificados": 0.044031647746818024,
+          "tiempo_ms": 0.9678559999883873,
+          "delta_snr_db": 0.00048129776862460005,
+          "reduccion_error_banda_db": 4.789636123147728e-09
+        },
+        "resta": {
+          "snr_salida_db": 14.670030083124491,
+          "mse": 0.0012516080743390527,
+          "energia_salida_respecto_limpia_pct": 104.94183204156927,
+          "ganancia_tonos_db": {
+            "300": -0.00102972705853895,
+            "700": -0.00696919501124715,
+            "1100": 1.0333308631827962
+          },
+          "fraccion_bins_modificados": 0.9824561403508771,
+          "tiempo_ms": 1.5603920001012739,
+          "tonos_protegidos_Hz": [
+            296.875,
+            703.125,
+            1101.5625
+          ],
+          "delta_snr_db": 11.670030083124463,
+          "reduccion_error_banda_db": 11.258748949737969
+        },
+        "top_k": {
+          "snr_salida_db": 7.9348591336562,
+          "mse": 0.005901813087717204,
+          "energia_salida_respecto_limpia_pct": 115.0451473736793,
+          "ganancia_tonos_db": {
+            "300": -0.0234874724465421,
+            "700": -0.06540574788545797,
+            "1100": 0.1405364531699735
+          },
+          "fraccion_bins_modificados": 0.9766081871345029,
+          "tiempo_ms": 0.44555100066645537,
+          "delta_snr_db": 4.934859133656172,
+          "reduccion_error_banda_db": 4.480215714325669
+        }
+      }
+    }
+  ],
+  "compromiso_caso_2_sin_proteccion_tonal": [
+    {
+      "alpha": 0,
+      "snr_salida_db": 5.000000000000009,
+      "mse": 0.010991303949554984,
+      "atenuacion_fuera_tonos_db": -9.643274665532873e-16,
+      "ganancia_1100_Hz_db": -0.02351031644522609
+    },
+    {
+      "alpha": 0.5,
+      "snr_salida_db": 8.666958449943476,
+      "mse": 0.004724473016194818,
+      "atenuacion_fuera_tonos_db": 3.63329882296265,
+      "ganancia_1100_Hz_db": -0.6377311084895414
+    },
+    {
+      "alpha": 1,
+      "snr_salida_db": 13.084296302817098,
+      "mse": 0.0017085181138075916,
+      "atenuacion_fuera_tonos_db": 8.489076462300245,
+      "ganancia_1100_Hz_db": -1.2952997769967944
+    },
+    {
+      "alpha": 2,
+      "snr_salida_db": 16.93831210974234,
+      "mse": 0.0007034253362985475,
+      "atenuacion_fuera_tonos_db": 20.61576715767604,
+      "ganancia_1100_Hz_db": -2.706811962146787
+    },
+    {
+      "alpha": 3,
+      "snr_salida_db": 14.736837447025515,
+      "mse": 0.0011677919391697071,
+      "atenuacion_fuera_tonos_db": 25.851632870448253,
+      "ganancia_1100_Hz_db": -4.277312241403864
+    },
+    {
+      "alpha": 4,
+      "snr_salida_db": 12.704733492168899,
+      "mse": 0.0018645578768720487,
+      "atenuacion_fuera_tonos_db": 25.950638107923247,
+      "ganancia_1100_Hz_db": -6.03763089527673
+    },
+    {
+      "alpha": 8,
+      "snr_salida_db": 7.643463756088225,
+      "mse": 0.005980022833370107,
+      "atenuacion_fuera_tonos_db": 25.98383261533329,
+      "ganancia_1100_Hz_db": -15.581855267603395
+    }
+  ]
+}

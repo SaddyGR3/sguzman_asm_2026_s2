@@ -1,0 +1,90 @@
+{
+  "fecha_consulta": "2026-10-12",
+  "estado": "fuentes_y_calculos_verificados_sin_compilacion_ESP32",
+  "seleccion": {
+    "biblioteca": "ESP-DSP",
+    "version": "1.8.2",
+    "commit_tag": "a53a0756833c045311ea1d79a2badf495cdfde4c",
+    "licencia": "Apache-2.0",
+    "idf_minimo_manifest": "4.2",
+    "target": "esp32",
+    "precision": "float32"
+  },
+  "fuentes": [
+    {
+      "archivo": "bitrev.c",
+      "url": "https://raw.githubusercontent.com/espressif/esp-dsp/v1.8.2/modules/fft/float/dsps_fft2r_bitrev_tables_fc32.c",
+      "sha256": "5aeffab252b3d597e33c51eee072fac51ac1d1e83187c6a4ae1c89f2cedd7386"
+    },
+    {
+      "archivo": "fft_ansi.c",
+      "url": "https://raw.githubusercontent.com/espressif/esp-dsp/v1.8.2/modules/fft/float/dsps_fft2r_fc32_ansi.c",
+      "sha256": "10e9d9916c691a8bc61df0d6cf91c9c4d7ee98240e64dbf059991dac340d3d8c"
+    },
+    {
+      "archivo": "fft.h",
+      "url": "https://raw.githubusercontent.com/espressif/esp-dsp/v1.8.2/modules/fft/include/dsps_fft2r.h",
+      "sha256": "c4a1a7111859fb503fa1068bfa8d985d0cbec3710329424c4d52087b2dde6dbe"
+    },
+    {
+      "archivo": "fir_init.c",
+      "url": "https://raw.githubusercontent.com/espressif/esp-dsp/v1.8.2/modules/fir/float/dsps_fir_init_f32.c",
+      "sha256": "6da3910ac928241a7542e91bc62e842f586a3403c56dd06dab99c71cf2638b10"
+    },
+    {
+      "archivo": "fir_ansi.c",
+      "url": "https://raw.githubusercontent.com/espressif/esp-dsp/v1.8.2/modules/fir/float/dsps_fir_f32_ansi.c",
+      "sha256": "d8ca1028e3e47d74b04d217ec54c14446cbe73273b8378cdda1f14e77d26a0a2"
+    },
+    {
+      "archivo": "fir_ae32.S",
+      "url": "https://raw.githubusercontent.com/espressif/esp-dsp/v1.8.2/modules/fir/float/dsps_fir_f32_ae32.S",
+      "sha256": "3c986aec0caa3a81879ef7a8c24fbda75d5437a1ddb7654909eefa1a6b7a3342"
+    },
+    {
+      "archivo": "fir.h",
+      "url": "https://raw.githubusercontent.com/espressif/esp-dsp/v1.8.2/modules/fir/include/dsps_fir.h",
+      "sha256": "3eda46e349b5f6655591150fe62880dc1112e388254323c409cf8fd91f2b86d9"
+    },
+    {
+      "archivo": "idf_component.yml",
+      "url": "https://raw.githubusercontent.com/espressif/esp-dsp/v1.8.2/idf_component.yml",
+      "sha256": "9927f33f2c25884afaa0155e63a7cb7d511101c3abbdb8abdf2ded5cc59819c6"
+    },
+    {
+      "archivo": "Kconfig",
+      "url": "https://raw.githubusercontent.com/espressif/esp-dsp/v1.8.2/Kconfig",
+      "sha256": "489696c06cd9a2f9f6fd0e732ae46661ebaef1455303702c1f467b0a807ea7ab"
+    },
+    {
+      "archivo": "LICENSE",
+      "url": "https://raw.githubusercontent.com/espressif/esp-dsp/v1.8.2/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    }
+  ],
+  "sha256_presupuesto_paso_7": "3d29dd7e737d92864558c7c446d7a4e5b0e08877cb66dd8ad388c9f590453d2a",
+  "memoria_fft": {
+    "buffer_complejo_bytes": 8192,
+    "twiddles_bytes": 4096,
+    "pares_bit_reversal": 496,
+    "copia_bit_reversal_bytes": 1984,
+    "tablas_ram_bytes": 6080,
+    "nota": "Payload de tablas; metadatos, alineación y allocator siguen en reservas."
+  },
+  "memoria_espectral": {
+    "subtotal_dsp_bytes": 65133,
+    "reserva_auxiliar_bytes": 16384,
+    "total_provisional_bytes": 81517,
+    "total_KiB": 79.6064453125,
+    "objetivo_bytes": 98304,
+    "margen_bytes": 16787
+  },
+  "memoria_fir_biblioteca": {
+    "coeficientes_bytes": 148,
+    "delay_bytes": 164,
+    "estructura_ABI32_bytes_estimados": 40,
+    "nucleo_estimado_bytes": 352,
+    "subtotal_con_io_y_control_bytes": 9568,
+    "nota": "sizeof(fir_f32_t) pendiente en el compilador destino; control separado de la estructura."
+  }
+}

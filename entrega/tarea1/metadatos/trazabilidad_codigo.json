@@ -1,0 +1,121 @@
+[
+  {
+    "origen": "seccion_2_3/src/filtros_temporales.py",
+    "destino": "src/filtros_temporales.py",
+    "adaptaciones": 0,
+    "sha256_original": "81e89b9dc1df215092565df10abf6069e8e617062f7893e5b27bddfad56cd698",
+    "sha256_entrega": "81e89b9dc1df215092565df10abf6069e8e617062f7893e5b27bddfad56cd698"
+  },
+  {
+    "origen": "seccion_2_4/src/filtrado_espectral.py",
+    "destino": "src/filtrado_espectral.py",
+    "adaptaciones": 0,
+    "sha256_original": "1ff9049bfddbc4ce58b7ec24522ea553781a20b32627029e16bcb8faefafe083",
+    "sha256_entrega": "1ff9049bfddbc4ce58b7ec24522ea553781a20b32627029e16bcb8faefafe083"
+  },
+  {
+    "origen": "seccion_2_5/src/metricas.py",
+    "destino": "src/metricas.py",
+    "adaptaciones": 0,
+    "sha256_original": "2feeb1bd0822166f6171076795f0f696e85a6d70469a26476c7b3e16c81239e8",
+    "sha256_entrega": "2feeb1bd0822166f6171076795f0f696e85a6d70469a26476c7b3e16c81239e8"
+  },
+  {
+    "origen": "seccion_2_5/src/evaluar_comparacion.py",
+    "destino": "src/evaluar_comparacion.py",
+    "adaptaciones": 6,
+    "sha256_original": "7d93366ba077c5e4cac5a6b0ebd451cb6d326428f704053b6db8872bf7b01f9d",
+    "sha256_entrega": "5efed5f814ad6fd3abd54116a810a47a0cf8accb4ee16fee57831a4e90ce48ee"
+  },
+  {
+    "origen": "seccion_2_5/src/graficar_comparacion.py",
+    "destino": "src/graficar_comparacion.py",
+    "adaptaciones": 3,
+    "sha256_original": "3d23ba0a787b95751474d6fc386e9e535a1d8a44cd2d668018d73defbab6eeb2",
+    "sha256_entrega": "b2f55fec2608e065720f21b1a52b32c197fa4c6c99c2ccc9f588ed75ee7699d4"
+  },
+  {
+    "origen": "seccion_2_1/src/analizar_2_1.py",
+    "destino": "src/analizar_2_1.py",
+    "adaptaciones": 1,
+    "sha256_original": "274c02840795bcfe2b11608faca697a544c130bb01d5b985a04b5e1e65d6ac8d",
+    "sha256_entrega": "af2dc4216a699ec2cc669a9220e458a695bc3995493abbbb3a5bdc39631e20fe"
+  },
+  {
+    "origen": "seccion_2_3/pruebas/filtros_temporales/test_candidatos_fir_iir.py",
+    "destino": "pruebas/filtros_temporales/test_candidatos_fir_iir.py",
+    "adaptaciones": 0,
+    "sha256_original": "78d0a3319663e5df28a37fefa61dab99be499da8d23beff4cc39b360c3ebe0ba",
+    "sha256_entrega": "78d0a3319663e5df28a37fefa61dab99be499da8d23beff4cc39b360c3ebe0ba"
+  },
+  {
+    "origen": "seccion_2_3/pruebas/filtros_temporales/test_comparacion_fir_iir.py",
+    "destino": "pruebas/filtros_temporales/test_comparacion_fir_iir.py",
+    "adaptaciones": 0,
+    "sha256_original": "7160b2225e5dfe680465cfea7db347efd52531ea82c0f695c14c7a54f0d742dd",
+    "sha256_entrega": "7160b2225e5dfe680465cfea7db347efd52531ea82c0f695c14c7a54f0d742dd"
+  },
+  {
+    "origen": "seccion_2_3/pruebas/filtros_temporales/test_cuantizacion_saturacion_memoria.py",
+    "destino": "pruebas/filtros_temporales/test_cuantizacion_saturacion_memoria.py",
+    "adaptaciones": 0,
+    "sha256_original": "16b7c154b37426db1098712c4f8b3e8df23f512d5fbf3ece0a9fed5abffb4208",
+    "sha256_entrega": "16b7c154b37426db1098712c4f8b3e8df23f512d5fbf3ece0a9fed5abffb4208"
+  },
+  {
+    "origen": "seccion_2_3/pruebas/filtros_temporales/test_ecuacion_diferencias.py",
+    "destino": "pruebas/filtros_temporales/test_ecuacion_diferencias.py",
+    "adaptaciones": 0,
+    "sha256_original": "0b84ad1bd01584b2632fefa142e1300e7e7ffd0d52d81cf39e784c401de22a57",
+    "sha256_entrega": "0b84ad1bd01584b2632fefa142e1300e7e7ffd0d52d81cf39e784c401de22a57"
+  },
+  {
+    "origen": "seccion_2_3/pruebas/filtros_temporales/test_filtro_final.py",
+    "destino": "pruebas/filtros_temporales/test_filtro_final.py",
+    "adaptaciones": 0,
+    "sha256_original": "59885efc98eaec55d0fb484dc0d2f5faf32e30ad9e001a09abb9eb42caf25089",
+    "sha256_entrega": "ec32527a9e16e72be58d8db31cc075531c93e5c77643d98cd35d50c84197671e"
+  },
+  {
+    "origen": "seccion_2_3/pruebas/filtros_temporales/test_polos_estabilidad.py",
+    "destino": "pruebas/filtros_temporales/test_polos_estabilidad.py",
+    "adaptaciones": 0,
+    "sha256_original": "affdef6b0da5eddeb91e520a49074ec361b7ff060df8d95c670a9d036e1dd0cd",
+    "sha256_entrega": "affdef6b0da5eddeb91e520a49074ec361b7ff060df8d95c670a9d036e1dd0cd"
+  },
+  {
+    "origen": "seccion_2_3/pruebas/filtros_temporales/test_procesamiento_bloques.py",
+    "destino": "pruebas/filtros_temporales/test_procesamiento_bloques.py",
+    "adaptaciones": 0,
+    "sha256_original": "7957d5068d8e1b379010dce7af75f7902fe272e8ca802bdbe2258753dc1a0fe4",
+    "sha256_entrega": "7957d5068d8e1b379010dce7af75f7902fe272e8ca802bdbe2258753dc1a0fe4"
+  },
+  {
+    "origen": "seccion_2_3/pruebas/filtros_temporales/test_respuesta_frecuencia.py",
+    "destino": "pruebas/filtros_temporales/test_respuesta_frecuencia.py",
+    "adaptaciones": 0,
+    "sha256_original": "714297291855989f760af923a99e4a5ecb9db2b0b9fa6d7ed8ce8c057f39229c",
+    "sha256_entrega": "714297291855989f760af923a99e4a5ecb9db2b0b9fa6d7ed8ce8c057f39229c"
+  },
+  {
+    "origen": "seccion_2_4/pruebas/filtrado_espectral/evaluar_casos.py",
+    "destino": "pruebas/filtrado_espectral/evaluar_casos.py",
+    "adaptaciones": 3,
+    "sha256_original": "8a3abdcb857e21df04e975587687080c3d9a88b78d4e187e1c42e469f7387a98",
+    "sha256_entrega": "49f84c1d60b37422e7c99e9aacebe23dd35f47cc78adbb7123fc5e5e50b2b713"
+  },
+  {
+    "origen": "seccion_2_4/pruebas/filtrado_espectral/test_filtrado_espectral.py",
+    "destino": "pruebas/filtrado_espectral/test_filtrado_espectral.py",
+    "adaptaciones": 0,
+    "sha256_original": "755c31998da3efff491c70099d6f27fa2b783c997d656a182f646406f2faff15",
+    "sha256_entrega": "755c31998da3efff491c70099d6f27fa2b783c997d656a182f646406f2faff15"
+  },
+  {
+    "origen": "seccion_2_5/pruebas/test_comparacion.py",
+    "destino": "pruebas/comparacion/test_comparacion.py",
+    "adaptaciones": 2,
+    "sha256_original": "c4f0ba9b23114892bab60400d86ea51946c78e038018a39960539fdb2f92055d",
+    "sha256_entrega": "8908ed79fef0b56ade18cfe2df80d9a910c8c412bba0a5d06fea99ed3b5b7021"
+  }
+]

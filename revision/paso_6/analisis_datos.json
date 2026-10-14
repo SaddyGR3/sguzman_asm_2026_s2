@@ -1,0 +1,144 @@
+{
+  "alcance": "Derivaciones de resultados existentes; no se ejecutan filtros ni benchmark.",
+  "bordes_diagnosticos": {
+    "muestras_por_extremo": 512,
+    "porcentaje_intervalo": 12.52752630291167,
+    "nota": "Diagnóstico exploratorio posterior; no cambia el intervalo principal ni la clasificación."
+  },
+  "fuentes_sha256": {
+    "seccion_2_5/resultados/metricas.csv": "44c7db76e85103e1384801158244fba8304fbf0aa0db78dcd583acca4d25b31d",
+    "seccion_2_5/resultados/resultados_2_5.json": "dd528a1c4c7f142a98d9ee80f64d5989319ef39eb756a803986812e2455d5f0f",
+    "seccion_2_4/resultados/resultados_2_4.json": "1e018f95edbd29cf317c7155b788faea787eb1abe374698564a19bb4a0fa6369",
+    "seccion_2_5/resultados/caso_1/senales_comparacion.npz": "56cc8995687dba643d84cc6fbf8a09c37cd1abe6b2642a53e57cdc853de2a1d9",
+    "seccion_2_5/resultados/caso_2/senales_comparacion.npz": "14892b912d78fecc5ea78f73c30b8341f930b822e4ef8d6b85f847c162b6b058",
+    "seccion_2_5/resultados/caso_3/senales_comparacion.npz": "6b704f6a1479614e9f9b51dc0c88fa7716684bc0010f2db11dd6c47c0033c854"
+  },
+  "casos": [
+    {
+      "caso": 1,
+      "ganador_por_mse": "temporal_fir",
+      "ventaja_snr_db": 19.745188485313058,
+      "razon_mse_perdedor_sobre_ganador": 94.30155377735494,
+      "diagnosticos": {
+        "temporal_fir": {
+          "mse_comun": 3.6289063986133926e-07,
+          "porcentaje_error_en_bordes": 44.79032498100673,
+          "mse_interior_diagnostico": 2.2904433186100656e-07,
+          "mse_distorsion_util": 2.063518249144289e-07,
+          "mse_ruido_residual": 1.5643502589470168e-07,
+          "termino_cruzado_mse": 1.037890522098022e-10
+        },
+        "espectral": {
+          "mse_comun": 3.4221151190182827e-05,
+          "porcentaje_error_en_bordes": 98.98255822888876,
+          "mse_interior_diagnostico": 3.9804554741389517e-07,
+          "mse_distorsion_util": 1.4128355410903227e-09,
+          "mse_ruido_residual": 3.422321095942387e-05,
+          "termino_cruzado_mse": -3.472604782136659e-09
+        }
+      }
+    },
+    {
+      "caso": 2,
+      "ganador_por_mse": "espectral",
+      "ventaja_snr_db": 11.289527827286822,
+      "razon_mse_perdedor_sobre_ganador": 13.457140376698362,
+      "diagnosticos": {
+        "temporal_fir": {
+          "mse_comun": 0.003887311098055498,
+          "porcentaje_error_en_bordes": 13.321481313162487,
+          "mse_interior_diagnostico": 0.003852027425463906,
+          "mse_distorsion_util": 1.275642996456782e-07,
+          "mse_ruido_residual": 0.0038875737943494266,
+          "termino_cruzado_mse": -3.9026059357461205e-07
+        },
+        "espectral": {
+          "mse_comun": 0.00028886605840766513,
+          "porcentaje_error_en_bordes": 34.12926425147202,
+          "mse_interior_diagnostico": 0.00021752922943487688,
+          "mse_distorsion_util": 8.408366793952612e-05,
+          "mse_ruido_residual": 0.00020838487695532245,
+          "termino_cruzado_mse": -3.602486487183458e-06
+        }
+      }
+    },
+    {
+      "caso": 3,
+      "ganador_por_mse": "espectral",
+      "ventaja_snr_db": 11.60626792512118,
+      "razon_mse_perdedor_sobre_ganador": 14.475273978283283,
+      "diagnosticos": {
+        "temporal_fir": {
+          "mse_comun": 0.018128009915070065,
+          "porcentaje_error_en_bordes": 12.889471494722876,
+          "mse_interior_diagnostico": 0.018052999506097445,
+          "mse_distorsion_util": 1.3463292946616532e-07,
+          "mse_ruido_residual": 0.01812729781094424,
+          "termino_cruzado_mse": 5.774711963606989e-07
+        },
+        "espectral": {
+          "mse_comun": 0.0012523431295509049,
+          "porcentaje_error_en_bordes": 13.559167795047308,
+          "mse_interior_diagnostico": 0.0012375731215674825,
+          "mse_distorsion_util": 1.3843850518005828e-05,
+          "mse_ruido_residual": 0.0012243083597703026,
+          "termino_cruzado_mse": 1.4190919262596484e-05
+        }
+      }
+    }
+  ],
+  "ablacion_2_4": {
+    "nota": "Caso 2, 8192 muestras, protección tonal desactivada; distinta configuración de la comparación principal.",
+    "resultados": [
+      {
+        "alpha": 0,
+        "snr_salida_db": 5.000000000000008,
+        "mse": 0.010991303949554984,
+        "atenuacion_fuera_tonos_db": -9.643274665532871e-16,
+        "ganancia_1100_Hz_db": -0.023510316445228028
+      },
+      {
+        "alpha": 0.5,
+        "snr_salida_db": 8.666958449943476,
+        "mse": 0.004724473016194818,
+        "atenuacion_fuera_tonos_db": 3.63329882296265,
+        "ganancia_1100_Hz_db": -0.637731108489527
+      },
+      {
+        "alpha": 1,
+        "snr_salida_db": 13.0842963028171,
+        "mse": 0.0017085181138075916,
+        "atenuacion_fuera_tonos_db": 8.489076462300247,
+        "ganancia_1100_Hz_db": -1.2952997769967989
+      },
+      {
+        "alpha": 2,
+        "snr_salida_db": 16.938312109742345,
+        "mse": 0.0007034253362985475,
+        "atenuacion_fuera_tonos_db": 20.61576715767604,
+        "ganancia_1100_Hz_db": -2.7068119621467783
+      },
+      {
+        "alpha": 3,
+        "snr_salida_db": 14.736837447025517,
+        "mse": 0.001167791939169707,
+        "atenuacion_fuera_tonos_db": 25.851632870448253,
+        "ganancia_1100_Hz_db": -4.277312241403858
+      },
+      {
+        "alpha": 4,
+        "snr_salida_db": 12.704733492168899,
+        "mse": 0.0018645578768720483,
+        "atenuacion_fuera_tonos_db": 25.950638107923247,
+        "ganancia_1100_Hz_db": -6.03763089527672
+      },
+      {
+        "alpha": 8,
+        "snr_salida_db": 7.6434637560882255,
+        "mse": 0.005980022833370105,
+        "atenuacion_fuera_tonos_db": 25.98383261533329,
+        "ganancia_1100_Hz_db": -15.581855267603311
+      }
+    ]
+  }
+}

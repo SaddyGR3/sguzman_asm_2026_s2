@@ -1,0 +1,7 @@
+Frecuencia inicial: 0.0 Hz
+Magnitud en DC: 1.928654933106574e-15 dB
+Fase en DC: 0.0 rad
+Retardo de grupo en DC: 4.0000000000000036 muestras
+Prueba de respuesta en frecuencia completada.
+/home/saddygr/Documentos/GitHub/sguzman_asm_2026_s2/seccion_2_3/pruebas/filtros_temporales/test_respuesta_frecuencia.py:85: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+  plt.show()

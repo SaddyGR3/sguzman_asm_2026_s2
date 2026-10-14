@@ -1,0 +1,77 @@
+{
+  "2_1a": {
+    "N": 32,
+    "error_max_dft_vs_fft": 5.93697507751854e-14
+  },
+  "2_1b": {
+    "fs_Hz": 8000.0,
+    "tabla": [
+      {
+        "N": 256,
+        "T_s": 0.032,
+        "T_ms": 32.0,
+        "df_Hz": 31.25,
+        "entrada_float32_bytes": 1024,
+        "espectro_complex64_bytes": 2048,
+        "total_bytes": 3072
+      },
+      {
+        "N": 512,
+        "T_s": 0.064,
+        "T_ms": 64.0,
+        "df_Hz": 15.625,
+        "entrada_float32_bytes": 2048,
+        "espectro_complex64_bytes": 4096,
+        "total_bytes": 6144
+      },
+      {
+        "N": 1024,
+        "T_s": 0.128,
+        "T_ms": 128.0,
+        "df_Hz": 7.8125,
+        "entrada_float32_bytes": 4096,
+        "espectro_complex64_bytes": 8192,
+        "total_bytes": 12288
+      },
+      {
+        "N": 2048,
+        "T_s": 0.256,
+        "T_ms": 256.0,
+        "df_Hz": 3.90625,
+        "entrada_float32_bytes": 8192,
+        "espectro_complex64_bytes": 16384,
+        "total_bytes": 24576
+      }
+    ],
+    "referencia_N_1024": {
+      "N": 1024,
+      "T_s": 0.128,
+      "T_ms": 128.0,
+      "df_Hz": 7.8125,
+      "entrada_float32_bytes": 4096,
+      "espectro_complex64_bytes": 8192,
+      "total_bytes": 12288
+    }
+  },
+  "2_1c": {
+    "fs_Hz": 8000.0,
+    "N": 1024,
+    "df_Hz": 7.8125,
+    "k_exacto": 128,
+    "f_exacto_Hz": 1000.0,
+    "k_entre_bins": 128.5,
+    "f_entre_bins_Hz": 1003.90625,
+    "figura_magnitud": "resultados/regenerados/fundamentos/figuras/2_1c_magnitud.png",
+    "figura_fase": "resultados/regenerados/fundamentos/figuras/2_1c_fase.png"
+  },
+  "2_1d": {
+    "fs_Hz": 8000.0,
+    "N": 1024,
+    "error_max_simetria": 1.4210854715202004e-14,
+    "k_objetivo_1000Hz": 128,
+    "max_imag_modificacion_asimetrica": 0.5000000000000001,
+    "max_imag_modificacion_simetrica": 1.1102230246252778e-16,
+    "figura_simetria": "resultados/regenerados/fundamentos/figuras/2_1d_simetria_conjugada.png",
+    "figura_ifft": "resultados/regenerados/fundamentos/figuras/2_1d_ifft_simetria.png"
+  }
+}

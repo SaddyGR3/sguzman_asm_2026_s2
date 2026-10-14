@@ -1,0 +1,76 @@
+[
+  {
+    "comando": [
+      "/tmp/tarea1-notebook-42k6uoly/paquete/pruebas/filtros_temporales/test_candidatos_fir_iir.py"
+    ],
+    "resultado": "correcto"
+  },
+  {
+    "comando": [
+      "/tmp/tarea1-notebook-42k6uoly/paquete/pruebas/filtros_temporales/test_comparacion_fir_iir.py"
+    ],
+    "resultado": "correcto"
+  },
+  {
+    "comando": [
+      "/tmp/tarea1-notebook-42k6uoly/paquete/pruebas/filtros_temporales/test_cuantizacion_saturacion_memoria.py"
+    ],
+    "resultado": "correcto"
+  },
+  {
+    "comando": [
+      "/tmp/tarea1-notebook-42k6uoly/paquete/pruebas/filtros_temporales/test_ecuacion_diferencias.py"
+    ],
+    "resultado": "correcto"
+  },
+  {
+    "comando": [
+      "/tmp/tarea1-notebook-42k6uoly/paquete/pruebas/filtros_temporales/test_filtro_final.py"
+    ],
+    "resultado": "correcto"
+  },
+  {
+    "comando": [
+      "/tmp/tarea1-notebook-42k6uoly/paquete/pruebas/filtros_temporales/test_polos_estabilidad.py"
+    ],
+    "resultado": "correcto"
+  },
+  {
+    "comando": [
+      "/tmp/tarea1-notebook-42k6uoly/paquete/pruebas/filtros_temporales/test_procesamiento_bloques.py"
+    ],
+    "resultado": "correcto"
+  },
+  {
+    "comando": [
+      "/tmp/tarea1-notebook-42k6uoly/paquete/pruebas/filtros_temporales/test_respuesta_frecuencia.py"
+    ],
+    "resultado": "correcto"
+  },
+  {
+    "comando": [
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "/tmp/tarea1-notebook-42k6uoly/paquete/pruebas/filtrado_espectral",
+      "-p",
+      "test_*.py",
+      "-v"
+    ],
+    "resultado": "correcto"
+  },
+  {
+    "comando": [
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "/tmp/tarea1-notebook-42k6uoly/paquete/pruebas/comparacion",
+      "-p",
+      "test_*.py",
+      "-v"
+    ],
+    "resultado": "correcto"
+  }
+]

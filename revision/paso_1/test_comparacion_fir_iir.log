@@ -1,0 +1,6 @@
+FIR promedio móvil de orden 4
+Magnitud en DC: 0.0 dB
+Fase en DC: 0.0 rad
+Retardo de grupo en DC: 2.0000000000000004 muestras
+/home/saddygr/Documentos/GitHub/sguzman_asm_2026_s2/seccion_2_3/pruebas/filtros_temporales/test_comparacion_fir_iir.py:59: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+  plt.show()

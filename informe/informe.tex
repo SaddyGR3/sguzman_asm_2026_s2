@@ -1,0 +1,303 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-tabla]{babel}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{amsmath,amssymb,booktabs,graphicx,float,caption,subcaption}
+\usepackage{microtype,xcolor}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue!45!black,urlcolor=blue!45!black,citecolor=blue!45!black}
+\graphicspath{{figuras/}}
+\setlength{\parskip}{5pt}
+\setlength{\parindent}{0pt}
+\setcounter{tocdepth}{2}
+\newcommand{\ruta}[1]{\nolinkurl{#1}}
+\newcommand{\figura}[3]{\begin{figure}[H]\centering\includegraphics[width=\linewidth,height=.70\textheight,keepaspectratio]{#1}\caption{#2}\label{#3}\end{figure}}
+% Autores y carnés proporcionados para la entrega final.
+\newcommand{\integranteuno}{Saddy Guzman Rojas --- 2023088184}
+\newcommand{\integrantedos}{David García Cruz --- 2024115575}
+\newcommand{\integrantetres}{Válerin Calderón Bran --- 2020033313}
+\newcommand{\integrantecuatro}{Luis Castro Montenegro --- 2013083843}
+\begin{document}
+\begin{titlepage}
+\centering
+{\Large Instituto Tecnológico de Costa Rica\par}
+Escuela de Ingeniería en Computadores\par
+CE1110 --- Análisis de Señales Mixtas\par
+\vspace{2cm}
+{\huge\bfseries Tarea 1\par}
+\vspace{.5cm}
+{\LARGE Caracterización espectral y prototipado de filtros para reducción de ruido\par}
+\vspace{1.5cm}
+\integranteuno\par\integrantedos\par\integrantetres\par\integrantecuatro\par
+\vfill
+Profesor: Luis Chavarría Zamora\par
+Segundo semestre de 2026\par
+Fecha de entrega: 14 de octubre de 2026\par
+\vspace{.6cm}
+\small Repositorio: \url{https://github.com/SaddyGR3/sguzman_asm_2026_s2}\par
+Informe de prototipado en computadora; propuesta embebida pendiente de implementación física.
+\end{titlepage}
+\tableofcontents
+\clearpage
+\section{Introducción y alcance}
+Se estudian tres señales multitono contaminadas para comparar un filtro temporal FIR y un método adaptativo FFT/IFFT. El objetivo es decidir, con resultados reproducibles, qué estrategia conviene en cada tipo de ruido y cómo trasladarla a un sistema distribuido con tres ESP32. Se responde a los apartados 2.1--2.5 del enunciado\cite{tarea}; la distribución de nodos se vincula con el proyecto del curso\cite{proyecto}.
+
+La evaluación principal usa los archivos exactos generados en 2.2, doble precisión en PC y un intervalo común que compensa el retardo del FIR. Los tiempos son mediciones de las implementaciones Python en PC. Las tasas, memoria y plazos del sistema físico son presupuestos de diseño, sujetos a validación en hardware. La referencia limpia se emplea para evaluar los filtros; no interviene en la estimación espectral ni en la selección de sus ganancias.
+
+\section{Fundamentos, muestreo y FFT (2.1)}
+\subsection{Representaciones de Fourier y algoritmo FFT}
+Una señal periódica continua de período $T_0$ admite una serie de Fourier:
+\begin{equation}
+x(t)=\sum_{k=-\infty}^{\infty}C_k e^{jk\omega_0t},\qquad \omega_0=2\pi/T_0.
+\end{equation}
+La transformada de Fourier extiende la representación a señales aperiódicas:
+\begin{equation}
+X(\omega)=\int_{-\infty}^{\infty}x(t)e^{-j\omega t}\,dt,\qquad
+x(t)=\frac{1}{2\pi}\int_{-\infty}^{\infty}X(\omega)e^{j\omega t}\,d\omega.
+\end{equation}
+La periodicidad temporal origina líneas espectrales; para una señal periódica su transformada se expresa mediante impulsos ponderados por los coeficientes de la serie\cite{oppenheim}. Tras muestrear $x[n]=x(n/f_s)$ y observar $N$ muestras, la DFT y su inversa se definen como\cite{proakis}:
+\begin{equation}
+X[k]=\sum_{n=0}^{N-1}x[n]e^{-j2\pi kn/N},\qquad
+x[n]=\frac1N\sum_{k=0}^{N-1}X[k]e^{j2\pi kn/N}.
+\end{equation}
+La DFT es la transformación matemática. La FFT calcula esa misma DFT mediante descomposición y simetrías, con costo típico $O(N\log_2N)$ frente a $O(N^2)$ de la evaluación directa. No es una transformación distinta. Para $N=32$, la señal $\cos(2\pi3n/32)+0.5\cos(2\pi7n/32+0.4)$ produjo una diferencia máxima de $5.937\times10^{-14}$ entre la suma directa y \ruta{numpy.fft.fft}, compatible con error de punto flotante.
+
+\subsection{Resolución, duración y memoria}
+Las frecuencias muestreadas por la DFT son $f_k=kf_s/N$ y su separación es
+\begin{equation}
+\Delta f=\frac{f_s}{N}=\frac1T,\qquad T=\frac{N}{f_s}.
+\end{equation}
+\begin{table}[H]\centering\caption{Compromiso para $f_s=8000$ Hz. Memoria básica de entrada real y espectro complejo en precisión simple.}
+\begin{tabular}{rrrrrr}\toprule
+$N$ & $T$ (ms) & $\Delta f$ (Hz) & Entrada (KiB) & Espectro (KiB) & Total (KiB)\\\midrule
+256&32&31.25&1&2&3\\512&64&15.625&2&4&6\\1024&128&7.8125&4&8&12\\2048&256&3.90625&8&16&24\\\bottomrule
+\end{tabular}\end{table}
+Una observación más larga reduce la separación entre bins, aumenta la espera para completar el bloque y requiere más almacenamiento. La capacidad de separar tonos también depende del ancho del lóbulo de la ventana; $\Delta f$ por sí sola no garantiza resolver componentes cercanas. Las tablas FFT, estados y colas se presupuestan por separado en la propuesta embebida.
+
+\subsection{Bin exacto, fuga espectral, magnitud y fase}
+Con $N=1024$, se comparan 1000 Hz ($k=128$) y 1003.90625 Hz ($k=128.5$). La ventana rectangular es $w_R[n]=1$; la Hann simétrica usada en esta demostración es $w_H[n]=[1-\cos(2\pi n/(N-1))]/2$.
+\figura{2_1c_magnitud.png}{Tonos centrado y entre bins con ventanas rectangular y Hann. Cada espectro se normaliza a su máximo para comparar la fuga.}{fig:fuga}
+El tono centrado con ventana rectangular completa un número entero de ciclos y concentra su energía en el bin correspondiente. El tono intermedio presenta una discontinuidad en la extensión periódica del bloque y distribuye energía a otros bins. Hann reduce los lóbulos laterales, aproximadamente de $-13$ a $-31$ dB, a costa de ampliar el lóbulo principal entre primeros nulos de aproximadamente $2\Delta f$ a $4\Delta f$. Su efecto es reducir fuga lejana y ensanchar el pico\cite{proakis}.
+\figura{2_1c_fase.png}{Fase de los ejemplos de ventanas. Se ocultan bins de magnitud prácticamente nula, cuya fase es sensible al error numérico.}{fig:fase}
+La fase conserva información de posición temporal y de la ventana aplicada. En bins con energía despreciable no debe interpretarse como una componente física fiable.
+
+\subsection{Simetría conjugada y reconstrucción real}
+Para $x[n]\in\mathbb R$, $X[N-k]=X^*[k]$; DC y Nyquist son reales. En una señal con tonos de 1000, 625 y 1375 Hz, la diferencia máxima entre pares conjugados fue $1.421\times10^{-14}$.
+\begin{figure}[H]\centering
+\includegraphics[width=.49\linewidth]{2_1d_simetria_conjugada.png}\hfill
+\includegraphics[width=.49\linewidth]{2_1d_ifft_simetria.png}
+\caption{Simetría conjugada y efecto de modificar uno o ambos miembros del par.}\end{figure}
+Al anular solo $X[128]$, la IFFT presentó una parte imaginaria máxima de 0.5; al anular también $X[1024-128]$, cayó a $1.110\times10^{-16}$. Toda modificación de una FFT completa debe preservar ambos miembros del par para reconstruir una señal real. La implementación espectral en PC utiliza \ruta{rfft/irfft} y ganancias reales para conservar esta condición.
+
+\section{Generación y caracterización de señales (2.2)}
+La referencia es una suma de tonos a 300, 700 y 1100 Hz, amplitudes relativas $1$, $0.55$, $0.30$ y fases $0^\circ$, $35^\circ$, $-50^\circ$. Se aplica una transición de 20 ms en los extremos y una escala común a referencia, ruido y mezcla. Cada captura tiene $L=8192$ muestras, dura 1.024 s, usa $f_s=8000$ Hz y bloques nominales de $N=1024$.
+
+Con $x=s+r$, se escala el ruido a $\gamma$ dB mediante
+\begin{equation}
+r=\widetilde r\sqrt{\frac{\sum_n s^2[n]}{10^{\gamma/10}\sum_n\widetilde r^2[n]}}.
+\end{equation}
+\begin{table}[H]\centering\caption{Configuración y SNR verificada sobre las 8192 muestras originales.}
+\begin{tabular}{clrrr}\toprule Caso & Ruido & Semilla & Objetivo (dB) & Obtenida (dB)\\\midrule
+1&Tonal, 2150 Hz&202601&0&0.000000\\
+2&Blanco gaussiano&202602&5&5.000000\\
+3&Banda 900--1300 Hz&202603&3&3.000000\\\bottomrule
+\end{tabular}\end{table}
+Las diferencias respecto al objetivo son menores que $3\times10^{-14}$ dB. Los \ruta{muestras_exactas.npz} conservan las matrices sin cuantización WAV y son la fuente de la comparación. Se exportan también referencia, ruido y entrada en WAV, semillas y configuración. Las tres figuras siguientes documentan tiempo, magnitud, fase y energía por bandas.
+\begin{figure}[p]\centering
+\includegraphics[width=.97\linewidth,height=.38\textheight,keepaspectratio]{generacion_1_temporal.png}\par
+\includegraphics[width=.97\linewidth,height=.38\textheight,keepaspectratio]{generacion_1_magnitud.png}
+\caption{Caso 1: Señales temporales y magnitud espectral. Resultados originales de 2.2.}\end{figure}
+\begin{figure}[p]\centering
+\includegraphics[width=.97\linewidth,height=.38\textheight,keepaspectratio]{generacion_1_fase.png}\par
+\includegraphics[width=.97\linewidth,height=.38\textheight,keepaspectratio]{generacion_1_energia.png}
+\caption{Caso 1: Fase espectral y energía por bandas. Resultados originales de 2.2.}\end{figure}
+\begin{figure}[p]\centering
+\includegraphics[width=.97\linewidth,height=.38\textheight,keepaspectratio]{generacion_2_temporal.png}\par
+\includegraphics[width=.97\linewidth,height=.38\textheight,keepaspectratio]{generacion_2_magnitud.png}
+\caption{Caso 2: Señales temporales y magnitud espectral. Resultados originales de 2.2.}\end{figure}
+\begin{figure}[p]\centering
+\includegraphics[width=.97\linewidth,height=.38\textheight,keepaspectratio]{generacion_2_fase.png}\par
+\includegraphics[width=.97\linewidth,height=.38\textheight,keepaspectratio]{generacion_2_energia.png}
+\caption{Caso 2: Fase espectral y energía por bandas. Resultados originales de 2.2.}\end{figure}
+\begin{figure}[p]\centering
+\includegraphics[width=.97\linewidth,height=.38\textheight,keepaspectratio]{generacion_3_temporal.png}\par
+\includegraphics[width=.97\linewidth,height=.38\textheight,keepaspectratio]{generacion_3_magnitud.png}
+\caption{Caso 3: Señales temporales y magnitud espectral. Resultados originales de 2.2.}\end{figure}
+\begin{figure}[p]\centering
+\includegraphics[width=.97\linewidth,height=.38\textheight,keepaspectratio]{generacion_3_fase.png}\par
+\includegraphics[width=.97\linewidth,height=.38\textheight,keepaspectratio]{generacion_3_energia.png}
+\caption{Caso 3: Fase espectral y energía por bandas. Resultados originales de 2.2.}\end{figure}
+\clearpage
+\subsection{Identificación y límites de recuperación}
+El caso 1 presenta un pico aislado dominante: la caracterización detectó 2150.39 Hz, cercano a los 2150 Hz configurados. El caso 2 tiene energía ampliamente distribuida, con coeficiente de variación entre bandas de 3.64\%. El caso 3 concentra energía en una banda detectada de aproximadamente 870.12--1327.15 Hz; los extremos difieren de 900--1300 Hz por la estimación finita y la fuga. Estos indicadores sirven para distinguir interferencia tonal, ruido distribuido y ruido localizado en una banda.
+
+Cuando ruido y señal comparten frecuencia, la mezcla por sí sola no permite atribuir perfectamente cada contribución. En particular, rechazar toda la banda 900--1300 Hz elimina también el tono útil de 1100 Hz. La preservación de tonos persistentes ayuda en estos ejemplos, pero no prueba recuperación perfecta ni generalización a voz o transitorios.
+
+\section{Filtro temporal FIR (2.3)}
+\subsection{Especificaciones y elección}
+Se diseña un pasa bajas para el caso 1: borde de paso 1200 Hz, borde de rechazo 1800 Hz, pérdida permitida $\leq1$ dB y rechazo deseado $\geq40$ dB. El corte usado por \ruta{firwin} es 1500 Hz. El diseño Kaiser añade 5 dB de margen y fuerza longitud impar: orden 36 y 37 coeficientes.
+
+Se contrastó con un Butterworth de orden 11, pérdida de aproximadamente 0.999 dB, rechazo mínimo 43.489 dB y radio máximo de polos 0.887110. Se eligió el FIR por su fase lineal, retardo constante, ausencia de realimentación y conservación de las tres componentes útiles. Su rizado medido es 0.062763 dB, pérdida máxima 0.040820 dB y rechazo mínimo 46.106635 dB. La respuesta a 2150 Hz es $-64.959$ dB.
+
+\subsection{Ecuación, transferencia, polos y estabilidad}
+\begin{equation}
+y[n]=\sum_{k=0}^{36}b[k]x[n-k],\qquad
+H(z)=\sum_{k=0}^{36}b[k]z^{-k}=\frac{\sum_{k=0}^{36}b[k]z^{36-k}}{z^{36}}.
+\end{equation}
+Por simetría $b[k]=b[36-k]$, se enumeran los 19 valores independientes en el apéndice. Esta tabla define los 37 coeficientes sin omitir precisión significativa. La representación racional tiene 36 polos en el origen y 36 ceros; su ROC causal es $|z|>0$. El círculo unitario pertenece a la ROC y la respuesta impulsional finita es absolutamente sumable: el filtro es estable\cite{oppenheim,proakis}.
+\begin{figure}[H]\centering\includegraphics[width=.65\linewidth]{fir_polos_ceros.png}\caption{Polos y ceros del FIR definitivo. Los 36 polos coincidentes se representan con una cruz en el origen.}\end{figure}
+\figura{fir_respuesta.png}{Respuesta del FIR definitivo. Magnitud en toda la banda; fase y retardo en banda de paso. El retardo es 18 muestras, equivalente a 2.25 ms.}{fig:fir}
+
+\subsection{Implementación y validación}
+La ecuación de diferencias se aplica manualmente; \ruta{scipy.signal.lfilter} sirve como referencia de verificación. El FIR definitivo dio errores máximos de $2.776\times10^{-16}$, $3.331\times10^{-16}$ y $3.331\times10^{-16}$ en los tres casos, menores que la tolerancia declarada $10^{-12}$. La versión por bloques conserva el estado y reproduce el filtrado completo; reiniciar el estado entre bloques introduciría transitorios artificiales. La aplicación a los tres casos se presenta con el protocolo común en la sección comparativa.
+
+\subsection{Cuantización, saturación y memoria}
+En \ruta{float32}, el error máximo de coeficiente es $1.088\times10^{-8}$ y el rechazo mínimo 46.106615 dB. En Q15, el paso es $2^{-15}=3.052\times10^{-5}$, el error máximo $1.489\times10^{-5}$ y el rechazo mínimo 45.995639 dB. Ambas representaciones conservan las especificaciones; se propone \ruta{float32} para ESP32.
+
+Como $\sum_k|b[k]|=1.702778$, la entrada normalizada a $|x|\leq1$ no garantiza salida dentro de $[-1,1)$. Un escalamiento conservador es 0.587276, acompañado de contadores de saturación. Para Q15, la cota del acumulador es 1828323328, menor que el máximo \ruta{int32} de 2147483647; la conversión de salida sigue requiriendo control de escala. El FIR mínimo ocupa 37 coeficientes y 36 estados: 584 B en doble precisión, 292 B en precisión simple o 146 B en Q15. El módulo genérico de PC y la biblioteca embebida tienen otros requisitos, detallados más adelante.
+
+\section{Reducción espectral FFT/IFFT (2.4)}
+\subsection{Cadena de procesamiento}
+La implementación en PC usa $N=1024$, salto $H=512$ y ventana raíz de Hann periódica en análisis y síntesis:
+\begin{equation}
+w[n]=\sqrt{\frac{1-\cos(2\pi n/N)}2},\qquad
+w^2[n]+w^2[n+H]=1\quad (0\leq n<H).
+\end{equation}
+Se retira la media de la captura, se añade relleno en los extremos y se procesan 17 tramas. Cada trama recorre ventana, FFT real, estimación del piso, ganancia real, IFFT, ventana de síntesis y suma por solapamiento. Se recorta la salida y se restaura la media. Con ganancia unitaria, el error máximo de reconstrucción es menor que $4\times10^{-16}$; una comprobación con FFT completa produce parte imaginaria menor que $3\times10^{-16}$.
+
+El piso se estima desde la mezcla mediante mediana temporal de magnitudes y mediana local en frecuencia de 31 bins. Este uso de la captura completa hace que la versión evaluada sea fuera de línea. La ventana periódica de reconstrucción difiere de la Hann simétrica de la demostración 2.1.
+
+\subsection{Reglas adaptativas y selección}
+Para interferencia tonal, \ruta{picos} detecta máximos locales mayores que seis veces el piso, fuera de la banda protegida 0--1200 Hz, y atenúa seis bins a cada lado con ganancia $10^{-60/20}=0.001$. La frecuencia 2150 Hz no se entrega al algoritmo. Una prueba adicional con interferencia desplazada a 2350 Hz y la misma configuración logró aproximadamente 59.33 dB de atenuación en su entorno.
+
+Para ruido distribuido se usa \ruta{resta}:
+\begin{equation}
+G_m[k]=\operatorname{clip}\left(1-\frac{3P[k]}{|X_m[k]|},\,0.05,\,1\right).
+\end{equation}
+La implementación trata aparte magnitudes nulas para evitar divisiones inválidas. Se protegen máximos persistentes en 0--1200 Hz que superan $2.5$ veces el piso y tienen variación relativa temporal menor que 0.55, con un bin vecino por lado. En el caso 3 se detectaron centros de 296.875, 703.125 y 1101.5625 Hz, sin consultar la señal limpia. Se elige \ruta{picos} para el caso 1 y \ruta{resta} para los casos 2 y 3 según el tipo de ruido caracterizado. La selección no constituye un clasificador automático de cualquier entrada desconocida.
+
+El método alternativo \ruta{top_k}, que conserva 12 bins dominantes, dio SNR de 0.03, 17.75 y 7.93 dB sobre las 8192 muestras. \ruta{picos} deja los casos 2 y 3 prácticamente sin mejora, mientras \ruta{resta} deja el caso 1 en 0.14 dB. El ruido tonal intenso puede parecer señal persistente, y un rechazo de picos aislados no resuelve ruido distribuido.
+
+\subsection{Compromiso entre ruido y distorsión}
+En una ablación del caso 2 sin protección tonal, sobre las 8192 muestras, se incrementó $\alpha$ en $G=\operatorname{clip}(1-\alpha P/|X|,0.05,1)$:
+\begin{table}[H]\centering\caption{Ablación distinta de la configuración principal. Atenuación medida fuera de $\pm20$ Hz de los tonos.}
+\begin{tabular}{rrrr}\toprule $\alpha$ & Atenuación (dB) & SNR (dB) & Ganancia 1100 Hz (dB)\\\midrule
+2&20.62&16.94&$-2.71$\\3&25.85&14.74&$-4.28$\\8&25.98&7.64&$-15.58$\\\bottomrule
+\end{tabular}\end{table}
+Aumentar la sustracción puede eliminar más energía fuera de los tonos y, simultáneamente, destruir señal útil. La atenuación del ruido por sí sola no decide cuál filtro es mejor. Esta prueba no se mezcla con las métricas comunes de 8174 muestras.
+
+\section{Comparación y propuesta embebida (2.5)}
+\subsection{Protocolo común y significado de las métricas}
+Se usa $K=8192-18=8174$ muestras. Referencia, entrada y salida espectral se toman en $[0:8174]$; la salida FIR se toma en $[18:8192]$. Así se compensa su retardo y todos los métodos se evalúan contra la misma referencia. No se descartan otros extremos. La SNR de entrada cambia ligeramente respecto a los objetivos de captura completa por el recorte común.
+\begin{align}
+\mathrm{MSE}&=\frac1K\sum_{n=0}^{K-1}(s[n]-y[n])^2,\\
+\mathrm{SNR}&=10\log_{10}\frac{\sum_n s^2[n]}{\sum_n(s[n]-y[n])^2},\\
+\Delta\mathrm{SNR}&=\mathrm{SNR}_{\mathrm{salida}}-\mathrm{SNR}_{\mathrm{entrada}}.
+\end{align}
+Sin alinear, el FIR del caso 1 obtiene $-4.998$ dB: esa cifra penaliza el desfase temporal, por lo que no es el criterio principal de calidad del filtro.
+
+Para separar conservación útil de ruido residual, se fijan las ganancias $G$ estimadas desde $x$ y se aplica el mismo operador a $s$ y $r$. Se comprueba $y=y_s+y_r$ dentro de $10^{-12}$. El FIR es lineal; el operador espectral con ganancias fijadas también permite esta descomposición. Es una evaluación condicional con referencia conocida, no una separación accesible en operación normal:
+\begin{equation}
+C_u=100\frac{E(y_s)}{E(s)},\qquad A_r=10\log_{10}\frac{E(r)}{E(y_r)},\qquad E(v)=\sum_n v^2[n].
+\end{equation}
+La energía total $100E(y)/E(s)$ incluye ruido residual y términos cruzados: no equivale a $C_u$. La atenuación $A_B$ se calcula con el periodograma unilateral Hann periódico, pesos dobles en bins interiores, en 2130--2170 Hz para el caso 1 y 900--1300 Hz para el caso 3. Para ruido blanco no se define una interferencia estrecha dominante. La ganancia útil por tono se estima mediante ajuste de seno, coseno y DC sobre $y_s$, evitando atribuir ruido residual al tono.
+
+\begin{table}[H]\centering\small\caption{Calidad común: referencia y salidas alineadas, $K=8174$.}\input{tabla_calidad.tex}\label{tab:calidad}\end{table}
+\begin{table}[H]\centering\small\caption{Conservación útil, energía total y atenuación del ruido. $A_B$ no aplica al caso blanco.}\input{tabla_energia.tex}\end{table}
+\begin{table}[H]\centering\small\caption{Ganancia de cada tono útil bajo el operador fijado desde la mezcla.}\input{tabla_tonos.tex}\end{table}
+
+\subsection{Resultados y elección por caso}
+En el caso 1, el FIR obtiene 51.911 dB frente a 32.166 dB espectrales y conserva 99.643\% de energía útil. Su MSE es aproximadamente 94.30 veces menor. Como el ruido está separado de los tonos, un pasa bajas de fase lineal resulta suficiente y presenta un estado reducido. La FFT conserva casi toda la energía útil y atenúa la interferencia, pero su error de reconstrucción residual limita el SNR.
+
+Un diagnóstico posterior encontró que el primer y último tramo de 512 muestras, 12.528\% del intervalo, concentran 98.983\% del error espectral del caso 1. Esto sugiere influencia de los extremos y el procesamiento por ventanas; no prueba por sí solo una causa específica. Esos extremos permanecen en la evaluación principal.
+
+En el caso 2, la sustracción espectral obtiene 20.813 dB frente a 9.524 dB del FIR; conserva 99.016\% de energía útil y mejora la SNR en 15.804 dB. El FIR deja pasar el ruido blanco dentro de su banda, mientras la estimación espectral actúa sobre más frecuencias.
+
+En el caso 3, el espectral alcanza 14.677 dB frente a 3.071 dB del FIR, con 99.764\% de energía útil. El FIR casi no mejora porque la banda ruidosa se superpone con el tono de 1100 Hz. La protección de tonos del espectral reduce el daño, pero sigue existiendo ruido residual inseparable. Los resultados justifican FIR para el caso tonal separado y FFT/IFFT para los casos distribuidos evaluados. No hay un método único superior en todas las condiciones.
+
+\figura{resumen_calidad.png}{Resumen de SNR y MSE con el protocolo común.}{fig:calidad}
+\figura{energia_y_tonos.png}{Conservación de energía útil y ganancias de los tonos, calculadas sobre la descomposición condicional.}{fig:energia}
+\figura{caso_1_comparacion.png}{Caso 1: comparación temporal, espectral y del error. La vista temporal es una selección de 100--120 ms; las métricas usan todo el intervalo común.}{fig:caso1}
+\figura{caso_2_comparacion.png}{Caso 2: ruido distribuido y mejora del método espectral.}{fig:caso2}
+\figura{caso_3_comparacion.png}{Caso 3: superposición con la banda útil y ruido residual después del filtrado.}{fig:caso3}
+Las densidades espectrales anteriores usan las 8174 muestras con Hann periódica, sin retirar DC. El piso gráfico de $-160$ dB es solo visual. El espectro del error contiene tanto ruido residual como distorsión de la referencia.
+
+\subsection{Tiempo y memoria medidos en PC}
+Se realizaron tres calentamientos y 30 repeticiones alternadas por método y caso, usando \ruta{perf_counter_ns}. Se mide el procesamiento de la captura, sin carga de archivos, diseño, exportación ni métricas. El tiempo equivalente por 1024 muestras es el tiempo de captura dividido entre ocho; para el espectral no equivale al plazo causal de una trama.
+\begin{table}[H]\centering\footnotesize\caption{Mediciones en PC: mediana equivalente por 1024 muestras, percentil 95 de la captura completa y memoria lógica/trazada.}\input{tabla_recursos.tex}\end{table}
+El equipo de referencia es Intel Core i5-12450H. El FIR manual de Python y la FFT vectorizada de NumPy tienen costos de implementación diferentes; su relación de tiempos no determina el rendimiento de ESP32. El pico adicional se registra con \ruta{tracemalloc}, que puede omitir asignaciones nativas. La entrada común ocupa 65536 B y se informa aparte. Los 592 B persistentes del FIR genérico incluyen 37 coeficientes $b$, un coeficiente $a$ y 36 estados en doble precisión. El espectral declara cero estado persistente entre capturas; esto no significa memoria de trabajo cero ni capacidad de flujo continuo. Estas columnas no se suman como si fueran categorías independientes de RAM.
+\figura{recursos_pc.png}{Tiempo y memoria del prototipo en PC. Las cifras no son mediciones del sistema físico.}{fig:pc}
+\subsection{Parámetros y adaptación causal para ESP32}
+Se proponen tres ESP32 clásicos con $f_s=8000$ Hz, $N=1024$, salto $H=512$ y \ruta{float32}. La separación espectral es 7.8125 Hz y llega un lote cada 64 ms. El FIR conserva los 37 coeficientes y estado continuo; cambiar sus lotes a 512 muestras no altera la ecuación.
+
+La eliminación causal de DC se propone mediante $d[n]=d[n-1]+\beta(x[n]-d[n-1])$, con $\beta=1-e^{-1/(f_s\tau)}$, $\tau=1$ s e inicialización con la primera muestra. Se conserva DC por índice para restaurarlo en la salida correspondiente. El piso usa ocho tramas completas actuales y pasadas, mediana por bin y mediana local de 31 bins. Se conservan como punto de partida los umbrales, $\alpha=3$ y ganancia mínima 0.05. Hasta reunir el historial se usa ganancia unitaria; el relleno de ceros no entra al estimador. Los 576 ms de contexto corresponden al historial y calentamiento, no al retardo de reproducción.
+
+La meta de cómputo es $\leq48$ ms por salto de 64 ms, incluyendo diagnóstico. El FIR requiere 18944 multiplicaciones-acumulaciones por salto, 296000 por segundo. Una FFT compleja radix 2 de 1024 puntos requiere 5120 mariposas; FFT e IFFT suman 10240 por salto. No son conteos de ciclos ni pruebas de tiempo real. La validación futura debe comprobar identidad con ganancia unitaria, continuidad y tolerancia inicial $10^{-5}$ en precisión simple. La meta de calidad es no perder más de 1 dB de SNR respecto a PC sobre el mismo intervalo; aún no se ha validado en ESP32.
+
+La adquisición física requiere verificar antialias, conversores y reloj. Un ejemplo I2S con dos slots de 32 bits requiere 4096 B por 512 muestras; se proponen dos descriptores de 256 muestras y 2048 B, respetando el límite de 4092 B\cite{espidf}. El formato del ADC depende de la placa seleccionada.
+
+\subsection{Bibliotecas: licencia, precisión y restricciones}
+Se propone ESP-DSP 1.8.2, licencia Apache 2.0; su manifiesto declara ESP-IDF $\geq4.2$\cite{espdsp}. Se revisaron código y hashes de esa versión, sin compilar firmware. La API \ruta{dsps_fft2r_fc32} utiliza complejos intercalados en precisión simple; se habilita optimización ESP32 y máximo 1024. Tras la FFT se aplica \ruta{dsps_bit_rev2r_fc32}. La inversa se obtiene mediante
+\begin{equation}\operatorname{IFFT}(X)=\frac{\operatorname{conj}(\operatorname{FFT}(\operatorname{conj}(X)))}N.\end{equation}
+Se reflejan ganancias en pares conjugados y se tratan DC/Nyquist una vez. El buffer complejo ocupa 8192 B; las tablas requieren 4096 B de rotaciones y 1984 B de inversión de bits. Se inicializan una vez, sin inicialización/liberación concurrente. El FIR de esta variante requiere 41 estados, 37 coeficientes y estructura estimada de 40 B con ABI de 32 bits: 352 B. El orden de coeficientes debe probarse con un FIR no simétrico, pues el actual puede ocultar una inversión. Las restricciones ESP32-S3 no se transfieren automáticamente al ESP32 clásico.
+
+KISS FFT 131.1.0 ofrece una alternativa portable con licencia BSD de tres cláusulas\cite{kiss}. Por defecto usa \ruta{float}; admite doble precisión y Q15/Q31 por configuración. La FFT real exige longitud par, la entrada/salida coincidentes pueden requerir memoria auxiliar y la inversa flotante necesita normalización explícita. Se elige ESP-DSP por su ruta optimizada para el hardware propuesto; falta medir rendimiento y precisión en el dispositivo.
+
+\subsection{Arquitectura de tres nodos}
+\figura{arquitectura_nodos.png}{Tres ESP32 físicos y enlaces UART independientes. Los tiempos son presupuestos de diseño, pendientes de medición.}{fig:nodos}
+N1 adquiere $x$, asigna índices y produce un diagnóstico FFT resumido por ventana. N2 mantiene el FIR causal y genera salida DAC o PWM con reconstrucción. N3 aplica FFT/IFFT, compara rutas y presenta métricas e interfaz local. N1--N2 transporta $x$; N1--N3 transporta $x$ y la referencia $s$ en pruebas controladas; N2--N3 transporta $y_{\mathrm{FIR}}$. UART0 se reserva para consola y los otros UART para los enlaces\cite{uart}; se usan niveles de 3.3 V y tierra común, con pines por definir según placa.
+
+En prueba digital, N1 reproduce $x$ y $s$ almacenadas con reloj e índices comunes. Una referencia analógica exige sincronización y calibración de conversores. Sin referencia, MSE, SNR y energía útil se muestran como no disponibles. N3 calcula ganancias exclusivamente desde $x$ y las aplica también a $s$ para evaluar la componente útil; esto añade FFT/IFFT y estado. Una segunda instancia FIR procesa la referencia para la otra ruta. La atenuación estimada por ventanas cortas debe identificarse como tal: no reproduce exactamente el periodograma largo de PC.
+
+\subsection{Tramas, bytes y tasas}
+Se proponen UART independientes dúplex completo a 921600 baudios, 8N1, diez bits por byte. Cada trama tiene cabecera de 32 B, carga, CRC de 4 B, COBS y delimitador cero\cite{cobs,zlib}. CRC-32/ISO-HDLC cubre cabecera y carga antes de COBS: polinomio reflejado \ruta{0xEDB88320}, inicio/XOR final \ruta{0xFFFFFFFF}; \ruta{123456789} da \ruta{0xCBF43926}.
+
+La cabecera usa orden de bytes menos significativo primero: identificador 2 B; versión, tipo, origen y destino, 1 B cada uno; banderas 2 B; sesión y secuencia, 4 B cada una; primer índice 8 B; número de muestras 2 B; formato y canales, 1 B cada uno; longitud de carga 4 B. Audio: 512 muestras \ruta{float32} finitas y normalizadas, 2048 B por canal; $(x,s)$ se intercalan. El índice FIR representa la salida causal original; la calidad compensa 18 muestras, sin cambiar el índice transmitido.
+
+DIAG de 64 B resume muestreo, bloque, salto, método, calentamiento, frecuencia/banda, piso, DC, energía, tiempo, contadores, índice e identificador de configuración. Control de 32 B permite configuración, inicio, parada, estado y confirmación con índice efectivo. Los parámetros completos se preinstalan; se exige confirmación antes de activar cambios coordinados.
+
+Con $R$ bytes antes de COBS, la cota conservadora es $R+\lfloor R/254\rfloor+2$, incluido delimitador:
+\begin{table}[H]\centering\caption{Tamaños máximos por trama.}\begin{tabular}{lrrr}\toprule Tipo&Carga (B)&Cabecera+carga+CRC (B)&Enlace (B)\\\midrule Entrada o FIR&2048&2084&2094\\Entrada con referencia&4096&4132&4150\\DIAG&64&100&102\\Control&32&68&70\\\bottomrule\end{tabular}\end{table}
+Llegan $f_s/H=15.625$ lotes/s; la tasa mínima 8N1 es $10Bf_s/H$ para $B$ bytes/lote:
+\begin{table}[H]\centering\small\caption{Presupuesto por enlace, con un DIAG por lote desde N1.}\begin{tabular}{lrrr}\toprule Enlace&B/lote&Mínimo (baudios)&Uso a 921600\\\midrule N1--N2: $x$+DIAG&2196&343125&37.23\%\\N1--N3: $(x,s)$+DIAG&4252&664375&72.09\%\\N2--N3: FIR&2094&327187.5&35.50\%\\\bottomrule\end{tabular}\end{table}
+Sin referencia, N1--N3 usa la misma tasa que N1--N2. Hasta diez controles/s y sentido añaden 7000 baudios medios: el enlace crítico llega a 671375, 72.85\%. 115200 es insuficiente. Son enlaces independientes; sus tasas no se suman como un bus único.
+
+El receptor verifica longitud máxima 4150 B, CRC, sesión, destino, formato, muestras e índices. Detecta duplicados y discontinuidades por índices: perder un DIAG no equivale a perder audio. No se retransmite audio vencido. Ante un hueco se invalidan métricas afectadas, se registran pérdidas, se reinician estados/calentamiento y se aplica una transición controlada. La recepción UART funciona independientemente del DSP. Los índices no corrigen deriva física de relojes: se necesita reloj común o regulación mediante ocupación de FIFO.
+
+\subsection{Memoria y retardo presupuestados}
+El DSP espectral aislado requiere aproximadamente 65133 B, o 81517 B con auxiliares. El presupuesto completo añade referencia, FIR, parsers, UART, DMA, pilas y colas:
+\begin{table}[H]\centering\caption{Memoria estimada por nodo; no son medidas en firmware.}\begin{tabular}{lrrrr}\toprule Nodo&Total (B)&Total (KiB)&Meta (KiB)&Margen (B)\\\midrule N1&72868&71.16&96&25436\\N2&46652&45.56&64&18884\\N3&137377&134.16&160&26463\\\bottomrule\end{tabular}\end{table}
+N3 reserva dos FIFO de 2048 muestras, 8192 B cada una, para referencia y FIR. Sus auxiliares suman 40960 B; N1/N2 reservan 32768 B cada uno. La disponibilidad final depende del firmware y funciones habilitadas. Estas cifras no equivalen al pico trazado de Python.
+
+Se propone reproducir con 256 ms de retardo, cuatro saltos. Bajo metas de cómputo de 48 ms, encolado de 1 ms por enlace, transmisión simultánea desde N1 y máximo un control adicional por salto, la ruta espectral está disponible en 223.897 ms y la FIR alineada en 226.069 ms. Caben en 256 ms dentro del modelo; falta verificar conversores, colas, diagnóstico e interrupciones reales. El retardo intrínseco FIR sigue siendo 18 muestras, 2.25 ms.
+
+\section{Conclusiones}
+El FIR es la mejor opción medida para el caso tonal separado: SNR 51.911 dB, conservación útil 99.643\%, fase lineal y estado reducido. La FFT/IFFT ofrece mejores resultados para ruido distribuido y superpuesto: SNR de 20.813 y 14.677 dB. Una atenuación mayor no garantiza mejor reconstrucción; la ablación muestra pérdida de señal útil al aumentar la sustracción.
+
+La propuesta fija tres ESP32, 8 kHz, FFT de 1024 puntos, salto 512, precisión simple y UART 921600. El nodo más exigente requiere aproximadamente 134.16 KiB bajo el presupuesto. El siguiente avance debe convertir la estimación a flujo causal y medir calidad, memoria, tiempo y estabilidad de comunicación en hardware. El prototipo en PC establece la referencia de software.
+
+\section{Contribuciones, trazabilidad y uso de IA}
+\begin{table}[H]\centering\caption{Distribución conforme al plan inicial.}\begin{tabular}{lp{10cm}}\toprule Responsable&Aporte\\\midrule Integrante 1&Fundamentos, demostraciones FFT y generación/caracterización (2.1--2.2).\\Integrante 2&Diseño FIR/IIR, ecuación de diferencias y validación temporal (2.3).\\Integrante 3&Estimación adaptativa y reconstrucción espectral (2.4).\\Integrante 4&Protocolo común, comparación, bibliotecas, arquitectura e informe (2.5).\\\bottomrule\end{tabular}\end{table}
+Las fuentes se encuentran en \ruta{seccion_2_1/} a \ruta{seccion_2_5/}. La comparación se reproduce con \ruta{seccion_2_5/src/evaluar_comparacion.py}, su CSV y \ruta{revision/paso_2/protocolo.json}. Las figuras usan las mediciones guardadas mediante \ruta{seccion_2_5/src/graficar_comparacion.py}. El script \ruta{informe/preparar_recursos.py} prepara tablas y figuras sin repetir el benchmark. Los registros de \ruta{revision/} documentan pruebas, derivaciones y hashes; la verificación CRC/COBS no representa un enlace físico implementado. El notebook unificado y el paquete portable se encuentran en \ruta{entrega/tarea1/}. La versión de entrega se identifica mediante la etiqueta \ruta{tarea1_prototipo} en la rama de integración del repositorio.
+
+Se usó asistencia de IA para revisar e integrar aportes, preparar el módulo espectral y evaluador común, apoyar pruebas, calcular presupuestos y redactar el informe. Se proporcionaron enunciados, plan, libros, código y datos del repositorio. Se verificaron señales/metadatos, equivalencia FIR con SciPy, reconstrucción unitaria y simetría, métricas de resultado conocido, descomposición útil/residual, correspondencia CSV/JSON/NPZ y cálculos de trama/memoria. La revisión documental de bibliotecas no sustituye pruebas en ESP32. Cada integrante debe revisar y explicar su aporte antes de entregar.
+
+\begin{thebibliography}{10}
+\bibitem{tarea} L. Chavarría Zamora. \emph{Tarea 1: Caracterización espectral y prototipado de filtros para reducción de ruido}. CE1110, TEC, segundo semestre de 2026. Enunciado versión 7.
+\bibitem{proyecto} L. Chavarría Zamora. \emph{Diseño de un sistema distribuido de reducción adaptativa de ruido en tiempo real}. CE1110, TEC, segundo semestre de 2026. Enunciado del proyecto, versión 7.
+\bibitem{oppenheim} A. V. Oppenheim, A. S. Willsky y S. H. Nawab. \emph{Señales y sistemas}, 2.\textsuperscript{a} ed. Ejemplar proporcionado en \ruta{Contexto/}. Fourier y sistemas lineales; secciones 1.6.6 y 3.8--3.9.
+\bibitem{proakis} J. G. Proakis y D. G. Manolakis. \emph{Digital Signal Processing}, 4.\textsuperscript{a} ed. Ejemplar proporcionado en \ruta{Contexto/}. DFT, FFT, ventanas y filtrado; sección 5.4.1.
+\bibitem{espdsp} Espressif Systems. \emph{ESP-DSP}, versión 1.8.2: licencia, manifiesto, FFT y FIR. \url{https://github.com/espressif/esp-dsp/tree/v1.8.2}. Consulta: 12 de octubre de 2026.
+\bibitem{kiss} M. Borgerding y colaboradores. \emph{KISS FFT}, versión 131.1.0: README y licencia. \url{https://github.com/mborgerding/kissfft/tree/131.1.0}. Consulta: 12 de octubre de 2026.
+\bibitem{espidf} Espressif Systems. \emph{ESP-IDF: I2S driver, ESP32}. \url{https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/i2s.html}. Consulta: 12 de octubre de 2026.
+\bibitem{uart} Espressif Systems. \emph{ESP-IDF: UART driver, ESP32}. \url{https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/uart.html}. Consulta: 12 de octubre de 2026.
+\bibitem{cobs} S. Cheshire y M. Baker. \emph{Consistent Overhead Byte Stuffing}. \url{https://www.stuartcheshire.org/papers/COBSforToN.pdf}.
+\bibitem{zlib} J. L. Gailly y M. Adler. \emph{zlib manual} y \ruta{crc32.c}, versión 1.3.1. \url{https://zlib.net/manual.html}; \url{https://github.com/madler/zlib/blob/v1.3.1/crc32.c}. Consulta: 12 de octubre de 2026.
+\end{thebibliography}
+\clearpage
+\appendix
+\section{Coeficientes del FIR definitivo}
+Cada fila define $b[k]=b[36-k]$; el central aparece una sola vez. $a[0]=1$ y no hay realimentación.
+\begin{center}\small\input{coeficientes.tex}\end{center}
+\end{document}

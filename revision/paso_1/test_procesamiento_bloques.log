@@ -1,0 +1,14 @@
+
+FIR promedio móvil
+Bloque  256: error máximo = 0.000e+00
+Bloque  512: error máximo = 0.000e+00
+Bloque 1024: error máximo = 0.000e+00
+Bloque 2048: error máximo = 0.000e+00
+
+IIR de primer orden
+Bloque  256: error máximo = 0.000e+00
+Bloque  512: error máximo = 0.000e+00
+Bloque 1024: error máximo = 0.000e+00
+Bloque 2048: error máximo = 0.000e+00
+
+Todas las pruebas por bloques pasaron correctamente.

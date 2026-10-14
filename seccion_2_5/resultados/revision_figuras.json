@@ -1,0 +1,213 @@
+{
+  "estado_numerico": "verificado",
+  "revision_visual": "aprobada",
+  "filas_csv_json_verificadas": 9,
+  "errores": {
+    "caso_1/entrada": {
+      "error_descomposicion_max": 1.6653345369377348e-16,
+      "diferencias_metricas": {
+        "mse": 0.0,
+        "snr_salida_db": 0.0,
+        "snr_entrada_db": 0.0,
+        "delta_snr_db": 0.0,
+        "mse_directo": 0.0,
+        "snr_salida_directo_db": 0.0,
+        "snr_entrada_directo_db": 0.0,
+        "delta_snr_directo_db": 0.0,
+        "energia_util_conservada_pct": 0.0,
+        "energia_total_salida_pct": 0.0,
+        "atenuacion_ruido_total_db": 0.0,
+        "atenuacion_interferencia_banda_db": 0.0,
+        "ganancia_util_300_Hz_db": 0.0,
+        "ganancia_util_700_Hz_db": 0.0,
+        "ganancia_util_1100_Hz_db": 0.0
+      }
+    },
+    "caso_1/temporal_fir": {
+      "error_descomposicion_max": 3.784949784146896e-16,
+      "diferencias_metricas": {
+        "mse": 0.0,
+        "snr_salida_db": 0.0,
+        "snr_entrada_db": 0.0,
+        "delta_snr_db": 0.0,
+        "mse_directo": 0.0,
+        "snr_salida_directo_db": 0.0,
+        "snr_entrada_directo_db": 0.0,
+        "delta_snr_directo_db": 0.0,
+        "energia_util_conservada_pct": 0.0,
+        "energia_total_salida_pct": 0.0,
+        "atenuacion_ruido_total_db": 0.0,
+        "atenuacion_interferencia_banda_db": 0.0,
+        "ganancia_util_300_Hz_db": 0.0,
+        "ganancia_util_700_Hz_db": 0.0,
+        "ganancia_util_1100_Hz_db": 0.0
+      }
+    },
+    "caso_1/espectral": {
+      "error_descomposicion_max": 3.4932993997482953e-16,
+      "diferencias_metricas": {
+        "mse": 0.0,
+        "snr_salida_db": 0.0,
+        "snr_entrada_db": 0.0,
+        "delta_snr_db": 0.0,
+        "mse_directo": 0.0,
+        "snr_salida_directo_db": 0.0,
+        "snr_entrada_directo_db": 0.0,
+        "delta_snr_directo_db": 0.0,
+        "energia_util_conservada_pct": 0.0,
+        "energia_total_salida_pct": 0.0,
+        "atenuacion_ruido_total_db": 0.0,
+        "atenuacion_interferencia_banda_db": 0.0,
+        "ganancia_util_300_Hz_db": 0.0,
+        "ganancia_util_700_Hz_db": 0.0,
+        "ganancia_util_1100_Hz_db": 0.0
+      }
+    },
+    "caso_2/entrada": {
+      "error_descomposicion_max": 1.1102230246251565e-16,
+      "diferencias_metricas": {
+        "mse": 0.0,
+        "snr_salida_db": 0.0,
+        "snr_entrada_db": 0.0,
+        "delta_snr_db": 0.0,
+        "mse_directo": 0.0,
+        "snr_salida_directo_db": 0.0,
+        "snr_entrada_directo_db": 0.0,
+        "delta_snr_directo_db": 0.0,
+        "energia_util_conservada_pct": 0.0,
+        "energia_total_salida_pct": 0.0,
+        "atenuacion_ruido_total_db": 0.0,
+        "ganancia_util_300_Hz_db": 0.0,
+        "ganancia_util_700_Hz_db": 0.0,
+        "ganancia_util_1100_Hz_db": 0.0
+      }
+    },
+    "caso_2/temporal_fir": {
+      "error_descomposicion_max": 3.3306690738754696e-16,
+      "diferencias_metricas": {
+        "mse": 0.0,
+        "snr_salida_db": 0.0,
+        "snr_entrada_db": 0.0,
+        "delta_snr_db": 0.0,
+        "mse_directo": 0.0,
+        "snr_salida_directo_db": 0.0,
+        "snr_entrada_directo_db": 0.0,
+        "delta_snr_directo_db": 0.0,
+        "energia_util_conservada_pct": 0.0,
+        "energia_total_salida_pct": 0.0,
+        "atenuacion_ruido_total_db": 0.0,
+        "ganancia_util_300_Hz_db": 0.0,
+        "ganancia_util_700_Hz_db": 0.0,
+        "ganancia_util_1100_Hz_db": 0.0
+      }
+    },
+    "caso_2/espectral": {
+      "error_descomposicion_max": 2.0469737016526324e-16,
+      "diferencias_metricas": {
+        "mse": 0.0,
+        "snr_salida_db": 0.0,
+        "snr_entrada_db": 0.0,
+        "delta_snr_db": 0.0,
+        "mse_directo": 0.0,
+        "snr_salida_directo_db": 0.0,
+        "snr_entrada_directo_db": 0.0,
+        "delta_snr_directo_db": 0.0,
+        "energia_util_conservada_pct": 0.0,
+        "energia_total_salida_pct": 0.0,
+        "atenuacion_ruido_total_db": 0.0,
+        "ganancia_util_300_Hz_db": 0.0,
+        "ganancia_util_700_Hz_db": 0.0,
+        "ganancia_util_1100_Hz_db": 0.0
+      }
+    },
+    "caso_3/entrada": {
+      "error_descomposicion_max": 1.6653345369377348e-16,
+      "diferencias_metricas": {
+        "mse": 0.0,
+        "snr_salida_db": 0.0,
+        "snr_entrada_db": 0.0,
+        "delta_snr_db": 0.0,
+        "mse_directo": 0.0,
+        "snr_salida_directo_db": 0.0,
+        "snr_entrada_directo_db": 0.0,
+        "delta_snr_directo_db": 0.0,
+        "energia_util_conservada_pct": 0.0,
+        "energia_total_salida_pct": 0.0,
+        "atenuacion_ruido_total_db": 0.0,
+        "atenuacion_interferencia_banda_db": 0.0,
+        "ganancia_util_300_Hz_db": 0.0,
+        "ganancia_util_700_Hz_db": 0.0,
+        "ganancia_util_1100_Hz_db": 0.0
+      }
+    },
+    "caso_3/temporal_fir": {
+      "error_descomposicion_max": 4.996003610813204e-16,
+      "diferencias_metricas": {
+        "mse": 0.0,
+        "snr_salida_db": 0.0,
+        "snr_entrada_db": 0.0,
+        "delta_snr_db": 0.0,
+        "mse_directo": 0.0,
+        "snr_salida_directo_db": 0.0,
+        "snr_entrada_directo_db": 0.0,
+        "delta_snr_directo_db": 0.0,
+        "energia_util_conservada_pct": 0.0,
+        "energia_total_salida_pct": 0.0,
+        "atenuacion_ruido_total_db": 0.0,
+        "atenuacion_interferencia_banda_db": 0.0,
+        "ganancia_util_300_Hz_db": 0.0,
+        "ganancia_util_700_Hz_db": 0.0,
+        "ganancia_util_1100_Hz_db": 0.0
+      }
+    },
+    "caso_3/espectral": {
+      "error_descomposicion_max": 2.463307335887066e-16,
+      "diferencias_metricas": {
+        "mse": 0.0,
+        "snr_salida_db": 0.0,
+        "snr_entrada_db": 0.0,
+        "delta_snr_db": 0.0,
+        "mse_directo": 0.0,
+        "snr_salida_directo_db": 0.0,
+        "snr_entrada_directo_db": 0.0,
+        "delta_snr_directo_db": 0.0,
+        "energia_util_conservada_pct": 0.0,
+        "energia_total_salida_pct": 0.0,
+        "atenuacion_ruido_total_db": 0.0,
+        "atenuacion_interferencia_banda_db": 0.0,
+        "ganancia_util_300_Hz_db": 0.0,
+        "ganancia_util_700_Hz_db": 0.0,
+        "ganancia_util_1100_Hz_db": 0.0
+      }
+    }
+  },
+  "sha256_graficador": "3d23ba0a787b95751474d6fc386e9e535a1d8a44cd2d668018d73defbab6eeb2",
+  "sha256_resultados_json": "dd528a1c4c7f142a98d9ee80f64d5989319ef39eb756a803986812e2455d5f0f",
+  "sha256_figuras": {
+    "figuras/caso_1_comparacion.png": "406f4f98055f21658689403485f773740396fcf3284fd144d1803b833ef9016b",
+    "figuras/caso_1_comparacion.svg": "7b5f3e2b4a6aac51126ce401632bb520da56401348816fb67b945ff31937b85e",
+    "figuras/caso_2_comparacion.png": "5ecdac50a95fd7d9dd3c778c4537d7882ace759615a43daa55d2f1d7d400e707",
+    "figuras/caso_2_comparacion.svg": "fd16f017dea5769741222446d5f14e935f94517181ceb31132813a3f5fe09bd3",
+    "figuras/caso_3_comparacion.png": "6017cc228a59a26b7dbf955f8fc3f141d0b8bf80787ec61b856a5a6929930668",
+    "figuras/caso_3_comparacion.svg": "213728eeae388bf5b01c73b5337413b5758aef5b29817bf1c728388504b149e5",
+    "figuras/resumen_calidad.png": "bec03b38a2bb9530a885f0eab12f6f1b62e7a06cdeb6cd49bb0ef87823f54b55",
+    "figuras/resumen_calidad.svg": "995c1044df8a5b6643dd3030e7fc78cc1628e5952d435fc75439ddefba265a3e",
+    "figuras/energia_y_tonos.png": "05526b944f24ec6ed958f6ee3687be3e68d09b6152a2d29018c7b827fece40ab",
+    "figuras/energia_y_tonos.svg": "f7600a20f7042b5d06db4cd6b8e2d5e6ce317f29e2c2f39706c28b406bb41bff",
+    "figuras/recursos_pc.png": "22e7751f86b24c536d5ed6d290c46ba1cb67e5fe9f5b95ada16b9db47b2a94d6",
+    "figuras/recursos_pc.svg": "ff9192e5546a2c4bcb2a57f3e8f42ef662a4db450b821eac3b027e4476887abf"
+  },
+  "revision_visual_detalle": {
+    "fecha_local": "2026-10-12",
+    "PNG_inspeccionados": [
+      "figuras/caso_1_comparacion.png",
+      "figuras/caso_2_comparacion.png",
+      "figuras/caso_3_comparacion.png",
+      "figuras/resumen_calidad.png",
+      "figuras/energia_y_tonos.png",
+      "figuras/recursos_pc.png"
+    ],
+    "SVG": "Exportados desde las mismas figuras Matplotlib",
+    "correccion": "Etiquetas de mediana reubicadas dentro de las barras FIR para separar las marcas P95"
+  }
+}
