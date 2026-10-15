@@ -4,6 +4,7 @@ venv/
 
 # Materiales de contexto locales
 /[Cc]ontexto/
+/documentacion_respaldo/
 
 # Archivos temporales de Python
 __pycache__/
