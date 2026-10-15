@@ -231,7 +231,7 @@ Se elige FIR para el tono interferente separado y FFT/IFFT para el ruido blanco 
 \figura{caso_1_comparacion.png}{Caso 1: comparación temporal, espectral y del error. La vista temporal es una selección de 100--120 ms; las métricas usan todo el intervalo común.}{fig:caso1}
 \figura{caso_2_comparacion.png}{Caso 2: ruido distribuido y mejora del método espectral.}{fig:caso2}
 \figura{caso_3_comparacion.png}{Caso 3: superposición con la banda útil y ruido residual después del filtrado.}{fig:caso3}
-Las gráficas usan 8174 muestras, Hann periódica y no retiran DC. El límite de $-160$ dB es solo visual y no modifica métricas. El error incluye ruido residual y distorsión.
+Las gráficas usan 8174 muestras, Hann periódica y no retiran DC. Los ejes llegan hasta $-180$ dB; los valores inferiores se muestran en ese piso solo para representar el espectro, sin modificar las métricas. El error incluye ruido residual y distorsión.
 
 \subsection{Tiempo y memoria medidos en PC}
 Se hicieron tres ejecuciones previas y 30 repeticiones por caso, alternando métodos. \ruta{perf_counter_ns} mide solo filtrado, sin carga, diseño, métricas ni exportación. El tiempo equivalente por 1024 muestras es la mediana de captura dividida entre ocho, no una latencia de tiempo real.

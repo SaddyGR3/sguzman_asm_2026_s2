@@ -15,5 +15,11 @@
     "comparacion": 9
   },
   "duracion_s": 30.92524853500072,
-  "sha256_notebook": "5a0f284f4eadbae4c0aa7cb83d9225922d28cbe3b6dcddc3c4cc7cf41451574f"
+  "sha256_notebook": "5e3ab0176969e5a995a92b90d9ecea9abeb23cfc91a66faa18f49ff4012dbdcb",
+  "sha256_notebook_ejecucion_kernel": "5a0f284f4eadbae4c0aa7cb83d9225922d28cbe3b6dcddc3c4cc7cf41451574f",
+  "revision_posterior_de_salidas": {
+    "fecha": "2026-10-14",
+    "limite_inferior_db": -180,
+    "alcance": "Se actualizan las imágenes desde los resultados guardados; no se repite el benchmark."
+  }
 }

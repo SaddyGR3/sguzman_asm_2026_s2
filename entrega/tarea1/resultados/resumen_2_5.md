@@ -90,7 +90,8 @@ Python y espectral vectorizado en NumPy. No extrapolar estos tiempos a ESP32.
 
 Cada figura tiene una versión PNG de 300 dpi y una versión SVG. En los
 espectros se usa un periodograma Hann unilateral sobre el tramo común,
-sin quitar DC; el piso de visualización es −160 dB y no altera las métricas.
+sin quitar DC. Los ejes llegan hasta −180 dB; los valores inferiores se muestran
+en ese piso solo en las gráficas, sin modificar las métricas.
 El intervalo temporal ilustrado es 100–120 ms; no representa toda la captura.
 El PSD del error incluye ruido y distorsión.
 

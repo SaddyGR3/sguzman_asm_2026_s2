@@ -1,6 +1,6 @@
 {
   "estado_numerico": "verificado",
-  "revision_visual": "pendiente",
+  "revision_visual": "aprobada",
   "filas_csv_json_verificadas": 9,
   "errores": {
     "caso_1/entrada": {
@@ -181,20 +181,22 @@
       }
     }
   },
-  "sha256_graficador": "b2f55fec2608e065720f21b1a52b32c197fa4c6c99c2ccc9f588ed75ee7699d4",
+  "sha256_graficador": "e4c08ce4d926972d54391f526399327758b25496b470cecae2defa257e31344d",
   "sha256_resultados_json": "dcdd60903858660aefe60c6fbec6dec92dbee880d4c7d7fc80d79d3d26f33c3b",
   "sha256_figuras": {
-    "figuras/caso_1_comparacion.png": "406f4f98055f21658689403485f773740396fcf3284fd144d1803b833ef9016b",
-    "figuras/caso_1_comparacion.svg": "9f3653bd5ba935719cf6544afddc8cb96246beb91b79e5a353eafebda1f2cb89",
-    "figuras/caso_2_comparacion.png": "5ecdac50a95fd7d9dd3c778c4537d7882ace759615a43daa55d2f1d7d400e707",
-    "figuras/caso_2_comparacion.svg": "ab0033f859cfe3929b0e80e44120a88c8aedb1fd079cc7e16bd5fe054e8cd658",
-    "figuras/caso_3_comparacion.png": "6017cc228a59a26b7dbf955f8fc3f141d0b8bf80787ec61b856a5a6929930668",
-    "figuras/caso_3_comparacion.svg": "e580441e87493d54699ecf06316762ffff1a14ba0001bfbf40b9d1ae433baea5",
+    "figuras/caso_1_comparacion.png": "bd9811a27d9df6bd474804a8f1713486eebc3cab370cd93f6fb1db6951116550",
+    "figuras/caso_1_comparacion.svg": "a91eb94f6b92cd8a8808e3ea5f8debf4cdb86cf06bd0b0831f9036487830a5f3",
+    "figuras/caso_2_comparacion.png": "24cd474b0826edf24c4bb97b08d3ef8dbfa291bd06c50ab89f66250a6810b3c8",
+    "figuras/caso_2_comparacion.svg": "5e4d4397b2a0b39346c948359efc94563274d55fd49b2bfa486ec9ade7b3a90b",
+    "figuras/caso_3_comparacion.png": "5df2e056329fe767b80fd87180ef03ee968d62314b1fc19fdcf761e41bc2b797",
+    "figuras/caso_3_comparacion.svg": "c93f18461b5a15cb902769868f4c005b7d3d5b587bfafbbf5e598e32363926a6",
     "figuras/resumen_calidad.png": "bec03b38a2bb9530a885f0eab12f6f1b62e7a06cdeb6cd49bb0ef87823f54b55",
-    "figuras/resumen_calidad.svg": "0382ef7b94c55f8d6b26667376b71d3dfce13763ac409e956894414d3fed716b",
+    "figuras/resumen_calidad.svg": "bdf5ba512f6b2c9454e02145fa689234246215d5230c256b3f3634f518ce6214",
     "figuras/energia_y_tonos.png": "05526b944f24ec6ed958f6ee3687be3e68d09b6152a2d29018c7b827fece40ab",
-    "figuras/energia_y_tonos.svg": "d2e1234ede7260ff73be8ff4421c58250f00271c63c11a21b0c32ee451047978",
+    "figuras/energia_y_tonos.svg": "ccef2ef4fa0caad1f6b05edb2923833218f5a0d083f5ad0d0270a652d04b8ce9",
     "figuras/recursos_pc.png": "b1a6a9c24a41c741cfa86694df41489f5747a90df3603e1ccb3297de53c48f91",
-    "figuras/recursos_pc.svg": "b8a261a4c7a93f9aabf7c2a8f602ec510a208e7c37a32ec91dacc79b7dfc6b23"
-  }
+    "figuras/recursos_pc.svg": "e56a3d670463c8444da122c6ba7cd0b06fed06c7220573606c03e5e0b61e0475"
+  },
+  "fecha_revision_visual": "2026-10-14",
+  "nota_revision_visual": "Comparaciones de casos 1–3 inspeccionadas: ejes y piso a -180 dB. Métricas y benchmark sin cambios."
 }

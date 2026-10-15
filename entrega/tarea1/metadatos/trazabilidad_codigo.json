@@ -31,8 +31,9 @@
     "origen": "seccion_2_5/src/graficar_comparacion.py",
     "destino": "src/graficar_comparacion.py",
     "adaptaciones": 3,
-    "sha256_original": "3d23ba0a787b95751474d6fc386e9e535a1d8a44cd2d668018d73defbab6eeb2",
-    "sha256_entrega": "b2f55fec2608e065720f21b1a52b32c197fa4c6c99c2ccc9f588ed75ee7699d4"
+    "sha256_original": "75b07b7288c07fec6ef491e3bdf500c22385afc85ed5c5de74f9d923f35718a7",
+    "sha256_entrega": "e4c08ce4d926972d54391f526399327758b25496b470cecae2defa257e31344d",
+    "revision_grafica": "Eje y piso de PSD ajustados a -180 dB; sin cambios en métricas."
   },
   {
     "origen": "seccion_2_1/src/analizar_2_1.py",

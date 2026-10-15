@@ -134,7 +134,7 @@ def psd_db(x, fs):
     espectro = np.fft.rfft(x*ventana)
     potencia = np.abs(espectro)**2 / (fs*np.sum(ventana**2))
     potencia[1:-1 if k % 2 == 0 else None] *= 2
-    return np.fft.rfftfreq(k, 1/fs), 10*np.log10(np.maximum(potencia, 1e-16))
+    return np.fft.rfftfreq(k, 1/fs), 10*np.log10(np.maximum(potencia, 1e-18))
 
 
 def guardar(fig, carpeta, nombre):
@@ -160,12 +160,12 @@ def figura_caso(numero, curvas, fs, carpeta):
     axs[0].set(title="Señal temporal: 100–120 ms, FIR alineado", xlabel="Tiempo de referencia (ms)", ylabel="Amplitud digital")
     axs[0].legend(ncol=4, loc="upper center", fontsize=8)
     axs[1].set(title="Espectro de las señales sobre las 8174 muestras comunes", xlabel="Frecuencia (Hz)",
-               ylabel="PSD (dB re 1 amplitud²/Hz)", xlim=(0, fs/2), ylim=(-140, -10))
+               ylabel="PSD (dB re 1 amplitud²/Hz)", xlim=(0, fs/2), ylim=(-180, -10))
     for nombre in ("entrada", "temporal_fir", "espectral"):
         f, db = psd_db(curvas[nombre]-curvas["limpia"], fs)
         axs[2].plot(f, db, color=COLORES[nombre], lw=1, label=ETIQUETAS[nombre], alpha=.85)
     axs[2].set(title="Espectro del error: incluye ruido residual y distorsión", xlabel="Frecuencia (Hz)",
-               ylabel="PSD del error (dB)", xlim=(0, fs/2), ylim=(-140, -10))
+               ylabel="PSD del error (dB)", xlim=(0, fs/2), ylim=(-180, -10))
     axs[2].legend(ncol=3, loc="upper right", fontsize=8)
     for ax in axs:
         ax.grid(alpha=.2)
@@ -336,7 +336,8 @@ Python y espectral vectorizado en NumPy. No extrapolar estos tiempos a ESP32.
 
 Cada figura tiene una versión PNG de 300 dpi y una versión SVG. En los
 espectros se usa un periodograma Hann unilateral sobre el tramo común,
-sin quitar DC; el piso de visualización es −160 dB y no altera las métricas.
+sin quitar DC. Los ejes llegan hasta −180 dB; los valores inferiores se muestran
+en ese piso solo en las gráficas, sin modificar las métricas.
 El intervalo temporal ilustrado es 100–120 ms; no representa toda la captura.
 El PSD del error incluye ruido y distorsión.
 

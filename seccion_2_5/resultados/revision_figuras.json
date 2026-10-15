@@ -181,33 +181,22 @@
       }
     }
   },
-  "sha256_graficador": "3d23ba0a787b95751474d6fc386e9e535a1d8a44cd2d668018d73defbab6eeb2",
+  "sha256_graficador": "75b07b7288c07fec6ef491e3bdf500c22385afc85ed5c5de74f9d923f35718a7",
   "sha256_resultados_json": "dd528a1c4c7f142a98d9ee80f64d5989319ef39eb756a803986812e2455d5f0f",
   "sha256_figuras": {
-    "figuras/caso_1_comparacion.png": "406f4f98055f21658689403485f773740396fcf3284fd144d1803b833ef9016b",
-    "figuras/caso_1_comparacion.svg": "7b5f3e2b4a6aac51126ce401632bb520da56401348816fb67b945ff31937b85e",
-    "figuras/caso_2_comparacion.png": "5ecdac50a95fd7d9dd3c778c4537d7882ace759615a43daa55d2f1d7d400e707",
-    "figuras/caso_2_comparacion.svg": "fd16f017dea5769741222446d5f14e935f94517181ceb31132813a3f5fe09bd3",
-    "figuras/caso_3_comparacion.png": "6017cc228a59a26b7dbf955f8fc3f141d0b8bf80787ec61b856a5a6929930668",
-    "figuras/caso_3_comparacion.svg": "213728eeae388bf5b01c73b5337413b5758aef5b29817bf1c728388504b149e5",
+    "figuras/caso_1_comparacion.png": "bd9811a27d9df6bd474804a8f1713486eebc3cab370cd93f6fb1db6951116550",
+    "figuras/caso_1_comparacion.svg": "3acf8988fb4c15a2865637eca2c5fbef06aede788b2a18c2927e82df2d5839a5",
+    "figuras/caso_2_comparacion.png": "24cd474b0826edf24c4bb97b08d3ef8dbfa291bd06c50ab89f66250a6810b3c8",
+    "figuras/caso_2_comparacion.svg": "a9be11d62118ac193d69d165691aad298e3a3b34a3b35709a19a134f691aa550",
+    "figuras/caso_3_comparacion.png": "5df2e056329fe767b80fd87180ef03ee968d62314b1fc19fdcf761e41bc2b797",
+    "figuras/caso_3_comparacion.svg": "899d1c84ffc957a9271d1e364a54237e1a17a340c48656e122996256132b6cd8",
     "figuras/resumen_calidad.png": "bec03b38a2bb9530a885f0eab12f6f1b62e7a06cdeb6cd49bb0ef87823f54b55",
-    "figuras/resumen_calidad.svg": "995c1044df8a5b6643dd3030e7fc78cc1628e5952d435fc75439ddefba265a3e",
+    "figuras/resumen_calidad.svg": "25cab47e18d89e94f5c43b93d221eefaef7109421ae079a3e8fdc342d5f3dd96",
     "figuras/energia_y_tonos.png": "05526b944f24ec6ed958f6ee3687be3e68d09b6152a2d29018c7b827fece40ab",
-    "figuras/energia_y_tonos.svg": "f7600a20f7042b5d06db4cd6b8e2d5e6ce317f29e2c2f39706c28b406bb41bff",
+    "figuras/energia_y_tonos.svg": "4c57b7f16e048e1488a6c72acab9b33a93884733c615b8ff57a784036accc4d4",
     "figuras/recursos_pc.png": "22e7751f86b24c536d5ed6d290c46ba1cb67e5fe9f5b95ada16b9db47b2a94d6",
-    "figuras/recursos_pc.svg": "ff9192e5546a2c4bcb2a57f3e8f42ef662a4db450b821eac3b027e4476887abf"
+    "figuras/recursos_pc.svg": "fbb7f4f7477a6a82f6fd442b3c834299d7953fbf6aa8677dee22264ad8102bab"
   },
-  "revision_visual_detalle": {
-    "fecha_local": "2026-10-12",
-    "PNG_inspeccionados": [
-      "figuras/caso_1_comparacion.png",
-      "figuras/caso_2_comparacion.png",
-      "figuras/caso_3_comparacion.png",
-      "figuras/resumen_calidad.png",
-      "figuras/energia_y_tonos.png",
-      "figuras/recursos_pc.png"
-    ],
-    "SVG": "Exportados desde las mismas figuras Matplotlib",
-    "correccion": "Etiquetas de mediana reubicadas dentro de las barras FIR para separar las marcas P95"
-  }
+  "fecha_revision_visual": "2026-10-14",
+  "nota_revision_visual": "Comparaciones de casos 1–3 inspeccionadas: ejes y piso a -180 dB. Métricas y benchmark sin cambios."
 }
