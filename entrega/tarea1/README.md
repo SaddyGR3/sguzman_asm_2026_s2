@@ -9,7 +9,11 @@ Código, señales y resultados de la comparación entre un FIR temporal y un mé
 - Válerin Calderón Bran — 2020033313
 - Luis Castro Montenegro — 2013083843
 
-Repositorio: [sguzman_asm_2026_s2](https://github.com/SaddyGR3/sguzman_asm_2026_s2), rama `integracion-tarea1`. La etiqueta local registrada `tarea1_prototipo` identifica el cierre inicial del repositorio.
+Repositorio: [sguzman_asm_2026_s2](https://github.com/SaddyGR3/sguzman_asm_2026_s2).
+
+Commit de referencia previo al cierre de la entrega: [`6ec64a66a02c452c2896e40e8b64df46408ee482`](https://github.com/SaddyGR3/sguzman_asm_2026_s2/commit/6ec64a66a02c452c2896e40e8b64df46408ee482).
+
+Etiqueta de entrega: `tarea1_prototipo`.
 
 ## Archivos principales
 
