@@ -5,6 +5,6 @@ test_rechazo_sigue_a_la_interferencia_sin_bin_fijo (test_filtrado_espectral.Filt
 La misma configuracion debe funcionar al mover el tono interferente. ... ok
 
 ----------------------------------------------------------------------
-Ran 4 tests in 0.045s
+Ran 4 tests in 0.050s
 
 OK

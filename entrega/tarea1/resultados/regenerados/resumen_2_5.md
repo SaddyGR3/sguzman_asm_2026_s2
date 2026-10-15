@@ -70,14 +70,14 @@ Python y espectral vectorizado en NumPy. No extrapolar estos tiempos a ESP32.
 | Caso | Método | Mediana por 1024 (ms) | P95 captura (ms) | Persistencia lógica (bytes) | Pico adicional trazado (bytes) |
 |---|---|---|---|---|---|
 | 1 | Sin filtrar | 0.000 | 0.000 | 0 | 0 |
-| 1 | FIR temporal | 5.898 | 62.200 | 592 | 134569 |
-| 1 | Espectral | 0.123 | 1.230 | 0 | 989751 |
+| 1 | FIR temporal | 5.098 | 42.175 | 592 | 133361 |
+| 1 | Espectral | 0.101 | 0.942 | 0 | 989751 |
 | 2 | Sin filtrar | 0.000 | 0.000 | 0 | 0 |
-| 2 | FIR temporal | 6.965 | 62.574 | 592 | 133361 |
-| 2 | Espectral | 0.304 | 2.902 | 0 | 1067580 |
+| 2 | FIR temporal | 5.091 | 41.280 | 592 | 133361 |
+| 2 | Espectral | 0.239 | 2.091 | 0 | 1067580 |
 | 3 | Sin filtrar | 0.000 | 0.000 | 0 | 0 |
-| 3 | FIR temporal | 7.629 | 63.813 | 592 | 133361 |
-| 3 | Espectral | 0.203 | 2.061 | 0 | 1067486 |
+| 3 | FIR temporal | 5.126 | 51.930 | 592 | 133361 |
+| 3 | Espectral | 0.156 | 1.628 | 0 | 1067580 |
 
 ## Figuras
 
@@ -95,6 +95,6 @@ en ese piso solo en las gráficas, sin modificar las métricas.
 El intervalo temporal ilustrado es 100–120 ms; no representa toda la captura.
 El PSD del error incluye ruido y distorsión.
 
-La decisión por caso y las condiciones de fallo se desarrollan en el paso 6.
+La decisión por caso y las condiciones de fallo se explican en el informe PDF.
 El algoritmo espectral permanece fuera de línea. La comparación directa
 sobre 8192 muestras se conserva en CSV/JSON, separada de estas tablas.

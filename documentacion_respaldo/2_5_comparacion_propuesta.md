@@ -1,10 +1,6 @@
 # 2.5 Comparación y propuesta para el sistema embebido
 
-**Estado:** evaluación común, tablas, figuras y análisis comparativo completados
-en los pasos 4–6. El diseño de procesamiento para ESP32 está propuesto en
-el paso 7, las bibliotecas se seleccionaron en el paso 8 y la arquitectura
-y comunicación se definieron en el paso 9. Este archivo servirá como
-base para integrar la sección en el informe LaTeX del grupo.
+Este documento explica la comparación de los filtros sobre las tres capturas de prueba. El diseño de ESP32, las bibliotecas y la comunicación se describen en los documentos complementarios enlazados al final.
 
 ## Objetivo
 
@@ -15,28 +11,18 @@ comunicación.
 
 ## Metodología común
 
-Aplicar el protocolo del paso 2, que define datos, parámetros, alineamiento,
-descomposición de fuentes, métricas y medición de recursos:
-
-- Criterios de comparación (ruta en el repositorio: `revision/paso_2/criterios_comparacion.md`).
-- Configuración del evaluador (ruta en el repositorio: `revision/paso_2/protocolo.json`).
+La configuración reproducible está en [metadatos/protocolo.json](../entrega/tarea1/metadatos/protocolo.json). Las instrucciones para ejecutarla están en el [README](../entrega/tarea1/README.md).
 
 La comparación principal compensa las 18 muestras del FIR y utiliza
 8174 muestras comunes. También se informan las métricas directas.
 La energía útil se separa del ruido residual mediante una evaluación
 condicional con ganancias espectrales fijadas desde la mezcla.
 
-El evaluador, las instrucciones y los controles están descritos en el
-README de la sección (ruta en el repositorio: `seccion_2_5/README.md`). Los resultados numéricos se encuentran
-en el CSV (ruta en el repositorio: `seccion_2_5/resultados/metricas.csv`) y
-el JSON de resultados (ruta en el repositorio: `seccion_2_5/resultados/resultados_2_5.json`).
+El módulo [evaluar_comparacion.py](../entrega/tarea1/src/evaluar_comparacion.py) calcula las métricas. El [CSV](../entrega/tarea1/resultados/metricas.csv) y el [JSON](../entrega/tarea1/resultados/resultados_2_5.json) conservan las mediciones citadas en el informe.
 
 ## Resultados comparativos
 
-Las cuatro tablas, sus unidades y las notas de interpretación están en
-el resumen generado (ruta en el repositorio: `seccion_2_5/resultados/resumen_2_5.md`). Las seis figuras revisadas
-presentan señales temporales, PSD de señales y errores, calidad reconstruida,
-conservación útil, ganancias por tono y recursos en PC.
+Las cuatro tablas y sus unidades están en el [resumen de resultados](../entrega/tarea1/resultados/resumen_2_5.md). Las figuras muestran señales, PSD, error, energía útil, ganancias por tono y recursos en PC.
 
 | Caso | SNR entrada (dB) | SNR FIR (dB) | SNR espectral (dB) |
 |---|---:|---:|---:|
@@ -44,9 +30,7 @@ conservación útil, ganancias por tono y recursos en PC.
 | 2: blanco | 5.009 | 9.524 | 20.813 |
 | 3: superposición parcial | 3.010 | 3.071 | 14.677 |
 
-La revisión numérica contrastó CSV y JSON y recalculó métricas desde las
-muestras NPZ. El registro de revisión (ruta en el repositorio: `revision/paso_5/README.md`)
-describe las comprobaciones y la inspección visual.
+La revisión numérica comparó CSV y JSON y recalculó las métricas desde los NPZ.
 
 La figura del caso 1 muestra que ambos filtros atenúan la componente de
 2150 Hz; el FIR alcanza menor error global. En el caso 2, el FIR conserva
@@ -61,10 +45,9 @@ no a la energía total de la salida. No demuestran ausencia de distorsión.
 
 Los gráficos de recursos describen implementaciones diferentes en PC: FIR
 manual con bucles Python y espectral vectorizado con NumPy. La comparación
-de esos tiempos no determina cuál será más rápido en ESP32. El presupuesto
-de firmware y la adaptación causal permanecen pendientes.
+de esos tiempos no determina cuál será más rápido en ESP32. La propuesta para firmware se presenta en los documentos complementarios; falta implementarla y medirla en placa.
 
-Calidad reconstruida de los tres casos (ruta en el repositorio: `seccion_2_5/resultados/figuras/resumen_calidad.png`)
+![Calidad de los tres casos](../entrega/tarea1/resultados/figuras/resumen_calidad.png)
 
 ## Elección del método por caso
 
@@ -107,8 +90,7 @@ Esto evidencia una concentración del error en los extremos. La cadena de
 ventanas, relleno y reconstrucción es una explicación posible; atribuir
 el error a una operación específica requeriría un experimento adicional.
 No se eliminan esos extremos ni se modifica la clasificación principal.
-Las derivaciones y su procedencia están en
-el registro del paso 6 (ruta en el repositorio: `revision/paso_6/README.md`).
+El diagnóstico se obtuvo de las salidas guardadas en los NPZ de comparación.
 
 ### Caso 2: ruido distribuido dentro y fuera de la banda útil
 
@@ -171,9 +153,7 @@ Entre α = 2 y α = 8, la atenuación adicional se obtiene a costa de una
 pérdida importante del tono útil y una SNR menor. Este experimento se
 evalúa sobre **8192 muestras y sin protección tonal**; no se mezcla con
 la comparación principal de 8174 muestras. La configuración elegida para
-los casos 2 y 3 mantiene α = 3 y protección tonal activada. Los datos
-del experimento están en
-los resultados originales de 2.4 (ruta en el repositorio: `seccion_2_4/resultados/resultados_2_4.json`).
+los casos 2 y 3 mantiene α = 3 y protección tonal activada. El experimento se reproduce con [evaluar_casos.py](../entrega/tarea1/pruebas/filtrado_espectral/evaluar_casos.py); sus nuevas salidas se guardan en `resultados/regenerados/espectral/`.
 
 ## Condiciones de fallo y alcance
 
@@ -208,14 +188,12 @@ de memoria trazada que el FIR manual. El FIR usa bucles Python y el
 espectral operaciones vectorizadas de NumPy; esos tiempos no establecen
 la velocidad relativa en ESP32. El valor de cero bytes persistentes del
 espectral describe su función por captura, no un requisito de RAM nulo.
-La adaptación y el presupuesto propuestos en el paso 7 deben validarse
-con ESP-DSP, seleccionada en el paso 8, y mediciones en la placa.
+La adaptación causal y el presupuesto de memoria deben validarse con ESP-DSP y mediciones en placa.
 
 Solo se evalúa una captura con una semilla por caso, tres tonos conocidos,
 un muestreo y un conjunto de parámetros. No se ha comprobado robustez con
 voz, música, variaciones de nivel, frecuencias cercanas a los bordes,
-otros ruidos o cambios de precisión. Estas son pruebas futuras; el paso 6
-no cambia señales, parámetros ni resultados para mejorar las cifras.
+otros ruidos o cambios de precisión. Estas pruebas quedan fuera de las tres capturas evaluadas.
 
 ## Conclusión comparativa
 
@@ -227,112 +205,16 @@ experimento sin protección demuestra el límite de una reducción espectral
 agresiva. La selección debe considerar conjuntamente fidelidad, retardo,
 memoria y disponibilidad de una estimación causal del ruido.
 
-## Propuesta para ESP32 — paso 7 completado
+## Documentación complementaria
 
-El diseño de procesamiento para ESP32 (ruta en el repositorio: `seccion_2_5/docs/2_5_diseno_esp32.md`) desarrolla
-la selección, sus cálculos y los criterios de validación pendientes:
+- [Procesamiento para ESP32](2_5_diseno_esp32.md): muestreo, bloques, formato numérico y estimación causal.
+- [Bibliotecas DSP](2_5_bibliotecas_esp32.md): versiones, licencias, FFT/IFFT y FIR.
+- [Arquitectura y comunicación](2_5_arquitectura_comunicacion.md): nodos, paquetes, tasas y memoria completa.
 
-| Parámetro | Propuesta |
-|---|---|
-| Muestreo | 8000 Hz; 125 µs por muestra; Nyquist 4000 Hz |
-| Análisis espectral | FFT de 1024 muestras; separación entre bins 7.8125 Hz |
-| Avance | 512 muestras nuevas cada 64 ms; solapamiento de 50 % |
-| Ventanas | sqrt-Hann en análisis y síntesis, con overlap-add |
-| Ruta temporal | FIR de orden 36, 37 coeficientes, estado continuo |
-| Procesamiento | float32; formato de ADC, DAC y transmisión por especificar |
-| Estimación causal | Mediana sobre las últimas 8 tramas completas y suavizado de 31 bins |
-| Objetivo de cálculo | DSP ≤ 48 ms; plazo total por avance < 64 ms |
-| Retardo programado espectral | 192 ms en el DSP aislado; refinado a 256 ms con enlaces en el paso 9 |
-| Memoria espectral provisional | 81517 bytes ≈ 79.61 KiB, refinada en el paso 8; objetivo de 96 KiB |
-| Núcleo FIR especializado | 292 bytes para coeficientes y estado float32 |
+## Fuentes
 
-La adaptación sustituye el DC de captura completa por un promedio causal
-con restauración alineada, conserva un historial de magnitudes acotado y
-calcula las máscaras desde el pasado y la trama actual. Durante el
-calentamiento se usa G = 1. El historial completo representa 576 ms de
-señal y no añade ese valor como retardo por trama. Se conservan inicialmente
-los parámetros de picos y resta, pero la calidad del estimador causal no
-se considera medida por las pruebas fuera de línea.
+- A. V. Oppenheim, A. S. Willsky y S. H. Nawab, *Señales y sistemas*, segunda edición, secciones 1.6.6, 3.8 y 3.9 [R1].
+- J. G. Proakis y D. G. Manolakis, *Digital Signal Processing*, cuarta edición, sección 5.4.1 [R2].
+- Mediciones reproducibles de [resultados/](../entrega/tarea1/resultados/) y código incluido en [src/](../entrega/tarea1/src/).
 
-El diseño incluye control de escala y saturación, un presupuesto por
-arreglo, reservas provisionales para la biblioteca y las tareas, y una
-distinción entre bloque DSP y descriptor DMA. Mantener 8000 Hz requiere
-además limitar el espectro analógico antes del ADC y comprobar el reloj
-real. El ancho numérico del procesamiento no fija la resolución de los
-convertidores.
-
-Los cálculos reproducibles están en
-el registro del paso 7 (ruta en el repositorio: `revision/paso_7/README.md`). La propuesta
-está fundamentada en los resultados y en documentación técnica primaria;
-todavía no es firmware ni una medición de desempeño del ESP32.
-
-## Bibliotecas de FFT y filtrado — paso 8 completado
-
-La selección de bibliotecas (ruta en el repositorio: `seccion_2_5/docs/2_5_bibliotecas_esp32.md`) propone
-**ESP-DSP 1.8.2, Apache-2.0**, como componente ESP-IDF para FFT y FIR
-float32 sobre ESP32 clásico. **KISS FFT 131.1.0, BSD-3-Clause**, queda
-como alternativa portable. Se verificaron licencia, precisión, APIs y
-restricciones con documentación y código oficiales fijados por versión.
-
-La propuesta FFT incluye datos complejos intercalados, reordenamiento
-de bins y una inversa por conjugación con escala 1/1024. El FIR usa
-37 coeficientes y delay de 41 floats, conservando el estado entre avances.
-Las tablas activas FFT ocupan 6080 bytes de payload, y refinan el total
-espectral provisional a 81517 bytes. El núcleo FIR con estructura se
-estima en 352 bytes; los 292 bytes del paso 7 corresponden a una
-implementación mínima propia.
-
-La versión exacta de ESP-IDF, el sizeof de estructuras, la RAM total,
-precisión efectiva y tiempos deben confirmarse al implementar. La revisión
-de fuentes no se presenta como compilación o validación en placa.
-La evidencia está en el registro del paso 8 (ruta en el repositorio: `revision/paso_8/README.md`).
-
-## Arquitectura y comunicación — paso 9 completado
-
-La propuesta de arquitectura (ruta en el repositorio: `seccion_2_5/docs/2_5_arquitectura_comunicacion.md`) define
-tres placas ESP32: N1 adquiere y analiza, N2 filtra mediante FIR y
-N3 filtra mediante FFT/IFFT y compara las salidas por índices de muestra.
-Cada filtro tiene reproducción local con DAC/PWM y reconstrucción.
-Tres UART independientes conectan N1–N2, N1–N3 y N2–N3 a 921600 baud,
-8N1, con control de estado en sentido inverso.
-
-Arquitectura propuesta (ruta en el repositorio: `seccion_2_5/docs/figuras/arquitectura_nodos.png`)
-
-Cada avance transmite 512 muestras nuevas float32. El paquete incluye
-cabecera de 32 bytes, CRC-32, COBS y delimitador. INPUT/FIR_OUT requieren
-hasta 2094 bytes en el cable; INPUT_REF con x y s, hasta 4150 bytes.
-El enlace más cargado, N1→N3 con referencia y diagnóstico, requiere
-664375 baud; con control acotado, 671375 baud, 72.85 % de ocupación
-a la tasa propuesta. Las tasas no se suman entre enlaces independientes.
-
-La referencia limpia solo está disponible en ensayos controlados; sin
-ella se muestran N/D para MSE, SNR de referencia y energía útil.
-El modo de evaluación condicional calcula la contribución útil con
-ganancias congeladas y añade memoria y trabajo. La arquitectura completa
-refina la reproducción a 256 ms y propone reservas por dispositivo
-de 96 KiB para N1, 64 KiB para N2 y 160 KiB para N3, cuyos consumos
-modelados son 71.16, 45.56 y 134.16 KiB, respectivamente.
-
-Se especifican sesión, secuencia e índice, tratamiento de errores,
-discontinuidades y deriva de reloj. Una trama oficial de ejemplo,
-cálculos reproducibles y revisión visual del diagrama están en
-el registro del paso 9 (ruta en el repositorio: `revision/paso_9/README.md`).
-El diseño aún requiere validar enlaces, precisión, RAM y plazos en placa.
-
-## Referencias del análisis
-
-- **[R1]** Oppenheim, Willsky y Nawab, *Señales y sistemas*, segunda
-  edición, secciones 1.6.6, 3.8 y 3.9. Se consultó el
-  libro proporcionado (ruta en el repositorio: `Contexto/alan-v-oppenheim-seales-y-sistemas-pdf-free.pdf`),
-  páginas 76 y 251–254 del archivo PDF.
-- **[R2]** Proakis y Manolakis, *Digital Signal Processing*, cuarta
-  edición, sección 5.4.1, página impresa 327, página 347 del
-  archivo PDF proporcionado (ruta en el repositorio: `Contexto/Digital%20Signal%20Processing%204th%20edition%20-%20Proakis%20and%20Manolakis-compressed.pdf`).
-
-La evidencia numérica procede del evaluador común de 2.5 y, donde se
-indica expresamente, del experimento adicional de 2.4. Se empleó asistencia
-de IA para redactar el análisis y derivar los diagnósticos; las cifras se
-contrastaron con archivos guardados y las afirmaciones teóricas con las
-fuentes locales. Las referencias bibliográficas finales, la declaración
-de asistencia y la integración con las demás secciones se completarán
-durante el paso 10.
+Las mediciones se realizaron en PC. Las prestaciones del firmware propuesto todavía deben comprobarse en ESP32.

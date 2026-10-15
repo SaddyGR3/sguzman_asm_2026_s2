@@ -3,7 +3,7 @@
   "benchmark_ejecutado": true,
   "configuracion": {
     "version": 1,
-    "estado": "criterios_definidos_evaluador_pendiente",
+    "estado": "evaluacion_completada",
     "fecha_local": "2026-10-12",
     "fuente_requisitos": "Contexto/Tareas_ASM_Tarea1_v7.pdf, apartado 2.5",
     "fs_Hz": 8000,

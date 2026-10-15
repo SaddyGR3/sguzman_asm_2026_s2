@@ -1,6 +1,6 @@
 """Evalúa los filtros existentes sin alterar datos ni algoritmos de 2.2–2.4.
 
-Desde cualquier directorio: python /ruta/al/repositorio/seccion_2_5/src/evaluar_comparacion.py
+Desde la carpeta del paquete: python src/evaluar_comparacion.py
 El protocolo es la única fuente de parámetros. --sin-benchmark permite una
 verificación rápida de calidad, exportando tiempos y pico de memoria como null.
 """

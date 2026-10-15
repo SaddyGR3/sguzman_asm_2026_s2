@@ -337,8 +337,8 @@ def snr_db(s, s_hat):
 def energia_util_conservada(s_limpia, s_hat):
     """Porcentaje de energia total de salida respecto a la referencia limpia.
 
-    El nombre se conserva por compatibilidad con el borrador inicial. La
-    salida incluye ruido residual; por ello este porcentaje NO representa
+    Se mantiene este nombre de API por compatibilidad. La salida
+    incluye ruido residual; por ello este porcentaje NO representa
     por si solo la energia util conservada. El evaluador mide aparte la
     amplitud de cada tono para analizar la distorsion de señal util.
     """

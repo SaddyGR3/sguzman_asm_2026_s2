@@ -1,4 +1,4 @@
-# Paso 8: bibliotecas para FFT y filtrado en ESP32
+# Bibliotecas para FFT y filtrado en ESP32
 
 **Decisión:** proponer **ESP-DSP 1.8.2** como componente de ESP-IDF para
 FFT e implementación FIR en float32 sobre el ESP32 clásico. KISS FFT
@@ -22,7 +22,7 @@ la comparación experimental se realizó con ese FIR.
 KISS FFT documenta float por defecto, opciones de punto fijo y double,
 y transformadas sin normalización en coma flotante. Su ejecución básica
 usa buffers distintos; si se utiliza el mismo buffer crea uno temporal.
-Esto cambiaría el presupuesto in-place del paso 7. La opción real requiere
+Esa reserva temporal debe incluirse en el cálculo de RAM. La opción real requiere
 longitud par, condición que cumple N = 1024. Se descarta como primera
 opción por la integración y validación adicional que requeriría, sin
 afirmar que sea más lenta en esta placa
@@ -83,7 +83,7 @@ se tratan una sola vez. No se usa el conversor de dos señales reales
 como si fuera un equivalente directo de `numpy.fft.rfft`.
 
 ESP-DSP aporta primitivas DSP. El estimador de ruido, protección de
-tonos, política de calentamiento, historial DC y overlap-add del paso 7
+tonos, política de calentamiento, historial DC y overlap-add descritos en el [diseño de procesamiento](2_5_diseno_esp32.md)
 siguen siendo responsabilidad de la implementación del grupo.
 
 ## FIR de 37 coeficientes
@@ -129,13 +129,14 @@ aporta el usuario. No cuenta dos veces la tabla estática en flash como
 RAM activa. Metadatos y costes del allocator siguen cubiertos de forma
 provisional por las reservas; el mapa de enlace determinará su ubicación.
 
-| Cuenta | Paso 7: reserva genérica | Paso 8: ESP-DSP 1.8.2 |
-|---|---:|---:|
-| Tablas/workspace FFT, fuera del buffer de datos | 8192 B | 6080 B de payload |
-| Subtotal espectral de aplicación | 67245 B | 65133 B |
-| Con provisión auxiliar de 16384 B | 83629 B | **81517 B ≈ 79.61 KiB** |
-| Margen dentro del objetivo de 96 KiB | 14675 B | **16787 B** |
-| Núcleo FIR | 292 B, implementación mínima | **352 B estimados con la biblioteca** |
+| Recurso con ESP-DSP 1.8.2 | Bytes |
+|---|---:|
+| Tablas FFT, sin buffer de datos | 6080 |
+| Subtotal espectral de aplicación | 65133 |
+| Ruta espectral aislada con 16384 B auxiliares | 81517 (79.61 KiB) |
+| Margen dentro de la reserva de 96 KiB de esa ruta | 16787 |
+| Núcleo FIR estimado | 352 |
+
 
 El núcleo FIR pasa a 148 bytes de coeficientes, 164 de delay y
 aproximadamente 40 de `fir_f32_t` bajo ABI de 32 bits. La estructura
@@ -144,13 +145,7 @@ de aplicación y control, la ruta FIR se estima en **9568 bytes**.
 Estas cifras refinan la propuesta; no equivalen a RAM total medida ni
 validan que los plazos de 64 ms se cumplan.
 
-Los resultados del paso 7 se conservan como presupuesto inicial. El
-registro del paso 8 (ruta en el repositorio: `revision/paso_8/README.md`) contiene las
-derivaciones, fuentes fijadas por versión y hashes de los archivos leídos.
-La arquitectura del paso 9 (ruta en el repositorio: `seccion_2_5/docs/2_5_arquitectura_comunicacion.md`) añade
-comunicación y evaluación controlada: el nodo N3 completo se presupuesta
-en 134.16 KiB, con objetivo de reserva de 160 KiB. Esa cuenta incluye
-recursos que no forman parte del DSP aislado aquí descrito.
+La [arquitectura de tres nodos](2_5_arquitectura_comunicacion.md) añade UART y evaluación con referencia: el nodo N3 completo requiere unos 134.16 KiB, dentro de una reserva objetivo de 160 KiB. Ese total incluye recursos ajenos al DSP aislado.
 
 ## Comprobaciones al implementar
 
@@ -161,8 +156,7 @@ Comparar ANSI y optimizada con tolerancia, y medir la cadena completa
 con ventanas, medianas y E/S. Los benchmarks del proveedor de una FFT
 aislada no sustituyen esa medición ni se suman a los tiempos de Python.
 
-La investigación y los cálculos del paso 8 quedan completos. Las
-pruebas de firmware, la compatibilidad efectiva con la versión de IDF
-seleccionada y las mediciones de RAM/plazos permanecen como validación
-de la implementación del proyecto. Se empleó asistencia de IA para
+Las pruebas de firmware, la compatibilidad con la versión de ESP-IDF elegida y las mediciones de RAM y tiempos deben realizarse al implementar el proyecto.
+
+Se empleó asistencia de IA para
 la revisión y redacción, contrastando las decisiones con fuentes primarias.

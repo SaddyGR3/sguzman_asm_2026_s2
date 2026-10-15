@@ -30,5 +30,5 @@ Magnitud a 1100 Hz: -0.123 dB
 Magnitud a 2150 Hz: -69.839 dB
 
 Ambos candidatos cumplen las especificaciones preliminares.
-/tmp/tarea1-notebook-42k6uoly/paquete/pruebas/filtros_temporales/test_candidatos_fir_iir.py:179: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+/tmp/tarea1-notebook-twe41k55/paquete/pruebas/filtros_temporales/test_candidatos_fir_iir.py:179: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
   plt.show()

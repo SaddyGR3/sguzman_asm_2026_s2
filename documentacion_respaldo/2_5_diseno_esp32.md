@@ -1,11 +1,6 @@
-# Paso 7: propuesta de procesamiento para ESP32
+# Procesamiento propuesto para ESP32
 
-**Estado:** propuesta de diseño calculada; no se ha implementado ni medido
-en la placa. La selección de bibliotecas del paso 8 (ruta en el repositorio: `seccion_2_5/docs/2_5_bibliotecas_esp32.md`)
-propone ESP-DSP 1.8.2 y refina este presupuesto inicial. La
-arquitectura del paso 9 (ruta en el repositorio: `seccion_2_5/docs/2_5_arquitectura_comunicacion.md`) incluye enlaces
-y evaluación, y refina la reproducción a 256 ms y la reserva del nodo
-comparador completo a 160 KiB.
+La propuesta usa ESP32 clásico con procesamiento en float32. Aún no se ha implementado ni medido en placa. Las [bibliotecas](2_5_bibliotecas_esp32.md) y la [arquitectura](2_5_arquitectura_comunicacion.md) completan el diseño: reproducción a 256 ms y reserva de 160 KiB para el nodo comparador.
 
 ## Decisión y fundamento
 
@@ -18,13 +13,12 @@ sqrt-Hann en análisis y síntesis y modifica ganancias reales por bin.
 Estos valores preservan el muestreo, diseño FIR y rejilla espectral de
 los experimentos. El FIR obtuvo la mejor calidad en el caso tonal
 separado; la resta espectral con protección la obtuvo en los casos blanco
-y superpuesto, según el análisis del paso 6 (ruta en el repositorio: `seccion_2_5/docs/2_5_comparacion_propuesta.md`).
+y superpuesto, según el [análisis comparativo](2_5_comparacion_propuesta.md).
 Se mantienen ambas rutas para compararlas. La elección del método no
 requiere conocer la referencia limpia; el modo puede configurarse para
 cada ensayo, y una selección automática requeriría validación adicional.
 
-La documentación existente de 2.3 identifica ESP32 como hardware y
-justifica float32 mediante cuantización de coeficientes. Para esta
+La evaluación de cuantización de coeficientes respalda float32. Para esta
 propuesta se toma como base el **ESP32 clásico con LX6**; el modelo exacto
 de placa debe registrarse al implementar. Espressif declara 520 KB de
 SRAM en el chip, compartidos por datos e instrucciones; esa cifra no es
@@ -80,8 +74,8 @@ la disponibilidad de datos; por defecto, FreeRTOS de ESP-IDF no admite
 uso de FPU en interrupciones ([documentación de FreeRTOS](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/freertos_idf.html#floating-point-usage)).
 
 El ancho del ADC o DAC y el formato de transmisión se especificarán
-separadamente: procesar en float32 no implica adquirir 32 bits de precisión
-ni obliga a transmitir floats. La conversión se realiza con escala y
+separadamente: procesar en float32 no implica adquirir 32 bits de precisión.
+La propuesta de comunicación transmite float32, sin atribuir al ADC esa precisión. La conversión se realiza con escala y
 offset documentados. Los buffers complejos no se limitan artificialmente
 a ±1: una FFT sin normalizar puede superar el rango de las muestras.
 La normalización de la IFFT debe comprobarse con la biblioteca elegida.
@@ -154,7 +148,7 @@ La identidad con G = 1 se comprobará usando
 `w[n]² + w[n+H]² = 1` en régimen y el tratamiento de extremos indicado.
 El promedio DC y su restauración alineada también deben conservar esa
 identidad. El nuevo estimador puede cambiar SNR, MSE y detección de tonos;
-no se trasladan las cifras del paso 6 como resultados del firmware causal.
+las cifras del filtro fuera de línea no se presentan como resultados del firmware causal.
 
 ## Plazo de ejecución y latencia
 
@@ -169,15 +163,7 @@ Con FFT e IFFT complejas radix-2 se cuentan 5120 mariposas por transformada,
 El FIR directo requiere 37 × 512 = 18944 MAC por avance, o 296000 MAC/s.
 Estos conteos no permiten deducir tiempos comparables entre métodos.
 
-En la ruta espectral, las primeras 512 muestras reales solo quedan
-completas cuando se dispone del segundo bloque solapado, a los 128 ms
-desde el inicio. Para reproducción uniforme se propone un retardo
-programado de **N + H = 1536 muestras, 192 ms**, que deja un avance
-adicional para completar el cálculo antes de reproducir el bloque.
-Cumplir 48 ms de DSP dejaría 16 ms de esa holgura. La transferencia entre
-nodos y otras colas pueden aumentar el retardo y se presupuestarán en el
-paso 9. Los 128 ms de ventana y 64 ms de avance no son por sí solos
-mediciones de latencia extremo a extremo.
+La ventana dura 128 ms y avanza cada 64 ms. Al incluir adquisición, procesamiento y enlaces se propone reproducir con **256 ms de retardo**. El modelo sitúa la disponibilidad espectral en 223.90 ms y la FIR alineada en 226.07 ms, bajo el objetivo de 48 ms de DSP, envío simultáneo desde N1 y encolado de hasta 1 ms por enlace. Son estimaciones; véase el [presupuesto de comunicación](2_5_arquitectura_comunicacion.md).
 
 El FIR mantiene su retardo de grupo de 18 muestras, **2.25 ms**, además
 del tiempo de acumular lotes, procesamiento, enlace y cola de reproducción.
@@ -187,52 +173,30 @@ es una decisión de sincronización, no una propiedad adicional del filtro.
 
 ## Presupuesto de memoria
 
-**Presupuesto inicial del paso 7.** Con ESP-DSP 1.8.2, el paso 8 refina
-el total espectral a **81517 bytes (79.61 KiB)** y el núcleo FIR de
-biblioteca a **352 bytes estimados**. Las cuentas siguientes se conservan
-como referencia de diseño previa a elegir la biblioteca; consultar
-el presupuesto refinado (ruta en el repositorio: `seccion_2_5/docs/2_5_bibliotecas_esp32.md#memoria-refinada-para-esp-dsp`).
-
-Se reservan arreglos una vez, sin matrices de todas las capturas ni
-asignaciones por trama. Se contempla una FFT compleja in-place para
-presupuestar sin depender aún de una API rFFT específica. Las magnitudes
-y máscaras solo almacenan los 513 bins no negativos.
+Se reservan arreglos una vez y se procesa por lotes, sin cargar capturas completas en RAM. La FFT compleja reutiliza su buffer y guarda magnitudes/ganancias de los 513 bins no negativos.
 
 | Componente de la ruta espectral | Bytes |
 |---|---:|
 | Historial centrado, N float32 | 4096 |
 | Historial DC alineado, N float32 | 4096 |
-| Trabajo FFT/IFFT, N pares float32 reutilizados | 8192 |
-| Ventana sqrt-Hann, N float32 | 4096 |
-| Acumulación overlap-add, N float32 | 4096 |
+| Buffer FFT/IFFT, N pares float32 | 8192 |
+| Ventana raíz de Hann | 4096 |
+| Acumulación por solapamiento | 4096 |
 | Magnitudes actuales, 513 float32 | 2052 |
-| Historial de magnitudes, 8 × 513 float32 | 16416 |
-| Perfil mediano, piso y ganancias, 3 × 513 float32 | 6156 |
-| Máscara protegida, 513 uint8 | 513 |
-| Scratch de mediana, 31 float32 | 124 |
-| Reserva provisional de tablas/workspace FFT | 8192 |
-| Dos buffers de entrada y dos de salida, H float32 cada uno | 8192 |
-| Reserva de control, contadores y alineación | 1024 |
-| **Subtotal DSP y buffers de aplicación** | **67245** |
-| Provisión adicional para DMA, pilas y colas | 16384 |
-| **Total provisional** | **83629 ≈ 81.67 KiB** |
+| Historial, 8 × 513 float32 | 16416 |
+| Perfil, piso y ganancias, 3 × 513 float32 | 6156 |
+| Máscara de protección, 513 uint8 | 513 |
+| Trabajo de mediana, 31 float32 | 124 |
+| Tablas ESP-DSP | 6080 |
+| Dos buffers de entrada y dos de salida | 8192 |
+| Control y alineación | 1024 |
+| **Subtotal DSP** | **65133** |
+| Reserva auxiliar de la ruta aislada | 16384 |
+| **Ruta aislada con auxiliares** | **81517 ≈ 79.61 KiB** |
 
-Se propone un objetivo de **96 KiB por ruta espectral**, con 14675 bytes
-de margen respecto de esta provisión. La reserva FFT es una asignación
-de diseño, refinada con las tablas de la biblioteca en el paso 8.
-Los 16 KiB auxiliares tampoco son un consumo medido ni abarcan
-todo el firmware: pueden cambiar con drivers, pantalla, comunicación y
-pilas. La factibilidad final se comprobará con mapa de enlace, heap libre,
-máximo de pila y requisitos de los buffers; no solo contra los 520 KB
-nominales del chip.
+El FIR mínimo necesita 37 coeficientes y 36 estados: 292 B en float32 o 146 B en Q15. Con ESP-DSP se estiman 352 B por su estado y estructura de control. Con buffers de aplicación y control, la ruta FIR ocupa 9568 B, antes de los auxiliares completos del nodo.
 
-Para el FIR especializado, 37 coeficientes más 36 muestras de estado
-ocupan **292 bytes float32** o **146 bytes Q15**. Con los cuatro buffers
-de H muestras float32 y una provisión de control de 1024 bytes, su
-subtotal de aplicación es **9508 bytes**, antes de drivers y pilas.
-No se duplica el coeficiente a[0] = 1 de una implementación FIR
-especializada. No debe confundirse esta cuenta con los 592 bytes de
-estado genérico float64 medidos en el evaluador de PC.
+La memoria completa de N1, N2 y N3 se estima en **72868, 46652 y 137377 B**, con reservas objetivo de 96, 64 y 160 KiB, respectivamente. Esas cuentas incluyen comunicación y evaluación y se detallan en la [arquitectura](2_5_arquitectura_comunicacion.md). No se suman a la ruta aislada como categorías adicionales.
 
 El lote lógico H no obliga a que un descriptor DMA contenga H muestras.
 Por ejemplo, I2S con dos slots de 32 bits requeriría 4096 bytes para
@@ -269,10 +233,8 @@ ya superadas. Las métricas con referencia limpia requieren un ensayo
 controlado; no son observables directamente a partir de una entrada
 contaminada arbitraria.
 
-Los cálculos están registrados en
-presupuesto_esp32.json (ruta en el repositorio: `revision/paso_7/presupuesto_esp32.json`) y se
-regeneran con
-calcular_presupuesto.py (ruta en el repositorio: `revision/paso_7/calcular_presupuesto.py`).
+Las tablas anteriores son estimaciones de diseño. Las ecuaciones y asignaciones permiten contrastarlas con el mapa de memoria y las reservas efectivas del firmware.
+
 Las fuentes técnicas se consultaron el 12 de octubre de 2026. La propuesta
 se redactó con asistencia de IA; sus cálculos se verificaron separadamente
 de las mediciones existentes.

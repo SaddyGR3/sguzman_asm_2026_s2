@@ -1,4 +1,4 @@
-# Paso 9: arquitectura de tres nodos y comunicación
+# Arquitectura de tres nodos y comunicación
 
 **Estado:** arquitectura y protocolo propuestos, cálculos y trama de
 ejemplo verificados en PC. No se han probado enlaces ni plazos en placa.
@@ -10,10 +10,9 @@ Se proponen **tres ESP32 clásicos separados** y tres enlaces UART
 punto a punto. Así la adquisición queda separada y las dos rutas
 producen salidas físicas independientes, como exige el proyecto.
 
-Arquitectura de los tres nodos (ruta en el repositorio: `seccion_2_5/docs/figuras/arquitectura_nodos.png`)
+![Arquitectura de los tres nodos](figuras/arquitectura_nodos.png)
 
-La versión SVG (ruta en el repositorio: `seccion_2_5/docs/figuras/arquitectura_nodos.svg`) permite integrar el
-diagrama en el informe sin perder resolución.
+La [versión SVG](figuras/arquitectura_nodos.svg) conserva la resolución al ampliar el diagrama.
 
 | Nodo | Responsabilidad | Datos que conserva o produce |
 |---|---|---|
@@ -22,8 +21,7 @@ diagrama en el informe sin perder resolución.
 | N3: espectral y evaluación | Recibir la misma x, calcular FFT/IFFT y máscaras causales, reproducir salida, comparar por índices | y_espectral, referencia y FIFO de y_FIR; métricas y estado en pantalla/interfaz local |
 
 N1 calcula diagnóstico para cumplir su función de análisis. N3 calcula
-localmente las máscaras a partir de x y del historial definido en el
-paso 7; no necesita recibir todas las FFT o un piso de 513 valores.
+localmente las máscaras a partir de x y del historial descrito en el [diseño de procesamiento](2_5_diseno_esp32.md); no necesita recibir todas las FFT o un piso de 513 valores.
 El resumen de N1 sirve para visualizar y contrastar detección y parámetros.
 En N1 el piso de diagnóstico se aproxima con una mediana local de 31
 bins de la trama actual, tras quitar su DC medio; no almacena el
@@ -216,8 +214,7 @@ ACK y reintento acotado antes de empezar el ensayo. La interfaz registra
 CRC incorrectos, huecos, cola desbordada, saturación y reinicios. Los
 eventos de FIFO/ring buffer y trama del driver UART complementan el CRC.
 
-Al incluir enlaces, se refina el retardo de reproducción de 192 ms del
-paso 7 a **256 ms (4H/fs)**. Bajo el objetivo T_DSP ≤ 48 ms, un control
+Se propone un retardo de reproducción de **256 ms (4H/fs)** para incluir adquisición, procesamiento y enlaces. Bajo el objetivo T_DSP ≤ 48 ms, un control
 adicional por avance y lanzamiento TX ≤ 1 ms por enlace, el modelo sitúa
 la disponibilidad espectral a **223.90 ms** desde la primera muestra.
 El FIR alineado que necesita 18 muestras del lote siguiente estará
@@ -235,7 +232,7 @@ no se restan sin sincronizar sus relojes.
 ## Memoria por dispositivo
 
 La comunicación y evaluación controlada requieren recursos adicionales
-al DSP aislado del paso 8. Se conservan sus tablas y buffers y se añaden
+al [DSP aislado](2_5_bibliotecas_esp32.md). Se conservan sus tablas y buffers y se añaden
 colas, parser, driver y estado de evaluación, sin cargar las capturas
 completas en RAM.
 
@@ -253,22 +250,17 @@ enlace, pilas de 8192 B, DMA de 8192 B, colas de 2048 B y otros
 2048 B. Los datos originales de x y s pueden consumirse por lotes
 desde flash en la prueba digital.
 
-N1 y N2 reservan 32768 B auxiliares cada uno, detallados en el registro.
+N1 y N2 reservan 32768 B auxiliares cada uno: 12288 B de UART, 8192 B de pilas, 8192 B de DMA, 2048 B de colas y 2048 B para otros datos.
 Se dimensionan buffers acotados y tareas de recepción separadas del DSP;
 una función que tarda 48 ms no puede bloquear el vaciado del UART.
-El objetivo de **96 KiB del paso 8 era para la ruta espectral aislada**:
+La reserva de **96 KiB corresponde a la ruta espectral aislada**:
 no basta para el nodo completo con referencia y evaluación. La nueva
 cuenta es una provisión, no un mapa de RAM libre ni una garantía de
 cabida; falta medir memoria, pilas, jitter y tiempos del firmware real.
 
 ## Evidencia y comprobación pendiente
 
-El registro del paso 9 (ruta en el repositorio: `revision/paso_9/README.md`) contiene un
-script de cálculo, presupuesto JSON y una trama INPUT_REF binaria
-construida con el primer lote oficial del caso 1. Se contrastaron la
-cabecera, serialización, CRC conocido, límites COBS, ida/vuelta del
-payload y detección de una corrupción de un bit. El diagrama PNG/SVG
-fue inspeccionado visualmente.
+El formato se comprobó en PC mediante serialización de una cabecera, CRC conocido, límites COBS, reconstrucción de la carga y detección de un bit alterado. Estas comprobaciones validan el formato propuesto, sin demostrar todavía un enlace físico.
 
 En placa se comprobarán el tráfico simultáneo de los tres enlaces,
 recepción con fragmentación, pérdidas/corrupción introducidas, deriva de

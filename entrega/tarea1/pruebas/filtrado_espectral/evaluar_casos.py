@@ -10,7 +10,7 @@ Se ejecutan los tres metodos en cada caso. El tipo de ruido registrado por
 caso 2 ilustra el requisito 2.4 f) de la Tarea 1.
 
 Ejecutar desde cualquier directorio:
-    python seccion_2_4/pruebas/filtrado_espectral/evaluar_casos.py
+    python pruebas/filtrado_espectral/evaluar_casos.py
 """
 
 import csv

@@ -11,7 +11,7 @@
     "destino": "src/filtrado_espectral.py",
     "adaptaciones": 0,
     "sha256_original": "1ff9049bfddbc4ce58b7ec24522ea553781a20b32627029e16bcb8faefafe083",
-    "sha256_entrega": "1ff9049bfddbc4ce58b7ec24522ea553781a20b32627029e16bcb8faefafe083"
+    "sha256_entrega": "25dec7c12243a13f5392ce9ac3b83fe1cb5c4cf3010da4a28219065f4cb858a0"
   },
   {
     "origen": "seccion_2_5/src/metricas.py",
@@ -25,14 +25,14 @@
     "destino": "src/evaluar_comparacion.py",
     "adaptaciones": 6,
     "sha256_original": "7d93366ba077c5e4cac5a6b0ebd451cb6d326428f704053b6db8872bf7b01f9d",
-    "sha256_entrega": "5efed5f814ad6fd3abd54116a810a47a0cf8accb4ee16fee57831a4e90ce48ee"
+    "sha256_entrega": "6ff93cf4f77ea30169397d6196fd0057dedf16e1626e29461c10fd0ef198e153"
   },
   {
     "origen": "seccion_2_5/src/graficar_comparacion.py",
     "destino": "src/graficar_comparacion.py",
     "adaptaciones": 3,
-    "sha256_original": "75b07b7288c07fec6ef491e3bdf500c22385afc85ed5c5de74f9d923f35718a7",
-    "sha256_entrega": "e4c08ce4d926972d54391f526399327758b25496b470cecae2defa257e31344d",
+    "sha256_original": "025a0a54e081c023771bc91625e56986d1445830464f261a93bca8b85dd15849",
+    "sha256_entrega": "521115e1c15d26fe78b1ade6539c94fdf8f67a8aae82f6aff730cbbfac162087",
     "revision_grafica": "Eje y piso de PSD ajustados a -180 dB; sin cambios en métricas."
   },
   {
@@ -103,7 +103,7 @@
     "destino": "pruebas/filtrado_espectral/evaluar_casos.py",
     "adaptaciones": 3,
     "sha256_original": "8a3abdcb857e21df04e975587687080c3d9a88b78d4e187e1c42e469f7387a98",
-    "sha256_entrega": "49f84c1d60b37422e7c99e9aacebe23dd35f47cc78adbb7123fc5e5e50b2b713"
+    "sha256_entrega": "3b8e033702b6cf42540bcfd639969f6943fc5a22865ef22c586ff225f78b7247"
   },
   {
     "origen": "seccion_2_4/pruebas/filtrado_espectral/test_filtrado_espectral.py",

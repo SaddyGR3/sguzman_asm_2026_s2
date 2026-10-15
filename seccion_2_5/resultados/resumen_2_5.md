@@ -95,6 +95,6 @@ en ese piso solo en las gráficas, sin modificar las métricas.
 El intervalo temporal ilustrado es 100–120 ms; no representa toda la captura.
 El PSD del error incluye ruido y distorsión.
 
-La decisión por caso y las condiciones de fallo se desarrollan en el paso 6.
+La decisión por caso y las condiciones de fallo se explican en el informe PDF.
 El algoritmo espectral permanece fuera de línea. La comparación directa
 sobre 8192 muestras se conserva en CSV/JSON, separada de estas tablas.

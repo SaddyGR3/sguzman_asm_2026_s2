@@ -285,9 +285,8 @@ def cargar_caso(numero):
         raise FileNotFoundError(
             "\nNo se encontró:\n"
             f"{ruta}\n\n"
-            "Verifique que "
-            "'2_2_generacionsenales' "
-            "esté en la raíz del repositorio."
+            "Verifique que los casos estén en la carpeta pruebas del paquete, "
+            "o regenérelos ejecutando el notebook."
         )
 
     datos = np.load(

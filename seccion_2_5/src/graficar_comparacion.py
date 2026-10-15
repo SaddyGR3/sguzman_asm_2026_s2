@@ -9,10 +9,11 @@ import csv
 import hashlib
 import json
 import os
+import tempfile
 from pathlib import Path
 
 os.environ.setdefault("MPLBACKEND", "Agg")
-os.environ.setdefault("MPLCONFIGDIR", "/tmp/mpl-tarea1")
+os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "tarea1-matplotlib"))
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -341,7 +342,7 @@ en ese piso solo en las gráficas, sin modificar las métricas.
 El intervalo temporal ilustrado es 100–120 ms; no representa toda la captura.
 El PSD del error incluye ruido y distorsión.
 
-La decisión por caso y las condiciones de fallo se desarrollan en el paso 6.
+La decisión por caso y las condiciones de fallo se explican en el informe PDF.
 El algoritmo espectral permanece fuera de línea. La comparación directa
 sobre 8192 muestras se conserva en CSV/JSON, separada de estas tablas.
 """

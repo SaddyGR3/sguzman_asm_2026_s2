@@ -4,7 +4,7 @@ import hashlib, json, shutil, textwrap, re
 ROOT=Path(__file__).resolve().parents[2]
 DEST=ROOT/'entrega/tarea1'
 DEST.mkdir(parents=True,exist_ok=True)
-for name in ('src','pruebas','metadatos','resultados','documentacion'):(DEST/name).mkdir(exist_ok=True)
+for name in ('src','pruebas','metadatos','resultados'):(DEST/name).mkdir(exist_ok=True)
 changes=[]
 def copiar(src,dst,replacements=()):
     original=(ROOT/src).read_text();new=original
@@ -68,7 +68,7 @@ for name in ('metricas.csv','resultados_2_5.json','resumen_2_5.md'):
     shutil.copy2(ROOT/'seccion_2_5/resultados'/name,DEST/'resultados'/name)
 shutil.copytree(ROOT/'seccion_2_5/resultados/figuras',DEST/'resultados/figuras',dirs_exist_ok=True)
 shutil.copy2(ROOT/'informe/informe.pdf',DEST/'informe.pdf')
-for f in (ROOT/'seccion_2_5/docs').glob('*.md'):shutil.copy2(f,DEST/'documentacion'/f.name)
+# La documentación complementaria se conserva fuera del entregable.
 for sub in ('filtros_temporales','filtrado_espectral'):(DEST/'pruebas'/sub).mkdir(exist_ok=True)
 for f in (ROOT/'seccion_2_3/pruebas/filtros_temporales').glob('test_*.py'):copiar(str(f.relative_to(ROOT)),f'pruebas/filtros_temporales/{f.name}')
 # El auxiliar temporal localiza los casos con rutas antiguas: adaptar solamente ese acceso.
@@ -86,13 +86,22 @@ print(DEST)
 # Guía y dependencias también se incluyen al reconstruir una carpeta vacía.
 for name in ('README.md','requirements.txt','requirements-lock.txt'):
     shutil.copy2(Path(__file__).parent/('plantilla_'+name),DEST/name)
-# Los enlaces locales de los textos originales indican sus rutas de repositorio.
-for f in (DEST/'documentacion').glob('*.md'):
-    original=ROOT/'seccion_2_5/docs'/f.name
-    def corregir(m):
-        label,target=m.group(1),m.group(2)
-        if target.startswith(('http:','https:','#')):return m.group(0)
-        try:ruta=str((original.parent/target).resolve().relative_to(ROOT))
-        except ValueError:return label
-        return label+' (ruta en el repositorio: `'+ruta+'`)'
-    f.write_text(re.sub(r'!?\[([^\]]+)\]\(([^)]+)\)',corregir,f.read_text()))
+# Adaptaciones de texto para la estructura distribuida.
+for archivo,pares in {
+    'src/evaluar_comparacion.py': [('Desde cualquier directorio: python /ruta/al/repositorio/seccion_2_5/src/evaluar_comparacion.py','Desde la carpeta del paquete: python src/evaluar_comparacion.py')],
+    'src/filtrado_espectral.py': [('El nombre se conserva por compatibilidad con el borrador inicial. La\n    salida incluye ruido residual; por ello este porcentaje NO representa','Se mantiene este nombre de API por compatibilidad. La salida\n    incluye ruido residual; por ello este porcentaje NO representa')],
+    'pruebas/filtrado_espectral/evaluar_casos.py': [('python seccion_2_4/pruebas/filtrado_espectral/evaluar_casos.py','python pruebas/filtrado_espectral/evaluar_casos.py')],
+}.items():
+    path=DEST/archivo;texto=path.read_text()
+    for anterior,nuevo in pares:texto=texto.replace(anterior,nuevo)
+    path.write_text(texto)
+p=DEST/'pruebas/filtros_temporales/evaluar_candidatos_casos.py'
+s=p.read_text();s=s.replace('2_2_generacionsenales','pruebas').replace('esté en la raíz del repositorio.','contenga los tres casos del paquete.');p.write_text(s)
+# Registrar las huellas finales, después de adaptar documentación y ejemplos.
+p=DEST/'metadatos/trazabilidad_codigo.json';trazas=json.loads(p.read_text())
+for traza in trazas:traza['sha256_entrega']=hashlib.sha256((DEST/traza['destino']).read_bytes()).hexdigest()
+p.write_text(json.dumps(trazas,ensure_ascii=False,indent=2)+'\n')
+
+# El estado del registro distribuido refleja la evaluación ya realizada.
+p=DEST/'resultados/resultados_2_5.json';v=json.loads(p.read_text());v['configuracion']['estado']='evaluacion_completada'
+p.write_text(json.dumps(v,ensure_ascii=False,indent=2)+'\n')

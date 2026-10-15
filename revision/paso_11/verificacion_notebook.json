@@ -14,12 +14,8 @@
     "espectrales": 4,
     "comparacion": 9
   },
-  "duracion_s": 30.92524853500072,
-  "sha256_notebook": "5e3ab0176969e5a995a92b90d9ecea9abeb23cfc91a66faa18f49ff4012dbdcb",
-  "sha256_notebook_ejecucion_kernel": "5a0f284f4eadbae4c0aa7cb83d9225922d28cbe3b6dcddc3c4cc7cf41451574f",
-  "revision_posterior_de_salidas": {
-    "fecha": "2026-10-14",
-    "limite_inferior_db": -180,
-    "alcance": "Se actualizan las imágenes desde los resultados guardados; no se repite el benchmark."
-  }
+  "duracion_s": 25.14452077399983,
+  "sha256_notebook": "2654d3bf8fbc4770151eded395fabd9802923411c9294c38ff44b6ea51257895",
+  "sha256_notebook_ejecucion_kernel": "e4fecdde4110e98f605e12a41d2c4261ffe2df0202a6394ffd3c3fb4b7d034ef",
+  "revision_posterior_documental": "Referencias de Markdown actualizadas: la documentación complementaria queda fuera del paquete; celdas de cálculo y resultados sin cambios."
 }

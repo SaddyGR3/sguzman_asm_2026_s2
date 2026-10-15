@@ -49,7 +49,7 @@ assert fundamentos["2_1d"]["max_imag_modificacion_simetrica"] < 1e-12
 for nombre in ("2_1c_magnitud.png", "2_1c_fase.png", "2_1d_simetria_conjugada.png", "2_1d_ifft_simetria.png"):
     mostrar(analizar_2_1.FIGURAS / nombre)''')
 md('''## 2.2 — regeneración de los tres casos congelados
-Se reutilizan las funciones y celdas oficiales de generación/caracterización, adaptando las rutas. Tonos útiles: 300, 700 y 1100 Hz; semillas 202601, 202602 y 202603. Casos: interferencia 2150 Hz a 0 dB, ruido blanco a 5 dB y banda 900–1300 Hz a 3 dB.
+El generador crea tres capturas reproducibles. Tonos útiles: 300, 700 y 1100 Hz; semillas 202601, 202602 y 202603. Casos: interferencia 2150 Hz a 0 dB, ruido blanco a 5 dB y banda 900–1300 Hz a 3 dB.
 
 Se regeneran NPZ, WAV, metadatos agregados, gráficas y análisis de ruido. Las huellas de **los arreglos** se contrastan con las señales congeladas, independientemente del contenedor ZIP del NPZ. Solo después de verificarlas se actualiza la huella del archivo regenerado en el protocolo portable. La caracterización de ruido aislado es una prueba de referencia, no un clasificador demostrado de mezclas desconocidas.''')
 code('''import generar_senales
@@ -171,8 +171,8 @@ Los resultados favorecen FIR para el caso tonal separado (SNR 51.911 dB) y FFT/I
 
 La propuesta usa tres ESP32 clásicos: N1 adquisición/FFT de diagnóstico, N2 FIR con salida física y N3 FFT/IFFT, salida y evaluación. Se proponen 8 kHz, FFT 1024, salto 512 y `float32`; piso causal de ocho tramas y DC causal. N3 usa la referencia únicamente en ensayos de evaluación. UART independientes a 921600 baudios transportan lotes de 512 muestras: hasta 2094 B para un canal, 4150 B para `(x,s)`, más 102 B de diagnóstico. El enlace crítico requiere 664375 baudios sin control, y el retardo modelado de reproducción es 256 ms. Las memorias completas presupuestadas son 71.16, 45.56 y 134.16 KiB para N1–N3.
 
-ESP-DSP 1.8.2 (Apache 2.0) se propone para FFT/FIR; KISS FFT 131.1.0 (BSD de tres cláusulas) es alternativa. Estos son presupuestos y fuentes revisadas, no firmware probado. El informe y `documentacion/` contienen fundamentos, licencias, bibliografía, protocolo y límites.
+ESP-DSP 1.8.2 (Apache 2.0) se propone para FFT/FIR; KISS FFT 131.1.0 (BSD de tres cláusulas) es alternativa. Estos son presupuestos y fuentes revisadas, no firmware probado. El informe PDF contiene fundamentos, licencias, bibliografía, protocolo y límites.
 
-**Uso de IA:** se suministraron enunciados, plan, aportes, libros, código y datos para apoyar integración, pruebas y documentación. Este notebook verifica ejecución y calidad contra las fuentes congeladas. La portada contiene los nombres y carnés. El README identifica el repositorio y la versión de entrega mediante la etiqueta `tarea1_prototipo`.''')
+**Uso de IA:** se suministraron enunciados, plan, aportes, libros, código y datos para apoyar integración, pruebas y documentación. Este notebook verifica ejecución y calidad contra las fuentes congeladas. La portada contiene los nombres y carnés. El README describe el entorno de ejecución, los archivos y el repositorio.''')
 nb.cells=cells;nb.metadata={'kernelspec':{'display_name':'Python 3','language':'python','name':'python3'},'language_info':{'name':'python','version':'3.12'}}
 nbf.validate(nb);nbf.write(nb,DEST/'notebook.ipynb');print(len(cells),'celdas; notebook creado')

@@ -9,6 +9,6 @@ test_energia_unilateral_respeta_parseval_par_e_impar (test_comparacion.MetricasC
 test_mse_snr_y_energia_util_no_cuentan_ruido (test_comparacion.MetricasConocidasTest.test_mse_snr_y_energia_util_no_cuentan_ruido) ... ok
 
 ----------------------------------------------------------------------
-Ran 9 tests in 0.543s
+Ran 9 tests in 0.493s
 
 OK
