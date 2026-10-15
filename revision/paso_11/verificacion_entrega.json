@@ -1,0 +1,18 @@
+{
+  "estado": "paquete_final_verificado",
+  "archivos": 119,
+  "zip": "entrega/tarea1.zip",
+  "bytes_zip": 35553101,
+  "sha256_zip": "823ecf80c09c58f2fb53f7253f212ee3275ec77ca27ed3264c76af07426105ce",
+  "sha256_pdf": "96d3dd52b94d87f5f933114507fdcc7ba9eb4b300f59b36caf06d64404456c8f",
+  "sha256_notebook": "2654d3bf8fbc4770151eded395fabd9802923411c9294c38ff44b6ea51257895",
+  "error_max_calidad_vs_informe": 0.0,
+  "regeneracion_desde_cero": {
+    "resultados_eliminados": true,
+    "casos_NPZ_WAV_metadatos_eliminados": true,
+    "configuraciones_agregadas_eliminadas": true,
+    "repositorio_original_no_importado": true
+  },
+  "zip_crc_e_integridad": "correctos",
+  "pendientes": []
+}

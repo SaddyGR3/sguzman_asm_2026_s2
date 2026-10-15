@@ -1,0 +1,83 @@
+{
+  "estado": "propuesta_sin_validacion_en_hardware",
+  "sha256_protocolo": "1d99bfa98d9beadebd909a208f64130b29b8d2215d97554822caf2fce966f1fc",
+  "parametros": {
+    "fs_Hz": 8000,
+    "N_fft": 1024,
+    "hop": 512,
+    "bins_rfft": 513,
+    "float_bytes": 4,
+    "tramas_historial": 8,
+    "tau_dc_s": 1.0,
+    "beta_dc": 0.00012499218782546784,
+    "limite_dsp_propuesto_ms": 48.0
+  },
+  "alternativas_fft": [
+    {
+      "N": 256,
+      "delta_f_Hz": 31.25,
+      "ventana_ms": 32.0,
+      "hop_ms": 16.0
+    },
+    {
+      "N": 512,
+      "delta_f_Hz": 15.625,
+      "ventana_ms": 64.0,
+      "hop_ms": 32.0
+    },
+    {
+      "N": 1024,
+      "delta_f_Hz": 7.8125,
+      "ventana_ms": 128.0,
+      "hop_ms": 64.0
+    }
+  ],
+  "tiempos_derivados": {
+    "periodo_muestra_us": 125.0,
+    "ventana_ms": 128.0,
+    "hop_ms": 64.0,
+    "tramas_por_segundo": 15.625,
+    "span_historial_completo_ms": 576.0,
+    "retardo_fir_ms": 2.25,
+    "retardo_programado_espectral_ms": 192.0
+  },
+  "memoria_espectral": {
+    "componentes_bytes": {
+      "Historial de señal centrada": 4096,
+      "Historial DC para restauración alineada": 4096,
+      "FFT/IFFT compleja in-place": 8192,
+      "Ventana sqrt-Hann": 4096,
+      "Acumulador overlap-add": 4096,
+      "Magnitud actual": 2052,
+      "Historial de magnitudes, W=8": 16416,
+      "Perfil mediano": 2052,
+      "Piso suavizado": 2052,
+      "Ganancia por bin": 2052,
+      "Máscara protegida uint8": 513,
+      "Scratch mediana temporal/frecuencial": 124,
+      "Reserva provisional tablas/workspace FFT": 8192,
+      "Dos buffers de entrada y dos de salida, H float32": 8192,
+      "Reserva control, contadores y alineación": 1024
+    },
+    "subtotal_dsp_bytes": 67245,
+    "reserva_auxiliar_bytes": 16384,
+    "total_provisional_bytes": 83629,
+    "objetivo_bytes": 98304,
+    "margen_objetivo_bytes": 14675,
+    "nota": "Auxiliares: provisión para DMA, pilas y colas; no es toda la RAM del firmware. Biblioteca e interfaz pendientes."
+  },
+  "memoria_temporal": {
+    "coeficientes_y_estado_float32_bytes": 292,
+    "coeficientes_y_estado_q15_bytes": 146,
+    "buffers_io_float32_bytes": 8192,
+    "control_bytes": 1024,
+    "subtotal_dsp_bytes": 9508
+  },
+  "operaciones": {
+    "fir_mac_por_hop": 18944,
+    "fir_mac_por_segundo": 296000,
+    "fft_compleja_radix2_butterflies_por_transformada": 5120,
+    "fft_mas_ifft_butterflies_por_hop": 10240,
+    "nota": "Conteos algorítmicos de referencia; no son ciclos CPU ni incluyen medianas, magnitudes, ventanas, E/S o métricas."
+  }
+}

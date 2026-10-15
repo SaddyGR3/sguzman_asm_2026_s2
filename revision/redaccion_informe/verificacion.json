@@ -1,0 +1,29 @@
+{
+  "fecha_local": "2026-10-14",
+  "tipo": "revision_de_redaccion",
+  "criterios": [
+    "palabras directas",
+    "frases cortas",
+    "menos repeticiones",
+    "definiciones donde se necesitan",
+    "mediciones y estimaciones claramente diferenciadas"
+  ],
+  "comprobaciones": {
+    "equation": "sin cambios",
+    "align": "sin cambios",
+    "tabular": "sin cambios",
+    "citas": "conservadas",
+    "bibliografia": "conservadas",
+    "tablas_y_figuras": "conservadas"
+  },
+  "palabras_aproximadas_explicacion_antes": 3904,
+  "palabras_aproximadas_explicacion_despues": 3772,
+  "paginas": 29,
+  "compilacion": "latexmk/PDFLaTeX: correcta, sin desbordamientos ni referencias indefinidas",
+  "revision_visual": "29 páginas inspeccionadas; página de archivos y bibliografía verificadas después del ajuste final",
+  "sha256_tex_antes": "d0d5ce0669141f6e6e70ad711f8ef3676cb08583ca831b43a3d393352e93a262",
+  "sha256_tex_despues": "c97008ab1b733b56a8bff0df4be1af71d08c3edaafce11a579a904cfb62a807b",
+  "sha256_pdf": "58aeafcc0f10345a1f38cf4a701bd23bf827142189d9cf348e4ba3211d3b73f2",
+  "algoritmos_datos_y_notebook": "sin cambios",
+  "etiqueta_git": "tarea1_prototipo conserva la versión previa; no se mueve durante la revisión"
+}

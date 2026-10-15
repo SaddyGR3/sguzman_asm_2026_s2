@@ -1,0 +1,168 @@
+{
+  "estado": "arquitectura_y_modelo_verificados_sin_hardware",
+  "fs_Hz": 8000,
+  "N": 1024,
+  "H": 512,
+  "avance_ms": 64.0,
+  "baud_propuesto": 921600,
+  "UART": "8N1",
+  "header_struct": "<HBBBBHIIQHBBI",
+  "header_bytes": 32,
+  "crc": "CRC-32/ISO-HDLC; poly 0x04C11DB7; refin/refout true; init/xorout 0xFFFFFFFF; check 0xCBF43926",
+  "paquetes": {
+    "INPUT": {
+      "payload_bytes": 2048,
+      "raw_bytes": 2084,
+      "wire_max_bytes": 2094
+    },
+    "INPUT_REF": {
+      "payload_bytes": 4096,
+      "raw_bytes": 4132,
+      "wire_max_bytes": 4150
+    },
+    "FIR_OUT": {
+      "payload_bytes": 2048,
+      "raw_bytes": 2084,
+      "wire_max_bytes": 2094
+    },
+    "DIAG": {
+      "payload_bytes": 64,
+      "raw_bytes": 100,
+      "wire_max_bytes": 102
+    },
+    "CONTROL": {
+      "payload_bytes": 32,
+      "raw_bytes": 68,
+      "wire_max_bytes": 70
+    }
+  },
+  "enlaces": [
+    {
+      "enlace": "N1→N2",
+      "paquetes_por_avance": [
+        "INPUT",
+        "DIAG"
+      ],
+      "bytes_max_por_avance": 2196,
+      "baud_minimo_teorico": 343125.0,
+      "baud_con_reserva_control": 350125.0,
+      "ocupacion_pct": 37.2314453125,
+      "ocupacion_con_control_pct": 37.990993923611114,
+      "serializacion_ms": 23.828125
+    },
+    {
+      "enlace": "N1→N3_con_referencia",
+      "paquetes_por_avance": [
+        "INPUT_REF",
+        "DIAG"
+      ],
+      "bytes_max_por_avance": 4252,
+      "baud_minimo_teorico": 664375.0,
+      "baud_con_reserva_control": 671375.0,
+      "ocupacion_pct": 72.08930121527777,
+      "ocupacion_con_control_pct": 72.84884982638889,
+      "serializacion_ms": 46.13715277777778
+    },
+    {
+      "enlace": "N1→N3_sin_referencia",
+      "paquetes_por_avance": [
+        "INPUT",
+        "DIAG"
+      ],
+      "bytes_max_por_avance": 2196,
+      "baud_minimo_teorico": 343125.0,
+      "baud_con_reserva_control": 350125.0,
+      "ocupacion_pct": 37.2314453125,
+      "ocupacion_con_control_pct": 37.990993923611114,
+      "serializacion_ms": 23.828125
+    },
+    {
+      "enlace": "N2→N3",
+      "paquetes_por_avance": [
+        "FIR_OUT"
+      ],
+      "bytes_max_por_avance": 2094,
+      "baud_minimo_teorico": 327187.5,
+      "baud_con_reserva_control": 334187.5,
+      "ocupacion_pct": 35.502115885416664,
+      "ocupacion_con_control_pct": 36.26166449652778,
+      "serializacion_ms": 22.721354166666668
+    }
+  ],
+  "memoria_por_nodo": {
+    "N1": {
+      "componentes_bytes": {
+        "FFT": 8192,
+        "tablas_FFT": 6080,
+        "ventana": 4096,
+        "historial_x": 4096,
+        "magnitudes": 2052,
+        "scratch": 124,
+        "doble_buffer_adquisicion_x_s": 8192,
+        "dos_paquetes_TX_COBS": 6244,
+        "control": 1024,
+        "UART_pilas_DMA_colas_reserva": 32768
+      },
+      "total_provisional_bytes": 72868,
+      "total_KiB": 71.16015625,
+      "objetivo_bytes": 98304,
+      "margen_bytes": 25436
+    },
+    "N2": {
+      "componentes_bytes": {
+        "FIR_biblioteca": 352,
+        "buffers_IO": 8192,
+        "dos_decodificadores_RX": 2152,
+        "dos_paquetes_TX_COBS": 2164,
+        "control": 1024,
+        "UART_pilas_DMA_colas_reserva": 32768
+      },
+      "total_provisional_bytes": 46652,
+      "total_KiB": 45.55859375,
+      "objetivo_bytes": 65536,
+      "margen_bytes": 18884
+    },
+    "N3": {
+      "componentes_bytes": {
+        "DSP_y_buffers_paso_8": 65133,
+        "FIFO_referencia_4H": 8192,
+        "FIFO_FIR_4H": 8192,
+        "dos_decodificadores_RX": 6216,
+        "dos_paquetes_CONTROL_TX": 140,
+        "DC_referencia_historial": 4096,
+        "OLA_util": 4096,
+        "FIR_referencia_biblioteca": 352,
+        "UART_pilas_DMA_colas_reserva": 40960
+      },
+      "total_provisional_bytes": 137377,
+      "total_KiB": 134.1572265625,
+      "objetivo_bytes": 163840,
+      "margen_bytes": 26463
+    }
+  },
+  "control_por_sentido_max": {
+    "tramas_por_segundo": 10,
+    "bytes_por_trama_max": 70,
+    "baud_requerido": 7000
+  },
+  "latencia_modelo": {
+    "retardo_reproduccion_ms": 256,
+    "margen_lanzamiento_TX_ms": 1,
+    "disponibilidad_espectral_ms": 223.89670138888889,
+    "disponibilidad_FIR_alineado_ms": 226.06857638888889,
+    "nota": "Incluye DSP objetivo 48 ms, un control por avance/enlace y 1 ms de lanzamiento por enlace; sin otra cola. No es una medición."
+  },
+  "ejemplo": {
+    "tipo": "INPUT_REF",
+    "caso": 1,
+    "muestras": 512,
+    "wire_bytes_reales": 4146,
+    "sha256_trama": "9d52bde450485338a56eb7f03aabc6d55c820fd1bc04541747749716a767e5ca",
+    "sha256_fuente": "311f3dbcdc62818d441052c3ca6f711216a24019e0ef7c5fe4c206b4308746ef",
+    "nota": "Conversión a float32 solo para la trama; las fuentes originales no cambian."
+  },
+  "fuentes_sha256": {
+    "revision/paso_7/presupuesto_esp32.json": "3d29dd7e737d92864558c7c446d7a4e5b0e08877cb66dd8ad388c9f590453d2a",
+    "revision/paso_8/seleccion_bibliotecas.json": "f9f68f4fafac49c46b60a0c95298df1fd7d95280160321046386f7a14de168a8"
+  }
+}

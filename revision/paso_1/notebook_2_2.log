@@ -1,0 +1,57 @@
+Entorno listo
+{'modo': 'manual', 'semilla': 20260918, 'señal': 'multitono', 'ruido': 'mixto', 'frecuencias_utiles_Hz': [440, 880, 1320], 'interferencia_Hz': 1750, 'banda_ruido_Hz': (2500, 3800), 'snr_objetivo_dB': 2.0}
+Muestras: 96,000 | SNR obtenida: 2.000 dB | Ganancia común: 0.27793
+notebook:celda_9:23: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+Referencia limpia
+<IPython.lib.display.Audio object>
+Entrada contaminada para el sistema
+<IPython.lib.display.Audio object>
+Archivos exportados en: tonos_defensa
+ZIP para descargar: defensa_grupo_01.zip
+{'nombre_prueba': 'defensa_grupo_01', 'modo': 'manual', 'semilla': 20260918, 'fs_Hz': 16000, 'duracion_s': 6.0, 'tipo_senal': 'multitono', 'frecuencias_utiles_Hz': [440.0, 880.0, 1320.0], 'amplitudes_utiles': [1.0, 0.55, 0.3], 'fases_grados': [0.0, 35.0, -50.0], 'tipo_ruido': 'mixto', 'snr_objetivo_dB': 2.0, 'snr_obtenida_dB': 2.0000000000000204, 'frecuencia_interferencia_Hz': 1750.0, 'banda_ruido_Hz': [2500.0, 3800.0], 'numero_impulsos': 10, 'pico_maximo': 0.8, 'ganancia_comun': 0.2779276200604859}
+caso_1 SNR objetivo: 0.0 SNR obtenida: 0.0
+caso_2 SNR objetivo: 5.0 SNR obtenida: 5.0
+caso_3 SNR objetivo: 3.0 SNR obtenida: 3.0
+
+Generando gráficas del caso 1
+Variables disponibles: ['limpia', 'ruido', 'contaminada', 'fs']
+notebook:celda_18:77: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+notebook:celda_18:120: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+notebook:celda_18:137: UserWarning: No artists with labels found to put in legend.  Note that artists whose label start with an underscore are ignored when legend() is called with no argument.
+notebook:celda_18:151: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+notebook:celda_18:204: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+
+Generando gráficas del caso 2
+Variables disponibles: ['limpia', 'ruido', 'contaminada', 'fs']
+
+Generando gráficas del caso 3
+Variables disponibles: ['limpia', 'ruido', 'contaminada', 'fs']
+
+Todas las gráficas fueron generadas.
+
+========== CASO 1 ==========
+Tipo: Interferencia sinusoidal
+Frecuencia detectada: 2150.39 Hz
+Error absoluto: 0.39 Hz
+Resultados guardados en: 2_2_generacionsenales/resultados/identificacion_ruido/caso_1/resultados.json
+
+========== CASO 2 ==========
+Tipo: Ruido blanco gaussiano
+Distribución de energía por bandas:
+0-500 Hz: 46806.76
+500-1000 Hz: 46203.09
+1000-1500 Hz: 44661.48
+1500-2000 Hz: 48637.45
+2000-2500 Hz: 47463.58
+2500-3000 Hz: 47319.99
+3000-3500 Hz: 43650.49
+3500-4000 Hz: 44065.96
+Coeficiente de variación: 0.0364
+Resultados guardados en: 2_2_generacionsenales/resultados/identificacion_ruido/caso_2/resultados.json
+
+========== CASO 3 ==========
+Tipo: Ruido de banda limitada
+Banda detectada: 870.12 - 1327.15 Hz
+Resultados guardados en: 2_2_generacionsenales/resultados/identificacion_ruido/caso_3/resultados.json
+
+Todos los resultados fueron guardados correctamente.

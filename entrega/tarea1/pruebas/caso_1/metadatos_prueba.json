@@ -1,0 +1,16 @@
+{
+  "semilla": 202601,
+  "fs_Hz": 8000,
+  "N_bloque": 1024,
+  "duracion_s": 1.024,
+  "frecuencias_utiles_Hz": [
+    300,
+    700,
+    1100
+  ],
+  "tipo_ruido": "tonal",
+  "frecuencia_interferencia_Hz": 2150,
+  "banda_ruido_Hz": null,
+  "snr_objetivo_dB": 0.0,
+  "snr_obtenida_dB": 1.2536257065192713e-14
+}

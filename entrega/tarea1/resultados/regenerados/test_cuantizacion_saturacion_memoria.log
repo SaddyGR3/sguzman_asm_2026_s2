@@ -1,0 +1,98 @@
+============================================================
+ CUANTIZACIÓN, SATURACIÓN Y MEMORIA - FIR FINAL
+============================================================
+
+Orden: 36
+Número de coeficientes: 37
+
+============================================================
+ CUANTIZACIÓN FLOAT32
+============================================================
+Error máximo de coeficiente: 1.087885e-08
+
+Respuesta con coeficientes float32
+  Rizado banda de paso: 0.062763 dB
+  Pérdida máxima banda de paso: 0.040820 dB
+  Atenuación mínima rechazo: 46.106615 dB
+
+============================================================
+ CUANTIZACIÓN Q15
+============================================================
+Resolución Q15: 3.051758e-05
+Error máximo de coeficiente: 1.489231e-05
+
+Respuesta con coeficientes Q15
+  Rizado banda de paso: 0.062938 dB
+  Pérdida máxima banda de paso: 0.040390 dB
+  Atenuación mínima rechazo: 45.995639 dB
+
+Coeficientes Q15 enteros:
+  b_q15[ 0] = 37
+  b_q15[ 1] = 75
+  b_q15[ 2] = 0
+  b_q15[ 3] = -152
+  b_q15[ 4] = -156
+  b_q15[ 5] = 111
+  b_q15[ 6] = 371
+  b_q15[ 7] = 180
+  b_q15[ 8] = -417
+  b_q15[ 9] = -679
+  b_q15[10] = 0
+  b_q15[11] = 1051
+  b_q15[12] = 1010
+  b_q15[13] = -697
+  b_q15[14] = -2390
+  b_q15[15] = -1266
+  b_q15[16] = 3604
+  b_q15[17] = 9569
+  b_q15[18] = 12266
+  b_q15[19] = 9569
+  b_q15[20] = 3604
+  b_q15[21] = -1266
+  b_q15[22] = -2390
+  b_q15[23] = -697
+  b_q15[24] = 1010
+  b_q15[25] = 1051
+  b_q15[26] = 0
+  b_q15[27] = -679
+  b_q15[28] = -417
+  b_q15[29] = 180
+  b_q15[30] = 371
+  b_q15[31] = 111
+  b_q15[32] = -156
+  b_q15[33] = -152
+  b_q15[34] = 0
+  b_q15[35] = 75
+  b_q15[36] = 37
+
+============================================================
+ ANÁLISIS DE SATURACIÓN
+============================================================
+Suma de |b[k]| original: 1.702778
+Suma de |b[k]| Q15: 1.702759
+
+Cota teórica:
+  |y[n]| <= sum(|b[k]|) * max(|x[n]|)
+
+Si |x[n]| <= 1:
+  |y[n]| máximo teórico <= 1.702778
+
+Escalamiento máximo para garantizar que |y[n]| <= 1:
+  0.587276
+
+Peor caso aproximado del acumulador Q15:
+  Suma absoluta coeficientes enteros = 55796
+  Acumulador máximo = 1828323328
+  Límite int32 = 2147483647
+  Cabe en int32 = True
+
+============================================================
+ MEMORIA DEL FILTRO
+============================================================
+Coeficientes almacenados: 37
+Muestras de estado:       36
+
+Memoria coeficientes + estado:
+  float64: 584 bytes
+  float32: 292 bytes
+  Q15:     146 bytes

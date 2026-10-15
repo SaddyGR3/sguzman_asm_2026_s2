@@ -1,0 +1,203 @@
+{
+  "version": 1,
+  "estado": "criterios_definidos_evaluador_pendiente",
+  "fecha_local": "2026-10-12",
+  "fuente_requisitos": "Contexto/Tareas_ASM_Tarea1_v7.pdf, apartado 2.5",
+  "fs_Hz": 8000,
+  "muestras_captura": 8192,
+  "bloque_nominal": 1024,
+  "dtype_real": "float64",
+  "dtype_complejo": "complex128",
+  "casos": [
+    {
+      "caso": 1,
+      "archivo": "seccion_2_2/2_2_generacionsenales/pruebas/caso_1/muestras_exactas.npz",
+      "sha256": "311f3dbcdc62818d441052c3ca6f711216a24019e0ef7c5fe4c206b4308746ef",
+      "semilla": 202601
+    },
+    {
+      "caso": 2,
+      "archivo": "seccion_2_2/2_2_generacionsenales/pruebas/caso_2/muestras_exactas.npz",
+      "sha256": "a64bd3dbe5c4eaff7178f1bcf87e7e32975db17533d952a880d232dedbc74440",
+      "semilla": 202602
+    },
+    {
+      "caso": 3,
+      "archivo": "seccion_2_2/2_2_generacionsenales/pruebas/caso_3/muestras_exactas.npz",
+      "sha256": "873fbcd059a7678f21fff962a200875063ec23066bb4eda2980d633351363a9f",
+      "semilla": 202603
+    }
+  ],
+  "metodos_principales": [
+    "entrada",
+    "temporal_fir",
+    "espectral"
+  ],
+  "temporal": {
+    "tipo": "fir_kaiser",
+    "orden": 36,
+    "fs_Hz": 8000,
+    "fp_Hz": 1200,
+    "fstop_Hz": 1800,
+    "atenuacion_diseno_db": 40,
+    "retardo_muestras": 18,
+    "estado_inicial": "cero_por_captura",
+    "conservar_estado_entre_bloques": true
+  },
+  "espectral": {
+    "N": 1024,
+    "hop": 512,
+    "solape": 0.5,
+    "ventana": "sqrt_hann_periodica",
+    "estimacion": "captura_completa_fuera_de_linea",
+    "seleccion_por_caso": {
+      "1": "picos",
+      "2": "resta",
+      "3": "resta"
+    },
+    "parametros_por_metodo": {
+      "picos": {
+        "umbral": 6.0,
+        "ancho_bins": 6,
+        "atenuacion_db": 60.0,
+        "banda_util": [
+          0.0,
+          1200.0
+        ]
+      },
+      "resta": {
+        "alpha": 3.0,
+        "g_min": 0.05,
+        "proteger_tonos": true,
+        "banda_util": [
+          0.0,
+          1200.0
+        ],
+        "umbral_tono": 2.5,
+        "ancho_tono_bins": 1
+      }
+    },
+    "tramas_incluido_relleno": 17
+  },
+  "alineamiento_principal": {
+    "criterio": "retardo_conocido_sin_optimizacion_por_correlacion",
+    "referencia_inicio": 0,
+    "referencia_fin_exclusivo": 8174,
+    "K": 8174,
+    "desplazamiento_por_metodo": {
+      "entrada": 0,
+      "temporal_fir": 18,
+      "espectral": 0
+    },
+    "descartar_transitorios_adicionales": false
+  },
+  "evaluacion_directa": {
+    "referencia_inicio": 0,
+    "referencia_fin_exclusivo": 8192,
+    "compensar_retardo": false,
+    "sufijo_columnas": "directo"
+  },
+  "energia_util": {
+    "criterio": "descomposicion_condicional_con_ganancias_congeladas_de_la_mezcla",
+    "formula": "100 * sum(y_util_alineada**2) / sum(limpia_tramo**2)",
+    "reestimar_ganancias_sobre_fuentes": false,
+    "limitar_a_100_pct": false,
+    "tolerancia_descomposicion_abs": 1e-12
+  },
+  "atenuacion": {
+    "ruido_total_formula": "10 * log10(sum(ruido_tramo**2) / sum(y_ruido_alineada**2))",
+    "bandas_Hz_por_caso": {
+      "1": [
+        2130,
+        2170
+      ],
+      "2": null,
+      "3": [
+        900,
+        1300
+      ]
+    },
+    "ventana_medicion": "hann_periodica_K",
+    "ponderacion_rfft": "2_interior_1_dc_y_nyquist_si_existe",
+    "extremos_banda_incluidos": true
+  },
+  "ganancia_tonos": {
+    "frecuencias_Hz": [
+      300,
+      700,
+      1100
+    ],
+    "ajuste": "minimos_cuadrados_senos_cosenos_con_DC_sobre_y_util",
+    "formula": "20 * log10(amplitud_salida / amplitud_referencia)"
+  },
+  "benchmark": {
+    "reloj": "perf_counter_ns",
+    "calentamientos": 3,
+    "repeticiones": 30,
+    "estadisticas": [
+      "mediana",
+      "percentil_95",
+      "maximo"
+    ],
+    "duracion_audio_s": 1.024,
+    "bloques_nominales_equivalentes": 8,
+    "medir_diseno_carga_metricas_io": false,
+    "medir_diagnosticos_internos_filtro": true,
+    "estado_inicial": "cero_por_captura",
+    "tiempo_entrada_sin_filtrar_ms": 0,
+    "validacion_tiempo_real_ESP32": false,
+    "orden_metodos": "alternar_entre_repeticiones"
+  },
+  "memoria": {
+    "dato_persistente": "nbytes_sin_duplicar_vistas",
+    "pico_PC": "tracemalloc_adicional_durante_captura_sin_benchmark_simultaneo",
+    "entrada_y_coeficientes_preasignados_fuera_pico": true,
+    "incluir_resultados_y_ganancias_en_pico": true,
+    "presupuesto_ESP32": "pendiente_paso_7_no_equivalente_a_python"
+  },
+  "valores_especiales": {
+    "error_cero": "SNR_positiva_infinita",
+    "ruido_residual_cero": "atenuacion_positiva_infinita",
+    "banda_no_aplicable": "null_JSON_celda_vacia_CSV",
+    "energia_referencia_cero": "rechazar",
+    "representacion_infinitos_JSON": "cadenas +inf o -inf",
+    "representacion_no_definidos_JSON": null
+  },
+  "columnas_csv_previstas": [
+    "caso",
+    "metodo",
+    "fs_Hz",
+    "N",
+    "hop",
+    "K_evaluacion",
+    "retardo_compensado_muestras",
+    "snr_entrada_db",
+    "mse",
+    "snr_salida_db",
+    "delta_snr_db",
+    "energia_util_conservada_pct",
+    "energia_total_salida_pct",
+    "atenuacion_ruido_total_db",
+    "banda_interferencia_inicio_Hz",
+    "banda_interferencia_fin_Hz",
+    "atenuacion_interferencia_banda_db",
+    "ganancia_util_300_Hz_db",
+    "ganancia_util_700_Hz_db",
+    "ganancia_util_1100_Hz_db",
+    "K_directo",
+    "mse_directo",
+    "snr_entrada_directo_db",
+    "snr_salida_directo_db",
+    "delta_snr_directo_db",
+    "tiempo_captura_mediana_ms",
+    "tiempo_captura_p95_ms",
+    "tiempo_captura_max_ms",
+    "tiempo_equivalente_1024_mediana_ms",
+    "razon_tiempo_audio",
+    "tramas_procesadas",
+    "tiempo_amortizado_trama_mediana_ms",
+    "memoria_entrada_bytes",
+    "memoria_persistente_bytes",
+    "memoria_pico_trazada_adicional_bytes"
+  ]
+}

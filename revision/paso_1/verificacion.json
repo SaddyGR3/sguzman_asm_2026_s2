@@ -1,0 +1,226 @@
+{
+  "entorno": {
+    "python": "3.12.14",
+    "numpy": "2.5.4",
+    "scipy": "1.18.1",
+    "matplotlib": "3.11.2"
+  },
+  "casos": [
+    {
+      "caso": 1,
+      "fs_Hz": 8000,
+      "muestras": 8192,
+      "semilla": 202601,
+      "snr_entrada_db": 1.2536257065192713e-14,
+      "sha256_npz": "311f3dbcdc62818d441052c3ca6f711216a24019e0ef7c5fe4c206b4308746ef",
+      "error_suma_max": 2.220446049250313e-16,
+      "errores_regeneracion_max": {
+        "limpia": 0.0,
+        "ruido": 0.0,
+        "contaminada": 0.0
+      },
+      "errores_cuantizacion_wav_max": {
+        "limpia": 3.033827932399924e-05,
+        "ruido": 3.0503798261971582e-05,
+        "contaminada": 3.0492212307775546e-05
+      },
+      "misma_entrada_ambos_evaluadores": true,
+      "diferencias_metricas_espectrales": {
+        "picos": {
+          "mse": 0.0,
+          "snr_salida_db": 0.0,
+          "delta_snr_db": 0.0
+        },
+        "resta": {
+          "mse": 6.938893903907228e-18,
+          "snr_salida_db": 0.0,
+          "delta_snr_db": 0.0
+        },
+        "top_k": {
+          "mse": 6.938893903907228e-18,
+          "snr_salida_db": 3.469446951953614e-18,
+          "delta_snr_db": 3.469446951953614e-18
+        }
+      },
+      "error_salida_espectral_guardada_max": 2.220446049250313e-16,
+      "metodo_espectral_elegido": "picos",
+      "snr_salida_espectral_db": 30.3142122912277
+    },
+    {
+      "caso": 2,
+      "fs_Hz": 8000,
+      "muestras": 8192,
+      "semilla": 202602,
+      "snr_entrada_db": 5.000000000000009,
+      "sha256_npz": "a64bd3dbe5c4eaff7178f1bcf87e7e32975db17533d952a880d232dedbc74440",
+      "error_suma_max": 1.1102230246251565e-16,
+      "errores_regeneracion_max": {
+        "limpia": 0.0,
+        "ruido": 0.0,
+        "contaminada": 0.0
+      },
+      "errores_cuantizacion_wav_max": {
+        "limpia": 3.047518330807908e-05,
+        "ruido": 3.051238135835105e-05,
+        "contaminada": 3.050025029946446e-05
+      },
+      "misma_entrada_ambos_evaluadores": true,
+      "diferencias_metricas_espectrales": {
+        "picos": {
+          "mse": 0.0,
+          "snr_salida_db": 8.881784197001252e-16,
+          "delta_snr_db": 0.0
+        },
+        "resta": {
+          "mse": 0.0,
+          "snr_salida_db": 0.0,
+          "delta_snr_db": 1.7763568394002505e-15
+        },
+        "top_k": {
+          "mse": 2.168404344971009e-19,
+          "snr_salida_db": 0.0,
+          "delta_snr_db": 1.7763568394002505e-15
+        }
+      },
+      "error_salida_espectral_guardada_max": 1.1102230246251565e-16,
+      "metodo_espectral_elegido": "resta",
+      "snr_salida_espectral_db": 20.730613767974777
+    },
+    {
+      "caso": 3,
+      "fs_Hz": 8000,
+      "muestras": 8192,
+      "semilla": 202603,
+      "snr_entrada_db": 3.000000000000029,
+      "sha256_npz": "873fbcd059a7678f21fff962a200875063ec23066bb4eda2980d633351363a9f",
+      "error_suma_max": 1.1102230246251565e-16,
+      "errores_regeneracion_max": {
+        "limpia": 0.0,
+        "ruido": 0.0,
+        "contaminada": 0.0
+      },
+      "errores_cuantizacion_wav_max": {
+        "limpia": 3.0477675746008737e-05,
+        "ruido": 3.05165956306086e-05,
+        "contaminada": 3.051054913030815e-05
+      },
+      "misma_entrada_ambos_evaluadores": true,
+      "diferencias_metricas_espectrales": {
+        "picos": {
+          "mse": 3.469446951953614e-18,
+          "snr_salida_db": 1.3322676295501878e-15,
+          "delta_snr_db": 1.3322676295501878e-15
+        },
+        "resta": {
+          "mse": 4.336808689942018e-19,
+          "snr_salida_db": 3.552713678800501e-15,
+          "delta_snr_db": 3.552713678800501e-15
+        },
+        "top_k": {
+          "mse": 8.673617379884035e-19,
+          "snr_salida_db": 0.0,
+          "delta_snr_db": 0.0
+        }
+      },
+      "error_salida_espectral_guardada_max": 1.6653345369377348e-16,
+      "metodo_espectral_elegido": "resta",
+      "snr_salida_espectral_db": 14.670030083124491
+    }
+  ],
+  "pruebas_temporales": [
+    {
+      "argumentos": [
+        "/home/saddygr/Documentos/GitHub/sguzman_asm_2026_s2/seccion_2_3/pruebas/filtros_temporales/test_candidatos_fir_iir.py"
+      ],
+      "codigo_salida": 0,
+      "log": "test_candidatos_fir_iir.log"
+    },
+    {
+      "argumentos": [
+        "/home/saddygr/Documentos/GitHub/sguzman_asm_2026_s2/seccion_2_3/pruebas/filtros_temporales/test_comparacion_fir_iir.py"
+      ],
+      "codigo_salida": 0,
+      "log": "test_comparacion_fir_iir.log"
+    },
+    {
+      "argumentos": [
+        "/home/saddygr/Documentos/GitHub/sguzman_asm_2026_s2/seccion_2_3/pruebas/filtros_temporales/test_cuantizacion_saturacion_memoria.py"
+      ],
+      "codigo_salida": 0,
+      "log": "test_cuantizacion_saturacion_memoria.log"
+    },
+    {
+      "argumentos": [
+        "/home/saddygr/Documentos/GitHub/sguzman_asm_2026_s2/seccion_2_3/pruebas/filtros_temporales/test_ecuacion_diferencias.py"
+      ],
+      "codigo_salida": 0,
+      "log": "test_ecuacion_diferencias.log"
+    },
+    {
+      "argumentos": [
+        "/home/saddygr/Documentos/GitHub/sguzman_asm_2026_s2/seccion_2_3/pruebas/filtros_temporales/test_filtro_final.py"
+      ],
+      "codigo_salida": 0,
+      "log": "test_filtro_final.log"
+    },
+    {
+      "argumentos": [
+        "/home/saddygr/Documentos/GitHub/sguzman_asm_2026_s2/seccion_2_3/pruebas/filtros_temporales/test_polos_estabilidad.py"
+      ],
+      "codigo_salida": 0,
+      "log": "test_polos_estabilidad.log"
+    },
+    {
+      "argumentos": [
+        "/home/saddygr/Documentos/GitHub/sguzman_asm_2026_s2/seccion_2_3/pruebas/filtros_temporales/test_procesamiento_bloques.py"
+      ],
+      "codigo_salida": 0,
+      "log": "test_procesamiento_bloques.log"
+    },
+    {
+      "argumentos": [
+        "/home/saddygr/Documentos/GitHub/sguzman_asm_2026_s2/seccion_2_3/pruebas/filtros_temporales/test_respuesta_frecuencia.py"
+      ],
+      "codigo_salida": 0,
+      "log": "test_respuesta_frecuencia.log"
+    }
+  ],
+  "notebook": {
+    "celdas_python_ejecutadas": [
+      1,
+      3,
+      5,
+      7,
+      9,
+      11,
+      13,
+      16,
+      18,
+      20
+    ],
+    "ejecucion": "Python en orden, directorio temporal",
+    "log": "notebook_2_2.log"
+  },
+  "evaluador_temporal": {
+    "argumentos": [
+      "/home/saddygr/Documentos/GitHub/sguzman_asm_2026_s2/seccion_2_3/pruebas/filtros_temporales/evaluar_candidatos_casos.py"
+    ],
+    "codigo_salida": 0,
+    "log": "evaluador_temporal.log"
+  },
+  "pruebas_espectrales": {
+    "argumentos": [
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "/home/saddygr/Documentos/GitHub/sguzman_asm_2026_s2/seccion_2_4/pruebas/filtrado_espectral",
+      "-p",
+      "test_*.py",
+      "-v"
+    ],
+    "codigo_salida": 0,
+    "log": "pruebas_espectrales.log"
+  },
+  "estado": "verificaciones_completadas"
+}

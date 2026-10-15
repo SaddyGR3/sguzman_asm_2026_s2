@@ -1,0 +1,95 @@
+{
+  "caso_1": {
+    "fs_Hz": 8000,
+    "N_bloque": 1024,
+    "muestras_totales": 8192,
+    "duracion_s": 1.024,
+    "semilla": 202601,
+    "tipo_senal": "multitono",
+    "frecuencias_utiles_Hz": [
+      300,
+      700,
+      1100
+    ],
+    "amplitudes_utiles": [
+      1,
+      0.55,
+      0.3
+    ],
+    "fases_grados": [
+      0,
+      35,
+      -50
+    ],
+    "tipo_ruido": "tonal",
+    "frecuencia_interferencia_Hz": 2150,
+    "banda_ruido_Hz": null,
+    "snr_objetivo_dB": 0,
+    "snr_obtenida_dB": -4.821637332766436e-16,
+    "ganancia_comun": 0.2877012618993703,
+    "pico_maximo": 0.8
+  },
+  "caso_2": {
+    "fs_Hz": 8000,
+    "N_bloque": 1024,
+    "muestras_totales": 8192,
+    "duracion_s": 1.024,
+    "semilla": 202602,
+    "tipo_senal": "multitono",
+    "frecuencias_utiles_Hz": [
+      300,
+      700,
+      1100
+    ],
+    "amplitudes_utiles": [
+      1,
+      0.55,
+      0.3
+    ],
+    "fases_grados": [
+      0,
+      35,
+      -50
+    ],
+    "tipo_ruido": "blanco",
+    "frecuencia_interferencia_Hz": null,
+    "banda_ruido_Hz": null,
+    "snr_objetivo_dB": 5,
+    "snr_obtenida_dB": 4.999999999999999,
+    "ganancia_comun": 0.22620499167166933,
+    "pico_maximo": 0.8
+  },
+  "caso_3": {
+    "fs_Hz": 8000,
+    "N_bloque": 1024,
+    "muestras_totales": 8192,
+    "duracion_s": 1.024,
+    "semilla": 202603,
+    "tipo_senal": "multitono",
+    "frecuencias_utiles_Hz": [
+      300,
+      700,
+      1100
+    ],
+    "amplitudes_utiles": [
+      1,
+      0.55,
+      0.3
+    ],
+    "fases_grados": [
+      0,
+      35,
+      -50
+    ],
+    "tipo_ruido": "banda",
+    "frecuencia_interferencia_Hz": null,
+    "banda_ruido_Hz": [
+      900,
+      1300
+    ],
+    "snr_objetivo_dB": 3,
+    "snr_obtenida_dB": 3.000000000000001,
+    "ganancia_comun": 0.2323877641910516,
+    "pico_maximo": 0.8
+  }
+}

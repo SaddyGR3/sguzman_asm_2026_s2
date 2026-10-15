@@ -1,0 +1,14 @@
+# Entornos virtuales
+.venv/
+venv/
+
+# Materiales de contexto locales
+/[Cc]ontexto/
+/documentacion_respaldo/
+
+# Archivos temporales de Python
+__pycache__/
+*.pyc
+
+# Archivos temporales de Jupyter
+.ipynb_checkpoints/

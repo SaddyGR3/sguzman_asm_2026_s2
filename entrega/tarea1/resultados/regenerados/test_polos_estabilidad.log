@@ -1,0 +1,20 @@
+IIR estable
+Ceros: [0.]
+Polos: [0.8]
+Radio máximo: 0.8
+Estable: True
+ROC causal: |z| > 0.8
+
+IIR inestable
+Polos: [1.1]
+Radio máximo: 1.1
+Estable: False
+
+FIR
+Ceros: [ 0.30901699+0.95105652j  0.30901699-0.95105652j -0.80901699+0.58778525j
+ -0.80901699-0.58778525j]
+Polos: [0. 0. 0. 0.]
+Radio máximo: 0.0
+Estable: True
+
+Todas las pruebas de polos y estabilidad pasaron.

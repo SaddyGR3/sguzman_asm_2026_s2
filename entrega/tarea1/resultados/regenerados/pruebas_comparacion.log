@@ -1,0 +1,14 @@
+test_operador_congelado_identidad_y_linealidad (test_comparacion.IntegracionTest.test_operador_congelado_identidad_y_linealidad) ... ok
+test_rechaza_hash_modificado_y_protocolo_incoherente (test_comparacion.IntegracionTest.test_rechaza_hash_modificado_y_protocolo_incoherente) ... ok
+test_rechaza_metadatos_modificados_aunque_npz_sea_original (test_comparacion.IntegracionTest.test_rechaza_metadatos_modificados_aunque_npz_sea_original) ... ok
+test_tres_casos_misma_referencia_y_filtros_originales (test_comparacion.IntegracionTest.test_tres_casos_misma_referencia_y_filtros_originales) ... ok
+test_ajuste_tonos_entre_bins_y_ganancias_conocidas (test_comparacion.MetricasConocidasTest.test_ajuste_tonos_entre_bins_y_ganancias_conocidas) ... ok
+test_alineamiento_fijo_recupera_secuencia_retardada (test_comparacion.MetricasConocidasTest.test_alineamiento_fijo_recupera_secuencia_retardada) ... ok
+test_ceros_no_finitos_y_referencia_invalida (test_comparacion.MetricasConocidasTest.test_ceros_no_finitos_y_referencia_invalida) ... ok
+test_energia_unilateral_respeta_parseval_par_e_impar (test_comparacion.MetricasConocidasTest.test_energia_unilateral_respeta_parseval_par_e_impar) ... ok
+test_mse_snr_y_energia_util_no_cuentan_ruido (test_comparacion.MetricasConocidasTest.test_mse_snr_y_energia_util_no_cuentan_ruido) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 0.493s
+
+OK

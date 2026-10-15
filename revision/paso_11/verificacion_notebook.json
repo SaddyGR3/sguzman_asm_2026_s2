@@ -1,0 +1,21 @@
+{
+  "estado": "ejecucion_completa_correcta",
+  "motor": "nbclient con kernel ipykernel nuevo",
+  "python": "3.12.14",
+  "celdas_codigo": 7,
+  "regeneracion_desde_cero": {
+    "resultados_eliminados": true,
+    "casos_NPZ_WAV_metadatos_eliminados": true,
+    "configuraciones_agregadas_eliminadas": true,
+    "repositorio_original_no_importado": true
+  },
+  "pruebas": {
+    "scripts_temporales": 8,
+    "espectrales": 4,
+    "comparacion": 9
+  },
+  "duracion_s": 25.14452077399983,
+  "sha256_notebook": "2654d3bf8fbc4770151eded395fabd9802923411c9294c38ff44b6ea51257895",
+  "sha256_notebook_ejecucion_kernel": "e4fecdde4110e98f605e12a41d2c4261ffe2df0202a6394ffd3c3fb4b7d034ef",
+  "revision_posterior_documental": "Referencias de Markdown actualizadas: la documentación complementaria queda fuera del paquete; celdas de cálculo y resultados sin cambios."
+}

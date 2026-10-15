@@ -1,0 +1,10 @@
+{
+    "caso": 1,
+    "frecuencia_muestreo_Hz": 8000,
+    "numero_muestras": 8192,
+    "resolucion_frecuencial_Hz": 0.9765625,
+    "tipo_ruido": "Interferencia sinusoidal",
+    "frecuencia_detectada_Hz": 2150.390625,
+    "frecuencia_configurada_Hz": 2150,
+    "error_absoluto_Hz": 0.390625
+}

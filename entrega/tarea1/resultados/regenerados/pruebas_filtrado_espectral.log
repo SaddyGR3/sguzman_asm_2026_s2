@@ -1,0 +1,10 @@
+test_compromiso_ruido_y_distorsion (test_filtrado_espectral.FiltradoEspectralTest.test_compromiso_ruido_y_distorsion) ... ok
+test_identidad_y_simetria (test_filtrado_espectral.FiltradoEspectralTest.test_identidad_y_simetria) ... ok
+test_mejora_en_los_tres_casos_oficiales (test_filtrado_espectral.FiltradoEspectralTest.test_mejora_en_los_tres_casos_oficiales) ... ok
+test_rechazo_sigue_a_la_interferencia_sin_bin_fijo (test_filtrado_espectral.FiltradoEspectralTest.test_rechazo_sigue_a_la_interferencia_sin_bin_fijo)
+La misma configuracion debe funcionar al mover el tono interferente. ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.050s
+
+OK

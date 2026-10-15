@@ -1,0 +1,34 @@
+
+Candidato FIR Kaiser
+--------------------
+Orden: 36
+Número de coeficientes b: 37
+Número de coeficientes a: 1
+Rizado banda de paso: 0.063 dB
+Pérdida máxima banda de paso: 0.041 dB
+Atenuación mínima banda de rechazo: 46.107 dB
+Estable: True
+Radio máximo de polos: 0.0
+Magnitud a  300 Hz: -0.017 dB
+Magnitud a  700 Hz: -0.017 dB
+Magnitud a 1100 Hz: 0.007 dB
+Magnitud a 2150 Hz: -64.959 dB
+
+Candidato IIR Butterworth
+-------------------------
+Orden: 11
+Número de coeficientes b: 12
+Número de coeficientes a: 12
+Rizado banda de paso: 0.999 dB
+Pérdida máxima banda de paso: 0.999 dB
+Atenuación mínima banda de rechazo: 43.489 dB
+Estable: True
+Radio máximo de polos: 0.8871098883970494
+Magnitud a  300 Hz: -0.000 dB
+Magnitud a  700 Hz: -0.000 dB
+Magnitud a 1100 Hz: -0.123 dB
+Magnitud a 2150 Hz: -69.839 dB
+
+Ambos candidatos cumplen las especificaciones preliminares.
+/tmp/tarea1-notebook-twe41k55/paquete/pruebas/filtros_temporales/test_candidatos_fir_iir.py:179: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+  plt.show()

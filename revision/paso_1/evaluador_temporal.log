@@ -1,0 +1,71 @@
+========================================
+ EVALUACIÓN DE CANDIDATOS FIR / IIR
+========================================
+FIR Kaiser: orden 36
+IIR Butterworth: orden 11
+
+========================================
+ CASO 1
+========================================
+
+  FIR Kaiser
+    Retardo estimado: 18 muestras
+    SNR entrada:         0.000 dB
+    SNR salida:         51.911 dB
+    Delta SNR:          51.911 dB
+    MSE alineado:     3.628906e-07
+    SNR sin alinear:    -4.998 dB
+    MSE sin alinear:  1.777248e-01
+
+  IIR Butterworth
+    Retardo estimado: 7 muestras
+    SNR entrada:         0.000 dB
+    SNR salida:         14.211 dB
+    Delta SNR:          14.211 dB
+    MSE alineado:     2.134192e-03
+    SNR sin alinear:    -3.409 dB
+    MSE sin alinear:  1.232493e-01
+
+========================================
+ CASO 2
+========================================
+
+  FIR Kaiser
+    Retardo estimado: 18 muestras
+    SNR entrada:         5.000 dB
+    SNR salida:          9.524 dB
+    Delta SNR:           4.524 dB
+    MSE alineado:     3.887311e-03
+    SNR sin alinear:    -5.152 dB
+    MSE sin alinear:  1.138232e-01
+
+  IIR Butterworth
+    Retardo estimado: 7 muestras
+    SNR entrada:         5.000 dB
+    SNR salida:          8.666 dB
+    Delta SNR:           3.666 dB
+    MSE alineado:     4.729116e-03
+    SNR sin alinear:    -3.616 dB
+    MSE sin alinear:  7.991121e-02
+
+========================================
+ CASO 3
+========================================
+
+  FIR Kaiser
+    Retardo estimado: 18 muestras
+    SNR entrada:         3.000 dB
+    SNR salida:          3.071 dB
+    Delta SNR:           0.071 dB
+    MSE alineado:     1.812801e-02
+    SNR sin alinear:    -5.667 dB
+    MSE sin alinear:  1.352468e-01
+
+  IIR Butterworth
+    Retardo estimado: 7 muestras
+    SNR entrada:         3.000 dB
+    SNR salida:          3.231 dB
+    Delta SNR:           0.231 dB
+    MSE alineado:     1.744659e-02
+    SNR sin alinear:    -4.198 dB
+    MSE sin alinear:  9.645269e-02
