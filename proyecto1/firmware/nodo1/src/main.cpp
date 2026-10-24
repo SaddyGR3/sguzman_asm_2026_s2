@@ -1,6 +1,7 @@
 #include <cstdio>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "dsps_fft2r.h"
 
 extern "C" void app_main(void)
 {
