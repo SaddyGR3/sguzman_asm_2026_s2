@@ -1,14 +1,21 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+#include <cstring>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_err.h"
 #include "esp_random.h"
 #include "esp_timer.h"
+#include "driver/gpio.h"
+#include "driver/uart.h"
 #include "dsps_fft2r.h"
 #include "generador.h"
 #include "protocolo.h"
+
+// true: lazo de prueba con puentes GPIO18->GPIO19 y GPIO17->GPIO16 en la misma placa.
+// false: para la PC, no se copia al anillo, no se lee RX y no se compara.
+constexpr bool PRUEBA_LAZO = true;
 
 constexpr int N_FFT = 1024;      // dos bloques de 512
 constexpr int EXCLUSION = 12;    // bins que separan un pico de otro
@@ -16,6 +23,10 @@ constexpr int EXCLUSION = 12;    // bins que separan un pico de otro
 // 512 muestras a 8 kHz = 64 ms: el temporizador marca el ritmo de un bloque.
 constexpr uint64_t PERIODO_US = 64000;
 constexpr uint32_t BLOQUES_VENTANA = 16;   // un resumen cada ~1.024 s
+
+constexpr int BAUDIOS = 921600;
+constexpr size_t TAM_ANILLO = 16384;       // potencia de 2: el índice se envuelve con una máscara
+constexpr size_t MARGEN_TX = 64;
 
 static TaskHandle_t tarea_principal = nullptr;   // la lee el callback del temporizador
 
@@ -96,6 +107,119 @@ static uint8_t sal_diag3[CABLE_DIAG];         // DIAG hacia el nodo 3
 static uint8_t diag64[TAM_DIAG];
 static uint32_t session_id = 0;
 
+// Un enlace UART hacia otro nodo, con sus contadores y, para el lazo, el anillo
+// con una copia de lo enviado.
+struct Enlace {
+    const char* nombre;
+    uart_port_t puerto;
+    uint64_t enviados = 0;        // bytes escritos en el búfer del driver (acumulado)
+    uint32_t desbordes_tx = 0;    // bloques descartados por falta de espacio (acumulado)
+    uint32_t esc_max_us = 0;      // máximo tiempo de escritura de la ventana
+    // Lazo de prueba.
+    uint8_t anillo[TAM_ANILLO];
+    uint32_t pos_esc = 0;         // dónde se copia el siguiente byte enviado
+    uint32_t pos_lect = 0;        // contra qué byte se compara el siguiente recibido
+    uint64_t recibidos = 0;
+    uint32_t diferencias = 0;
+    bool desincronizado = false;
+
+    Enlace(const char* n, uart_port_t p) : nombre(n), puerto(p) {}   // el anillo queda en .bss
+};
+
+static Enlace enlace_n2("N2", UART_NUM_1);
+static Enlace enlace_n3("N3", UART_NUM_2);
+static uint8_t buf_rx[1024];      // búfer de lectura compartido por los dos enlaces
+
+// Configura una UART a 921600 8N1 sin control de flujo, sin cola de eventos.
+static void iniciar_uart(uart_port_t puerto, int tx, int rx, int buf_tx, int buf_rx_tam)
+{
+    uart_config_t cfg = {};
+    cfg.baud_rate = BAUDIOS;
+    cfg.data_bits = UART_DATA_8_BITS;
+    cfg.parity = UART_PARITY_DISABLE;
+    cfg.stop_bits = UART_STOP_BITS_1;
+    cfg.flow_ctrl = UART_HW_FLOWCTRL_DISABLE;
+    cfg.source_clk = UART_SCLK_DEFAULT;
+    ESP_ERROR_CHECK(uart_param_config(puerto, &cfg));
+    ESP_ERROR_CHECK(uart_set_pin(puerto, tx, rx, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+    // Pull-up en RX, después de uart_set_pin: con PRUEBA_LAZO = false los RX quedan sin
+    // conectar, y sin pull-up captan ruido que la UART interpreta como bytes y errores.
+    ESP_ERROR_CHECK(gpio_set_pull_mode(static_cast<gpio_num_t>(rx), GPIO_PULLUP_ONLY));
+    ESP_ERROR_CHECK(uart_driver_install(puerto, buf_rx_tam, buf_tx, 0, NULL, 0));
+}
+
+// Copia al anillo lo que se acaba de escribir, en el mismo orden.
+static void copiar_al_anillo(Enlace& e, const uint8_t* datos, size_t n)
+{
+    for (size_t k = 0; k < n; ++k) {
+        e.anillo[e.pos_esc] = datos[k];
+        e.pos_esc = (e.pos_esc + 1) & (TAM_ANILLO - 1);
+    }
+}
+
+// Envía un bloque (datos + DIAG) sin bloquear: si no hay espacio en el búfer de TX
+// se descarta completo. uart_write_bytes copia al búfer del driver y vuelve, así que
+// los búferes de salida se pueden reutilizar en el bloque siguiente.
+static void enviar_bloque(Enlace& e, const uint8_t* datos, size_t l1,
+                          const uint8_t* diag, size_t l2)
+{
+    const int64_t t0 = esp_timer_get_time();
+    size_t libre = 0;
+    ESP_ERROR_CHECK(uart_get_tx_buffer_free_size(e.puerto, &libre));
+
+    // El margen de 64 B cubre la descripción (20 B), los encabezados (8 B por trozo) y el
+    // relleno a múltiplo de 4 de las dos escrituras, que la función no descuenta del todo.
+    if (libre >= l1 + l2 + MARGEN_TX) {
+        uart_write_bytes(e.puerto, datos, l1);
+        uart_write_bytes(e.puerto, diag, l2);
+        const int64_t t1 = esp_timer_get_time();
+        const uint32_t escritura = static_cast<uint32_t>(t1 - t0);
+        if (escritura > e.esc_max_us) e.esc_max_us = escritura;
+        if (PRUEBA_LAZO) {
+            copiar_al_anillo(e, datos, l1);
+            copiar_al_anillo(e, diag, l2);
+        }
+        e.enviados += l1 + l2;
+    } else {
+        // Sin reintento: el audio vencido se descarta. Los sequence ya asignados dejan un
+        // salto que el receptor cuenta como pérdida.
+        ++e.desbordes_tx;
+        const uint32_t escritura = static_cast<uint32_t>(esp_timer_get_time() - t0);
+        if (escritura > e.esc_max_us) e.esc_max_us = escritura;
+    }
+}
+
+// Lee lo que llegó por RX y lo compara con el anillo. No decodifica nada.
+static void leer_lazo(Enlace& e)
+{
+    if (e.desincronizado) return;
+    size_t disponible = 0;
+    ESP_ERROR_CHECK(uart_get_buffered_data_len(e.puerto, &disponible));
+    while (disponible > 0) {
+        // Si lo pendiente supera el anillo, ya se sobrescribieron bytes sin comparar.
+        if (static_cast<int64_t>(e.enviados - e.recibidos) > static_cast<int64_t>(TAM_ANILLO)) {
+            e.desincronizado = true;
+            printf("lazo %s desincronizado: pendientes %llu\n", e.nombre,
+                   (unsigned long long)(e.enviados - e.recibidos));
+            return;
+        }
+        const size_t pedir = disponible < sizeof(buf_rx) ? disponible : sizeof(buf_rx);
+        const int n = uart_read_bytes(e.puerto, buf_rx, pedir, 0);
+        if (n <= 0) break;
+        for (int k = 0; k < n; ++k) {
+            if (buf_rx[k] != e.anillo[e.pos_lect]) ++e.diferencias;
+            e.pos_lect = (e.pos_lect + 1) & (TAM_ANILLO - 1);
+        }
+        e.recibidos += n;
+        disponible -= n;
+    }
+    if (static_cast<int64_t>(e.enviados - e.recibidos) > static_cast<int64_t>(TAM_ANILLO)) {
+        e.desincronizado = true;
+        printf("lazo %s desincronizado: pendientes %llu\n", e.nombre,
+               (unsigned long long)(e.enviados - e.recibidos));
+    }
+}
+
 // INPUT hacia el nodo 2. Un arreglo de float no tiene relleno y el ESP32 es
 // little-endian con IEEE 754, así que los bytes de x ya son los del protocolo.
 static size_t paquete_input(uint32_t seq, uint16_t flags, uint64_t muestra)
@@ -173,12 +297,27 @@ extern "C" void app_main(void)
     paquete_ref(0, FLAG_REINICIO, 0);
     imprimir_cabecera("INPUT_REF");
 
+    // UART1 -> nodo 2 y UART2 -> nodo 3. El anillo de TX del driver es NOSPLIT con ítem
+    // máximo ALIGN4(tamaño/2) - 8: con 8 KB el tope es 4088 B y uart_get_tx_buffer_free_size
+    // daría descartes falsos para el bloque de N3 (~4246 B); con 16 KB el tope es 8184 B.
+    // En UART1 el INPUT (~2086 B) cabe con 8 KB.
+    iniciar_uart(UART_NUM_1, 18, 19, 8192, 8192);
+    iniciar_uart(UART_NUM_2, 17, 16, 16384, 8192);
+    uint32_t baud1 = 0, baud2 = 0;
+    ESP_ERROR_CHECK(uart_get_baudrate(UART_NUM_1, &baud1));
+    ESP_ERROR_CHECK(uart_get_baudrate(UART_NUM_2, &baud2));
+    printf("UART1 baud real %lu | UART2 baud real %lu\n", (unsigned long)baud1, (unsigned long)baud2);
+
     // Verificación espectral, una sola vez al arrancar.
     if (dsps_fft2r_init_fc32(NULL, N_FFT) != ESP_OK) {
         printf("Error al iniciar la FFT de ESP-DSP\n");
     } else {
         analizar(gen_s, gen_i);
     }
+
+    // Vacía RX para que el ruido del arranque no cuente en el lazo.
+    ESP_ERROR_CHECK(uart_flush_input(UART_NUM_1));
+    ESP_ERROR_CHECK(uart_flush_input(UART_NUM_2));
 
     // Temporizador periódico: cada 64 ms avisa a esta tarea que toca un bloque.
     tarea_principal = xTaskGetCurrentTaskHandle();
@@ -208,7 +347,7 @@ extern "C" void app_main(void)
     uint64_t v_per_suma = 0;
     uint32_t v_gen_max = 0;
     uint32_t v_emp_max = 0;
-    size_t cable_input = 0, cable_ref = 0, cable_diag = 0;
+    size_t cable_input = 0, cable_ref = 0, cable_diag = 0, cable_diag3 = 0;
 
     int64_t inicio_anterior = -1;   // la primera iteración no tiene periodo
 
@@ -270,10 +409,20 @@ extern "C" void app_main(void)
         // Enlace N1 -> N3: INPUT_REF y DIAG.
         cable_ref = paquete_ref(seq_n3++, primer_n3 ? FLAG_REINICIO : 0, muestra_inicial);
         primer_n3 = false;
-        paquete_diag(NODO_3, seq_n3++, muestra_inicial, sal_diag3);
+        cable_diag3 = paquete_diag(NODO_3, seq_n3++, muestra_inicial, sal_diag3);
 
         const uint32_t empaquetado = static_cast<uint32_t>(esp_timer_get_time() - fin_gen);
         if (empaquetado > v_emp_max) v_emp_max = empaquetado;
+
+        // Envío por UART: datos y después DIAG, un bloque por enlace.
+        enviar_bloque(enlace_n2, sal_input, cable_input, sal_diag2, cable_diag);
+        enviar_bloque(enlace_n3, sal_ref, cable_ref, sal_diag3, cable_diag3);
+
+        // Lazo de prueba: lee RX al final, así el envío (con plazo) va primero.
+        if (PRUEBA_LAZO) {
+            leer_lazo(enlace_n2);
+            leer_lazo(enlace_n3);
+        }
 
         // El resumen va al final: el printf cae en el tiempo libre del periodo.
         if (v_bloques == BLOQUES_VENTANA) {
@@ -285,6 +434,20 @@ extern "C" void app_main(void)
                    (unsigned long)cable_input, (unsigned long)cable_ref, (unsigned long)cable_diag,
                    (unsigned long)uxTaskGetStackHighWaterMark(NULL),
                    (unsigned long)overruns);
+            printf("tx N2 %llu B (esc max %lu us, desb %lu) | tx N3 %llu B (esc max %lu us, desb %lu)\n",
+                   (unsigned long long)enlace_n2.enviados, (unsigned long)enlace_n2.esc_max_us,
+                   (unsigned long)enlace_n2.desbordes_tx,
+                   (unsigned long long)enlace_n3.enviados, (unsigned long)enlace_n3.esc_max_us,
+                   (unsigned long)enlace_n3.desbordes_tx);
+            if (PRUEBA_LAZO) {
+                printf("lazo N2: rx %llu dif %lu pend %lld | N3: rx %llu dif %lu pend %lld\n",
+                       (unsigned long long)enlace_n2.recibidos, (unsigned long)enlace_n2.diferencias,
+                       (long long)(enlace_n2.enviados - enlace_n2.recibidos),
+                       (unsigned long long)enlace_n3.recibidos, (unsigned long)enlace_n3.diferencias,
+                       (long long)(enlace_n3.enviados - enlace_n3.recibidos));
+            }
+            enlace_n2.esc_max_us = 0;
+            enlace_n3.esc_max_us = 0;
             v_bloques = 0;
             v_periodos = 0;
             v_per_min = 0xFFFFFFFF;
