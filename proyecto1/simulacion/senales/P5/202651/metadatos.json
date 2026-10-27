@@ -1,0 +1,83 @@
+{
+  "prueba": "P5",
+  "semilla": 202651,
+  "fs_Hz": 8000,
+  "muestras": 80000,
+  "snr_objetivo_dB": 3,
+  "snr_obtenida_dB": 3.0000000000000284,
+  "factor_escala": 0.226113411682616,
+  "pico_x": 0.8,
+  "pico_s": 0.3715879763891938,
+  "configuracion": {
+    "descripcion": "Superposicion parcial senal-ruido",
+    "semillas": [
+      202651,
+      202652,
+      202653
+    ],
+    "senal": {
+      "tipo": "multitono",
+      "frecuencias_Hz": [
+        300,
+        700,
+        1100
+      ],
+      "amplitudes": [
+        1,
+        0.55,
+        0.3
+      ],
+      "fases_grados": [
+        0,
+        35,
+        -50
+      ]
+    },
+    "ruido": {
+      "tipo": "banda",
+      "banda_Hz": [
+        900,
+        1300
+      ]
+    },
+    "snr_dB": 3,
+    "banda_protegida_Hz": [
+      100,
+      1200
+    ],
+    "filtro_n2": "notch",
+    "frecuencia_notch_Hz": 1100,
+    "metodo_n3": "resta",
+    "banda_atenuacion_Hz": [
+      900,
+      1300
+    ],
+    "tono_vigilado_Hz": 1100,
+    "barrido": [
+      {
+        "nivel": "suave",
+        "q_notch": 10,
+        "alfa": 2,
+        "proteccion_tonos": false
+      },
+      {
+        "nivel": "medio",
+        "q_notch": 2.75,
+        "alfa": 3,
+        "proteccion_tonos": false
+      },
+      {
+        "nivel": "agresivo",
+        "q_notch": 1,
+        "alfa": 8,
+        "proteccion_tonos": false
+      },
+      {
+        "nivel": "referencia",
+        "q_notch": 2.75,
+        "alfa": 3,
+        "proteccion_tonos": true
+      }
+    ]
+  }
+}

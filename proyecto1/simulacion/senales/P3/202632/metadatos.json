@@ -1,0 +1,80 @@
+{
+  "prueba": "P3",
+  "semilla": 202632,
+  "fs_Hz": 8000,
+  "muestras": 80000,
+  "snr_objetivo_dB": 5,
+  "snr_obtenida_dB": 5.000000000000011,
+  "factor_escala": 0.3396044483634678,
+  "pico_x": 0.8,
+  "pico_s": 0.5157793987273911,
+  "configuracion": {
+    "descripcion": "Audio sintetico con ruido de banda ancha",
+    "semillas": [
+      202631,
+      202632,
+      202633
+    ],
+    "senal": {
+      "tipo": "melodia",
+      "notas_Hz": [
+        440,
+        392,
+        329.63,
+        293.66,
+        329.63,
+        392,
+        440,
+        523.25,
+        587.33,
+        523.25,
+        440,
+        392,
+        329.63,
+        261.63,
+        220,
+        261.63,
+        293.66,
+        329.63,
+        392,
+        440
+      ],
+      "duracion_nota_s": 0.5,
+      "armonicos": [
+        1,
+        0.5,
+        0.3333333333333333,
+        0.25
+      ],
+      "envolvente": {
+        "ataque_ms": 10,
+        "decaimiento_ms": 50,
+        "sostenido": 0.7,
+        "liberacion_ms": 50
+      },
+      "banda_Hz": [
+        100,
+        3000
+      ]
+    },
+    "ruido": {
+      "tipo": "banda",
+      "banda_Hz": [
+        100,
+        3000
+      ]
+    },
+    "snr_dB": 5,
+    "banda_protegida_Hz": [
+      100,
+      3000
+    ],
+    "filtro_n2": "fir_banda_protegida",
+    "metodo_n3": "resta",
+    "parametros_n3": {
+      "alfa": 3,
+      "ganancia_minima": 0.05
+    },
+    "banda_atenuacion_Hz": null
+  }
+}
