@@ -1,0 +1,4 @@
+# Se regeneran bajo demanda con python -m sim.comparacion.
+/comparacion.csv
+/comparacion_resumen.csv
+/figuras/

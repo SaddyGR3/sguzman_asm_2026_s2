@@ -61,6 +61,13 @@ sim/analogico.py        modelo de la cadena analógica de entrada (nodo 1) y de 
 resultados/decimacion.json  coeficientes del FIR de decimación y sus métricas, generados por sim/analogico.py
 config/nodo2.json       parámetros del filtrado del nodo 2 (FIR de la banda protegida y Q del notch automático)
 sim/nodo2.py            FIR de la banda protegida, notch IIR, polos y ceros, y filtrado por bloques con estado
+config/nodo3.json       historial, umbrales, ganancias y tramo de evaluación del nodo 3
+sim/nodo3.py            FFT/IFFT causal por bloques y reconstrucción con solape
+sim/metricas.py         MSE, SNR, energía útil, atenuación y ganancia de tonos
+sim/comparacion.py      P1–P5 por tres semillas, comparación y figuras
+resultados/comparacion.csv          métricas por corrida y ruta, generadas por sim.comparacion
+resultados/comparacion_resumen.csv  medias y desviaciones, generadas por sim.comparacion
+resultados/figuras/P1.png–P5.png   comparación temporal y espectral, generada por sim.comparacion
 ```
 
 ## Generar las señales
@@ -118,3 +125,51 @@ python -m sim.nodo2
 ## Nota
 
 El código marcado como "Origen: Tarea 1" se copió de `proyecto1/tarea1/`.
+
+## Nodo 3 y comparación
+
+`sim/nodo3.py` recibe la misma señal `x8` que el nodo 2. Trabaja a 8 kHz con
+tramas de **N = 1024** muestras y avance **H = 512**: aplica raíz de Hann antes
+de la FFT y después de la IFFT, y suma las mitades solapadas. La ganancia real
+por bin conserva la simetría conjugada, por lo que la salida es real. El método
+de **picos** detecta interferencias tonales fuera de la banda útil; el de
+**resta** reduce un piso espectral y puede proteger tonos estables. El piso se
+estima con la mediana de las últimas ocho tramas reales y se suaviza con una
+mediana de 31 bins. Durante el calentamiento se usa ganancia 1. Ninguna decisión
+usa tramas futuras.
+
+`config/nodo3.json` reúne los parámetros para ajustar el método sin cambiar
+el algoritmo:
+
+| Campo | Función |
+|---|---|
+| `historial_tramas: 8`, `suavizado_bins: 31` | Medianas temporal y frecuencial del piso de ruido |
+| `picos` | Umbral de detección, seis bins vecinos y atenuación de 60 dB |
+| `resta` | Intensidad inicial α = 3 y ganancia mínima 0.05 |
+| `proteccion_tonos` | Identifica tonos estables dentro de la banda útil y deja su ganancia en 1 |
+| `evaluacion` | Intervalo de 1 a 9 s usado por las métricas |
+
+La salida en flujo corresponde al bloque de entrada anterior: su retardo
+algorítmico es **512 muestras (64 ms)**. Las métricas se calculan entre 1 y 9 s
+contra `s8`, la referencia limpia que pasó por la misma cadena de entrada que
+`x8`. Se compensan solo los retardos propios de las rutas: **18 muestras** en
+el FIR del nodo 2, **0** en el notch y **512** en el nodo 3. El notch puede
+introducir desfase aunque su retardo declarado sea cero. Para medir energía
+útil en el nodo 3, se aplican a `s8` las ganancias aprendidas de `x8`.
+
+Desde `proyecto1/simulacion/`, con las dependencias instaladas:
+
+```
+python -m pytest pruebas
+python -m sim.comparacion
+```
+
+El segundo comando recorre P1–P5, tres semillas por condición y cuatro niveles
+en P5. Escribe las métricas de entrada, nodo 2 y nodo 3 en
+`resultados/comparacion.csv`, sus medias y desviaciones muestrales en
+`resultados/comparacion_resumen.csv` y cinco figuras en `resultados/figuras/`.
+**Las pruebas no crean esos archivos**: verifican cálculos en memoria, igual
+que las pruebas de los otros módulos. Las tablas y figuras solo se generan al
+ejecutar explícitamente `python -m sim.comparacion`, para incorporarlas al PDF.
+Las pruebas de integración verifican la alineación, la causalidad y los
+criterios de P1, P2 y P5.
