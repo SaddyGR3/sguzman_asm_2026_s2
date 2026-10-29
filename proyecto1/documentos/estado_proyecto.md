@@ -12,6 +12,7 @@ Documentos de referencia en esta carpeta:
 | `plan_frecuencias.md` | fs, N, bandas, cadena analógica, pruebas P1–P6 y diseño de los filtros |
 | `guia_conexiones_hardware.md` | Cómo se conecta cada componente |
 | `guia_git.md` | Flujo de ramas, PR y commits |
+| `plan_avance_s12.md` | Reparto de lo que falta para el avance del 30 oct, en frentes paralelos |
 
 ---
 
@@ -19,7 +20,7 @@ Documentos de referencia en esta carpeta:
 
 | Entrega | Fecha | Contenido |
 |---|---|---|
-| Avance semana 12 | **vie 30 oct, 11:59 pm** | Parte 1: sistema completo en Python con el plan de frecuencias. Parte 2: emisor en el microcontrolador. PDF del avance + código + defensa de 10 min. (Los diagramas de validación del receptor pasaron al 6 nov) |
+| Avance semana 12 | **vie 30 oct, 11:59 pm** | Parte 1: sistema completo en Python con el plan de frecuencias. Parte 2: emisor en el microcontrolador. Diagramas de validación en el receptor. PDF del avance + código, sin defensa. Plan de trabajo: `plan_avance_s12.md` |
 | Proyecto 1 | **vie 6 nov, 11:50 pm** | Sistema funcionando en hardware, paper IEEE (4 págs.), documento de herramientas (2 págs.) y defensa de 15 min con sonido |
 
 ---
@@ -29,6 +30,8 @@ Documentos de referencia en esta carpeta:
 ### Parte 2 del avance — emisor en el nodo 1 (terminada)
 
 Código en `proyecto1/firmware/nodo1/` (PlatformIO, `framework = espidf`, C++, ESP-DSP).
+
+El profesor aprobó que, para el avance, el emisor genere los tonos internamente en lugar de adquirirlos por el ADC.
 
 - Genera cada 64 ms un bloque de 512 muestras a 8 kHz: tonos de 300, 700 y 1100 Hz (señal útil s) más interferencia en 2150 Hz (x = s + interferencia, SNR 0 dB).
 - FFT de arranque en la placa para verificar los picos.
@@ -78,11 +81,11 @@ Valores clave que salieron de la simulación:
 
 | Qué | Estado |
 |---|---|
-| Paso 4 — nodo 3: método espectral causal por bloques (N = 1024, H = 512, raíz de Hann), métodos de picos y de resta con protección de tonos, métricas (MSE, SNR, ΔSNR, energía útil, atenuación) y comparación limpia / contaminada / filtradas, con media y desviación de las 3 semillas | Especificación lista, en revisión. Rama `simulacion-nodo3` |
+| Paso 4 — nodo 3: método espectral causal por bloques (N = 1024, H = 512, raíz de Hann), métodos de picos y de resta con protección de tonos, métricas (MSE, SNR, ΔSNR, energía útil, atenuación) y comparación limpia / contaminada / filtradas, con media y desviación de las 3 semillas | Especificación revisada; aplicar los 2 cambios de `plan_avance_s12.md` (frente 1). Rama `simulacion-nodo3` |
 | Paso 5 — DFT directa contra FFT (N = 1024) y tabla de costo computacional, memoria y latencia de cada método | Pendiente |
 | Paso 6 — un solo script que genera todas las figuras y tablas (incluye polos y ceros y la respuesta en frecuencia del nodo 2) | Pendiente |
 | PDF del avance: proceso de diseño, criterios y discusión | **Sin responsable** |
-| Defensa de 10 min | **Sin responsable** |
+| Diagramas de validación del receptor: flujo de recepción, validación del contenido y montaje, a partir de las capturas guardadas | Pendiente |
 | Entrega: zip en TEC-Digital, PR `development` → `main` y tag `avance_s12` (ver `guia_git.md`) | Pendiente |
 
 Material para el PDF que ya existe: el plan de frecuencias (justificación de fs, N, bandas y filtros), los resultados de la cadena analógica y del nodo 2 de arriba, y la salida del receptor de la PC como evidencia del emisor.
@@ -91,14 +94,13 @@ Material para el PDF que ya existe: el plan de frecuencias (justificación de fs
 
 ## 4. Lo que falta para el 6 de noviembre (hardware)
 
-1. **Diagramas de validación del receptor:** flujo de recepción (delimitador, CRC, secuencia, desbordamiento) y validación del contenido, a partir de las capturas guardadas.
-2. **Circuitos analógicos** (`guia_conexiones_hardware.md`): entrada del nodo 1 (acople, divisor a 1.32 V, Sallen-Key, protección) y salidas de los nodos 2 y 3 (seguidor, Sallen-Key, acople, potenciómetro, PAM8403). Verificar con osciloscopio. Confirmar que las compras (LM358 DIP-8, jack PJ-307, cable auxiliar) estén hechas.
-3. **Firmware de los tres nodos:**
+1. **Circuitos analógicos** (`guia_conexiones_hardware.md`): entrada del nodo 1 (acople, divisor a 1.32 V, Sallen-Key, protección) y salidas de los nodos 2 y 3 (seguidor, Sallen-Key, acople, potenciómetro, PAM8403). Verificar con osciloscopio. Confirmar que las compras (LM358 DIP-8, jack PJ-307, cable auxiliar) estén hechas.
+2. **Firmware de los tres nodos:**
    - nodo 1: ADC en modo continuo a 24 kHz con el FIR de `resultados/decimacion.json`, quitar DC, FFT, diagnóstico y clasificador de ruido, consola para cambiar parámetros;
    - nodo 2: recepción, FIR calculado en la placa y notch (mismos valores que `sim/nodo2.py`), salida por DAC;
    - nodo 3: recepción, FFT/IFFT con los métodos del paso 4, métricas en la LCD, LED de error, botones.
-4. **Integración y pruebas:** por pares (1–2, 1–3) y luego los tres; P1–P5 con 3 repeticiones; respuesta en frecuencia medida contra la calculada; latencia y memoria; ensayo de P6. Antes, escribir los criterios de aceptación.
-5. **Documentación:** paper IEEE (máx. 4 págs., abstract en inglés de 150–250 palabras), documento de herramientas (máx. 2 págs.), merge a `main`, tag `proyecto1`, ensayo de la defensa de 15 min.
+3. **Integración y pruebas:** por pares (1–2, 1–3) y luego los tres; P1–P5 con 3 repeticiones; respuesta en frecuencia medida contra la calculada; latencia y memoria; ensayo de P6. Antes, escribir los criterios de aceptación.
+4. **Documentación:** paper IEEE (máx. 4 págs., abstract en inglés de 150–250 palabras), documento de herramientas (máx. 2 págs.), merge a `main`, tag `proyecto1`, ensayo de la defensa de 15 min.
 
 Pendientes de decisión: parámetros finales del audio sintético de P3, criterios de aceptación por prueba y comunicar al profesor los límites de P6 (`plan_frecuencias.md`, sección 6).
 
