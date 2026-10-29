@@ -15,7 +15,7 @@
 
 // true: lazo de prueba con puentes GPIO18->GPIO19 y GPIO17->GPIO16 en la misma placa.
 // false: para la PC, no se copia al anillo, no se lee RX y no se compara.
-constexpr bool PRUEBA_LAZO = true;
+constexpr bool PRUEBA_LAZO = false;
 
 constexpr int N_FFT = 1024;      // dos bloques de 512
 constexpr int EXCLUSION = 12;    // bins que separan un pico de otro
@@ -318,6 +318,21 @@ extern "C" void app_main(void)
     // Vacía RX para que el ruido del arranque no cuente en el lazo.
     ESP_ERROR_CHECK(uart_flush_input(UART_NUM_1));
     ESP_ERROR_CHECK(uart_flush_input(UART_NUM_2));
+
+    // Un único 0x00 en cada UART. Si el emisor se reinicia a mitad de un paquete, ese paquete
+    // queda cortado sin su 0x00; el receptor juntaría esos restos con el primer paquete de la
+    // sesión nueva (sequence 0, bandera 0x0004) y fallaría el CRC. El 0x00 cierra los restos
+    // como una trama aparte y el receptor descarta las tramas vacías (resincronización COBS).
+    static const uint8_t cero = 0;
+    uart_write_bytes(enlace_n2.puerto, &cero, 1);
+    uart_write_bytes(enlace_n3.puerto, &cero, 1);
+    if (PRUEBA_LAZO) {
+        // Para que el lazo siga dando 0 diferencias, el 0x00 también entra al anillo.
+        copiar_al_anillo(enlace_n2, &cero, 1);
+        copiar_al_anillo(enlace_n3, &cero, 1);
+        enlace_n2.enviados += 1;
+        enlace_n3.enviados += 1;
+    }
 
     // Temporizador periódico: cada 64 ms avisa a esta tarea que toca un bloque.
     tarea_principal = xTaskGetCurrentTaskHandle();
