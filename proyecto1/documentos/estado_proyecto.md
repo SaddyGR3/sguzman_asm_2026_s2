@@ -2,7 +2,7 @@
 
 **CE1110 Análisis de Señales Mixtas — Sistema distribuido de reducción adaptativa de ruido en tiempo real**
 
-Resumen para el equipo: qué está hecho, cómo se usa y qué falta. Actualizado: 28 oct.
+Resumen para el equipo: qué está hecho, cómo se usa y qué falta. Actualizado: 29 oct.
 
 Documentos de referencia en esta carpeta:
 
@@ -48,7 +48,7 @@ El profesor aprobó que, para el avance, el emisor genere los tonos internamente
 - Capturas guardadas en `proyecto1/herramientas_pc/capturas/` (`captura_n2.bin`, `captura_n3.bin`); se reprocesan con `--archivo` sin la placa.
 - Uso y conexión: `guia_conexiones_hardware.md`, sección 6.
 
-### Parte 1 del avance — simulación en Python (3 de 6 pasos)
+### Parte 1 del avance — simulación en Python (4 de 6 pasos)
 
 Código en `proyecto1/simulacion/`. Todo valor de diseño sale de `config/*.json`; cada módulo tiene sus pruebas en `pruebas/`.
 
@@ -57,14 +57,16 @@ Código en `proyecto1/simulacion/`. Todo valor de diseño sale de `config/*.json
 | 1. Protocolo y señales | `sim/protocolo.py`, `sim/senales.py`, `config/pruebas.json` | Paquetes del contrato (el mismo módulo lo usa el receptor de la PC). Banco de señales P1–P5 con 3 semillas cada una y WAV estéreo (izquierdo = x, derecho = s) |
 | 2. Cadena analógica | `sim/analogico.py`, `config/cadena_analogica.json`, `resultados/decimacion.json` | Acople de entrada, Sallen-Key (fc 3.41 kHz, Q 0.73), ADC de 12 bits a 24 kHz (0.15–2.45 V), FIR de decimación de 37 coeficientes y ÷3, DAC de 8 bits con retención. x y s pasan por la misma cadena. `decimacion.json` tiene los coeficientes para el firmware del nodo 1 |
 | 3. Nodo 2 | `sim/nodo2.py`, `config/nodo2.json` | FIR de la banda protegida (Kaiser, 37 coeficientes, fórmula explícita como en la placa, validado contra `firwin` y contra la Tarea 1) y notch IIR de 2.º orden. Polos, ceros, ROC y estabilidad. Filtrado por bloques con estado |
+| 4. Nodo 3 y comparación | `sim/nodo3.py`, `sim/metricas.py`, `sim/comparacion.py`, `config/nodo3.json` | FFT/IFFT causal con raíz de Hann y suma con solape; detección de picos o resta espectral con protección opcional de tonos. Compara entrada, nodo 2 y nodo 3 contra la referencia limpia tras la misma cadena analógica; genera tablas y figuras |
 
 Cómo correrlo (desde `proyecto1/simulacion/`, con el entorno virtual activo):
 
 ```
 pip install -r requirements.txt
-python -m pytest pruebas        # 176 pruebas pasando
+python -m pytest pruebas        # 187 pruebas en la verificación del 29 oct
 python -m sim.analogico          # genera resultados/decimacion.json
 python -m sim.nodo2              # resumen de filtros de P1–P5
+python -m sim.comparacion        # genera tablas de métricas y figuras P1–P5
 ```
 
 Valores clave que salieron de la simulación:
@@ -74,6 +76,9 @@ Valores clave que salieron de la simulación:
 - FIR de la banda protegida: rechazo ≥ 45 dB (pasa bajas), retardo fijo de 18 muestras.
 - Notch de P1: Q = 8.5 (≥ 30 dB aunque la detección del pico se equivoque 3.9 Hz; pierde 0.013 dB en 700 Hz).
 - Compromiso de P5: bajar la Q del notch de 10 a 1 lleva la pérdida en 700 Hz de −0.05 a −3.8 dB.
+- Nodo 3: ventana N = 1024, avance H = 512, historial causal de 8 tramas y retardo algorítmico de 64 ms. El tramo de evaluación es de 1 a 9 s, con 3 semillas por condición; P5 tiene 4 niveles.
+- Comparación del 29 oct: se verificó que `python -m sim.comparacion` genera 72 filas de resultados, 24 grupos de medias y desviaciones y cinco figuras. Son archivos regenerables; las pruebas no los escriben. ΔSNR medio del nodo 3: P1 +51.32, P2 +25.66, P3 +5.94 y P4 +6.49 dB; P5 +10.33, +9.53, +9.21 y +10.80 dB (suave, medio, agresivo, referencia). Son resultados de la simulación, no mediciones de la placa.
+- Verificación local: 188 pruebas pasando con Python 3.11.9, NumPy 2.4.6, SciPy 1.16.3, pytest 9.1.1 y matplotlib 3.11.1. Repetir en el entorno objetivo de Python 3.14 y versiones fijadas por `requirements.txt` antes de entregar.
 
 ---
 
@@ -81,7 +86,7 @@ Valores clave que salieron de la simulación:
 
 | Qué | Estado |
 |---|---|
-| Paso 4 — nodo 3: método espectral causal por bloques (N = 1024, H = 512, raíz de Hann), métodos de picos y de resta con protección de tonos, métricas (MSE, SNR, ΔSNR, energía útil, atenuación) y comparación limpia / contaminada / filtradas, con media y desviación de las 3 semillas | Especificación revisada; aplicar los 2 cambios de `plan_avance_s12.md` (frente 1). Rama `simulacion-nodo3` |
+| Paso 4 — nodo 3: método espectral causal, métricas y comparación P1–P5 | Implementado y verificado localmente en `simulacion-nodo3`; falta revisión del equipo y fusión a `development` |
 | Paso 5 — DFT directa contra FFT (N = 1024) y tabla de costo computacional, memoria y latencia de cada método | Pendiente |
 | Paso 6 — un solo script que genera todas las figuras y tablas (incluye polos y ceros y la respuesta en frecuencia del nodo 2) | Pendiente |
 | PDF del avance: proceso de diseño, criterios y discusión | **Sin responsable** |
