@@ -1,35 +1,31 @@
-# tarea1_asm_2s_2026
-Tarea 1 Caracterización espectral y prototipado de filtros para reducción de ruido TEC 2S 2026
+# CE1110 Análisis de Señales Mixtas — sguzman_asm_2026_s2
 
-## Comparación e integración — integrante 4
+Repositorio del grupo para el Proyecto Grupal 1: un sistema distribuido de reducción de ruido en tiempo real con 3 ESP32 conectados por UART. El nodo 1 adquiere (o genera) la señal y la envía; el nodo 2 filtra en el tiempo y reproduce por DAC; el nodo 3 filtra por FFT/IFFT, calcula métricas y las muestra.
 
-La [sección 2.5](seccion_2_5/README.md) contiene la estructura para comparar
-los filtros y documentar la propuesta embebida. El evaluador común está
-implementado y probado, con tablas y figuras revisadas. El
-[análisis comparativo](seccion_2_5/docs/2_5_comparacion_propuesta.md) justifica
-la elección por caso y sus condiciones de fallo. El
-[diseño para ESP32](seccion_2_5/docs/2_5_diseno_esp32.md) propone muestreo,
-bloques, formato numérico, estimación causal y memoria. La
-[selección de bibliotecas](seccion_2_5/docs/2_5_bibliotecas_esp32.md) propone
-ESP-DSP y refina el presupuesto. La
-[arquitectura y comunicación](seccion_2_5/docs/2_5_arquitectura_comunicacion.md)
-define los tres nodos, protocolo y tasas. El [informe LaTeX](informe/informe.tex) integra las secciones 2.1–2.5,
-figuras, tablas y referencias; su [guía de compilación](informe/README.md)
-permite continuarlo en VS Code. La portada contiene los cuatro autores y carnés, sin campo de grupo.
-El [notebook integrado](entrega/tarea1/notebook.ipynb) y el
-[ZIP final](entrega/tarea1.zip) incluyen el trabajo consolidado.
-La ejecución desde cero, las pruebas y la integridad del paquete se verificaron.
-La versión de entrega se identifica con la etiqueta
-[`tarea1_prototipo`](https://github.com/SaddyGR3/sguzman_asm_2026_s2/tree/tarea1_prototipo)
-en la rama `integracion-tarea1`.
+## Carpetas de `proyecto1/`
 
-- [Revisión de los aportes existentes](revision/paso_1/README.md).
-- [Criterios comunes de comparación](revision/paso_2/criterios_comparacion.md).
-- [Análisis y evidencia del paso 6](revision/paso_6/README.md).
-- [Presupuesto y decisiones del paso 7](revision/paso_7/README.md).
-- [Bibliotecas y evidencia del paso 8](revision/paso_8/README.md).
-- [Arquitectura y cálculos del paso 9](revision/paso_9/README.md).
+| Carpeta | Contenido |
+|---|---|
+| [firmware/](proyecto1/firmware/) | Firmware de las ESP32. Hoy: [nodo1/](proyecto1/firmware/nodo1/), el emisor del nodo 1, terminado y verificado en placa. |
+| [herramientas_pc/](proyecto1/herramientas_pc/) | Receptor en la PC que valida lo que envía el emisor, con capturas reales de 60 s. |
+| [simulacion/](proyecto1/simulacion/) | Simulación en Python: protocolo, banco de señales, cadena analógica y nodo 2 hechos; nodo 3 en curso. |
+| [documentos/](proyecto1/documentos/) | Enunciados, contrato entre nodos, plan de frecuencias, guías y estado del proyecto. |
+| [tarea1/](proyecto1/tarea1/) | Entrega de la Tarea 1, ya cerrada. |
+| [avance_s12/](proyecto1/avance_s12/) | Entrega del avance de la semana 12. |
 
-- [Notebook y paquete portable — paso 11](revision/paso_11/README.md).
+## Empezar aquí
 
-- [Revisión final y cierre — paso 12](revision/paso_12/README.md).
+- [estado_proyecto.md](proyecto1/documentos/estado_proyecto.md): qué está hecho y qué falta.
+- [guia_git.md](proyecto1/documentos/guia_git.md): flujo de ramas. Leerla antes del primer commit.
+- [contrato_nodos.md](proyecto1/documentos/contrato_nodos.md): formato de los paquetes y reglas entre nodos.
+- [plan_frecuencias.md](proyecto1/documentos/plan_frecuencias.md): plan de frecuencias.
+- [guia_conexiones_hardware.md](proyecto1/documentos/guia_conexiones_hardware.md): conexiones de las placas.
+
+## Entregas
+
+- Avance de la semana 12: **30 oct, 11:59 pm**.
+- Proyecto completo: **6 nov, 11:50 pm**.
+
+## Tarea 1
+
+La entrega está en [proyecto1/tarea1/](proyecto1/tarea1/) y en el tag `tarea1_prototipo`.

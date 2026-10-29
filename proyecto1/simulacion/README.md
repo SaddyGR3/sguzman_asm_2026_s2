@@ -10,6 +10,44 @@ Simulación en Python del sistema de tres ESP32 conectados por UART (CE1110, An�
 
 Parámetros: fs = 8000 Hz, N = 1024, H = 512, float32 en transporte, señal normalizada en [−1, 1).
 
+## Instalación del entorno
+
+Requisito: Python 3.14.
+
+1. Crear el entorno virtual **fuera del repositorio**, para no subirlo:
+
+   ```
+   python3.14 -m venv ~/venvs/asm
+   source ~/venvs/asm/bin/activate
+   ```
+
+   En Windows: `py -3.14 -m venv %USERPROFILE%\venvs\asm` y `%USERPROFILE%\venvs\asm\Scripts\activate`.
+
+2. Instalar las dependencias, desde `proyecto1/simulacion/`:
+
+   ```
+   pip install -r requirements.txt
+   ```
+
+   Las versiones de numpy, scipy y pytest están fijadas en `requirements.txt`; no se cambian sin acordarlo con el grupo.
+
+3. Activar el entorno en cada terminal nueva.
+4. En VS Code, seleccionar el intérprete del entorno: `Python: Select Interpreter` → `~/venvs/asm/bin/python`.
+5. Verificación rápida: `python -m pytest pruebas` debe pasar todas las pruebas.
+
+## Orden de uso
+
+Desde esta carpeta, con el entorno activo:
+
+```
+python -m pytest pruebas     # comprueba que todo funciona
+python -m sim.senales        # genera las señales de P1–P5
+python -m sim.analogico      # genera los coeficientes del FIR de decimación
+python -m sim.nodo2          # muestra los filtros del nodo 2 para P1–P5
+```
+
+Cada comando se explica en su sección más abajo.
+
 ## Estructura
 
 ```

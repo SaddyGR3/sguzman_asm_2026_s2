@@ -12,3 +12,6 @@ __pycache__/
 
 # Archivos temporales de Jupyter
 .ipynb_checkpoints/
+
+# Configuración local del editor
+/.vscode/
