@@ -1,0 +1,114 @@
+# Estado del proyecto — Proyecto Grupal 1
+
+**CE1110 Análisis de Señales Mixtas — Sistema distribuido de reducción adaptativa de ruido en tiempo real**
+
+Resumen para el equipo: qué está hecho, cómo se usa y qué falta. Actualizado: 28 oct.
+
+Documentos de referencia en esta carpeta:
+
+| Documento | Para qué |
+|---|---|
+| `contrato_nodos.md` (v3.1) | Protocolo entre nodos: pines, paquetes, cabecera, DIAG, CONTROL, errores. Todo nodo o script lo respeta |
+| `plan_frecuencias.md` | fs, N, bandas, cadena analógica, pruebas P1–P6 y diseño de los filtros |
+| `guia_conexiones_hardware.md` | Cómo se conecta cada componente |
+| `guia_git.md` | Flujo de ramas, PR y commits |
+
+---
+
+## 1. Entregas
+
+| Entrega | Fecha | Contenido |
+|---|---|---|
+| Avance semana 12 | **vie 30 oct, 11:59 pm** | Parte 1: sistema completo en Python con el plan de frecuencias. Parte 2: emisor en el microcontrolador. PDF del avance + código + defensa de 10 min. (Los diagramas de validación del receptor pasaron al 6 nov) |
+| Proyecto 1 | **vie 6 nov, 11:50 pm** | Sistema funcionando en hardware, paper IEEE (4 págs.), documento de herramientas (2 págs.) y defensa de 15 min con sonido |
+
+---
+
+## 2. Lo que ya está hecho
+
+### Parte 2 del avance — emisor en el nodo 1 (terminada)
+
+Código en `proyecto1/firmware/nodo1/` (PlatformIO, `framework = espidf`, C++, ESP-DSP).
+
+- Genera cada 64 ms un bloque de 512 muestras a 8 kHz: tonos de 300, 700 y 1100 Hz (señal útil s) más interferencia en 2150 Hz (x = s + interferencia, SNR 0 dB).
+- FFT de arranque en la placa para verificar los picos.
+- Empaqueta según el contrato (cabecera de 32 B, datos float32, CRC-32, COBS, delimitador 0x00) y envía:
+  - UART1 (GPIO18) → nodo 2: INPUT + DIAG;
+  - UART2 (GPIO17) → nodo 3: INPUT_REF (x y s intercalados) + DIAG;
+  - 921 600 baudios, 8N1.
+- Al arrancar escribe un 0x00 en cada UART para que el receptor se resincronice si el emisor se reinicia a mitad de un paquete.
+- **Verificado en placa:** 0 overruns, periodo de 64 000 µs, prueba de lazo sin diferencias.
+
+**Validación con la PC** (`proyecto1/herramientas_pc/receptor_nodo1.py`): un receptor independiente lee cada enlace con el adaptador YP-05 y valida CRC, COBS, secuencia, banderas, DIAG y energía, y confirma los picos de la FFT y la SNR.
+
+- Resultado: `RESULTADO: OK` en los dos enlaces, 0 errores y 0 paquetes perdidos en 60 s; el reinicio con EN se recupera desde el primer paquete de la sesión nueva.
+- Capturas guardadas en `proyecto1/herramientas_pc/capturas/` (`captura_n2.bin`, `captura_n3.bin`); se reprocesan con `--archivo` sin la placa.
+- Uso y conexión: `guia_conexiones_hardware.md`, sección 6.
+
+### Parte 1 del avance — simulación en Python (3 de 6 pasos)
+
+Código en `proyecto1/simulacion/`. Todo valor de diseño sale de `config/*.json`; cada módulo tiene sus pruebas en `pruebas/`.
+
+| Paso | Archivos | Qué hace |
+|---|---|---|
+| 1. Protocolo y señales | `sim/protocolo.py`, `sim/senales.py`, `config/pruebas.json` | Paquetes del contrato (el mismo módulo lo usa el receptor de la PC). Banco de señales P1–P5 con 3 semillas cada una y WAV estéreo (izquierdo = x, derecho = s) |
+| 2. Cadena analógica | `sim/analogico.py`, `config/cadena_analogica.json`, `resultados/decimacion.json` | Acople de entrada, Sallen-Key (fc 3.41 kHz, Q 0.73), ADC de 12 bits a 24 kHz (0.15–2.45 V), FIR de decimación de 37 coeficientes y ÷3, DAC de 8 bits con retención. x y s pasan por la misma cadena. `decimacion.json` tiene los coeficientes para el firmware del nodo 1 |
+| 3. Nodo 2 | `sim/nodo2.py`, `config/nodo2.json` | FIR de la banda protegida (Kaiser, 37 coeficientes, fórmula explícita como en la placa, validado contra `firwin` y contra la Tarea 1) y notch IIR de 2.º orden. Polos, ceros, ROC y estabilidad. Filtrado por bloques con estado |
+
+Cómo correrlo (desde `proyecto1/simulacion/`, con el entorno virtual activo):
+
+```
+pip install -r requirements.txt
+python -m pytest pruebas        # 176 pruebas pasando
+python -m sim.analogico          # genera resultados/decimacion.json
+python -m sim.nodo2              # resumen de filtros de P1–P5
+```
+
+Valores clave que salieron de la simulación:
+
+- FIR de decimación: ondulación 0.036 dB hasta 3 kHz, rechazo 49.8 dB desde 5 kHz, retardo de 6 muestras a 8 kHz.
+- Caída de la salida a 3 kHz: unos −3.9 dB (filtro + retención del DAC). Imagen del DAC de 300 Hz: unos 42 dB abajo.
+- FIR de la banda protegida: rechazo ≥ 45 dB (pasa bajas), retardo fijo de 18 muestras.
+- Notch de P1: Q = 8.5 (≥ 30 dB aunque la detección del pico se equivoque 3.9 Hz; pierde 0.013 dB en 700 Hz).
+- Compromiso de P5: bajar la Q del notch de 10 a 1 lleva la pérdida en 700 Hz de −0.05 a −3.8 dB.
+
+---
+
+## 3. Lo que falta para el viernes 30
+
+| Qué | Estado |
+|---|---|
+| Paso 4 — nodo 3: método espectral causal por bloques (N = 1024, H = 512, raíz de Hann), métodos de picos y de resta con protección de tonos, métricas (MSE, SNR, ΔSNR, energía útil, atenuación) y comparación limpia / contaminada / filtradas, con media y desviación de las 3 semillas | Especificación lista, en revisión. Rama `simulacion-nodo3` |
+| Paso 5 — DFT directa contra FFT (N = 1024) y tabla de costo computacional, memoria y latencia de cada método | Pendiente |
+| Paso 6 — un solo script que genera todas las figuras y tablas (incluye polos y ceros y la respuesta en frecuencia del nodo 2) | Pendiente |
+| PDF del avance: proceso de diseño, criterios y discusión | **Sin responsable** |
+| Defensa de 10 min | **Sin responsable** |
+| Entrega: zip en TEC-Digital, PR `development` → `main` y tag `avance_s12` (ver `guia_git.md`) | Pendiente |
+
+Material para el PDF que ya existe: el plan de frecuencias (justificación de fs, N, bandas y filtros), los resultados de la cadena analógica y del nodo 2 de arriba, y la salida del receptor de la PC como evidencia del emisor.
+
+---
+
+## 4. Lo que falta para el 6 de noviembre (hardware)
+
+1. **Diagramas de validación del receptor:** flujo de recepción (delimitador, CRC, secuencia, desbordamiento) y validación del contenido, a partir de las capturas guardadas.
+2. **Circuitos analógicos** (`guia_conexiones_hardware.md`): entrada del nodo 1 (acople, divisor a 1.32 V, Sallen-Key, protección) y salidas de los nodos 2 y 3 (seguidor, Sallen-Key, acople, potenciómetro, PAM8403). Verificar con osciloscopio. Confirmar que las compras (LM358 DIP-8, jack PJ-307, cable auxiliar) estén hechas.
+3. **Firmware de los tres nodos:**
+   - nodo 1: ADC en modo continuo a 24 kHz con el FIR de `resultados/decimacion.json`, quitar DC, FFT, diagnóstico y clasificador de ruido, consola para cambiar parámetros;
+   - nodo 2: recepción, FIR calculado en la placa y notch (mismos valores que `sim/nodo2.py`), salida por DAC;
+   - nodo 3: recepción, FFT/IFFT con los métodos del paso 4, métricas en la LCD, LED de error, botones.
+4. **Integración y pruebas:** por pares (1–2, 1–3) y luego los tres; P1–P5 con 3 repeticiones; respuesta en frecuencia medida contra la calculada; latencia y memoria; ensayo de P6. Antes, escribir los criterios de aceptación.
+5. **Documentación:** paper IEEE (máx. 4 págs., abstract en inglés de 150–250 palabras), documento de herramientas (máx. 2 págs.), merge a `main`, tag `proyecto1`, ensayo de la defensa de 15 min.
+
+Pendientes de decisión: parámetros finales del audio sintético de P3, criterios de aceptación por prueba y comunicar al profesor los límites de P6 (`plan_frecuencias.md`, sección 6).
+
+---
+
+## 5. Reglas de trabajo
+
+- **Git:** cada tarea en una rama nueva desde `development` actualizado, PR a `development` con `--merge`. Commits pequeños y de todos los integrantes: el profesor revisa las estadísticas semanales.
+- **Carpetas:** la simulación solo en `proyecto1/simulacion/`; el firmware de cada nodo en `proyecto1/firmware/nodoX/`; las herramientas de PC en `proyecto1/herramientas_pc/`.
+- **Contrato y plan de frecuencias:** si algo debe cambiar, se cambia primero en el documento y se avisa al grupo.
+- **Todo resultado del firmware se compara contra la simulación** (mismos valores de `config/`).
+- **Código justificable:** en la defensa, el profesor puede borrar cualquier línea que no se sepa explicar. Nada de código sin uso.
+- **Entorno de Python:** Python 3.14, numpy 2.5.4, scipy 1.18.1, pytest 9.1.1, pyserial 3.5 (y matplotlib 3.11.2 desde el paso 4), en un entorno virtual fuera del repositorio. No subir `.vscode/` ni entornos virtuales.
