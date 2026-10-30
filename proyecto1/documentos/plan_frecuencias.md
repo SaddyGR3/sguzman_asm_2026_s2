@@ -6,6 +6,19 @@
 
 ---
 
+Actualizado el 29 oct 2026: la DFT de referencia calcula una frecuencia a la
+vez desde su definición, en `complex128`, sin guardar una matriz N×N. Reutiliza
+un vector de términos para exponentes, factores y productos. Sus arreglos son
+entrada, salida y términos complex128 (16 B por elemento), e índices float64
+(8 B por elemento). La memoria base es `56*N` bytes: con N = 1024 son
+**57 344 B (56 KiB)**. Los 12 KiB de la guía original omitían el espacio de
+trabajo y suponían otra precisión; no describen esta implementación.
+`memoria_valores` expresa unidades equivalentes de 4 bytes para comparar las
+filas, no que la DFT use float32. La estimación incluye los índices, pero excluye
+objetos Python, escalares y trabajo interno de NumPy; no es el pico de RAM.
+Las multiplicaciones son un modelo teórico y la latencia de referencia cero
+de la DFT no significa que su ejecución sea instantánea.
+
 ## 1. Parámetros base [Tarea 1]
 
 | Parámetro | Valor |

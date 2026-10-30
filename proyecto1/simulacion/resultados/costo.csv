@@ -1,0 +1,5 @@
+metodo,mult_por_segundo,memoria_valores,memoria_bytes,latencia_muestras,latencia_ms,nota
+FIR decimación nodo 1,296000.0,73,292,18.0,0.75,Mult/s=L*fs_salida; memoria=L+(L-1); retardo=(L-1)/2 a 24000 Hz; se calcula solo cada salida conservada.
+FIR banda protegida nodo 2,296000,73,292,18.0,2.25,Mult/s=L*fs_salida; memoria=L+(L-1); retardo=(L-1)/2 a 8000 Hz; se calcula solo cada salida conservada.
+Notch IIR,40000,7,28,0,0.0,"Mult/s=5*fs; memoria=5+2; alineación=0 muestras; introduce desfase y retardo de grupo dependiente de la frecuencia, no un retardo fijo."
+DFT directa,65536000.0,14336,57344,0,0.0,"Mult/s=4*N²*fs/H; memoria base=56*N bytes: entrada, salida y términos complex128 e índices float64; excluye objetos y trabajo interno de NumPy; no es pico de RAM; latencia=0 solo como referencia, no tiempo de ejecución."

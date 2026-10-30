@@ -1,0 +1,22 @@
+{
+  "P1": {
+    "N": 1024,
+    "error_max_rel": 2.5622205270321984e-13,
+    "tiempo_dft_s": 0.016128241999922466,
+    "tiempo_fft_s": 2.014499978031381e-05,
+    "aceleracion": 800.6077029439027,
+    "operaciones_dft": 1048576,
+    "operaciones_fft": 5120,
+    "cociente_operaciones": 204.8
+  },
+  "aleatoria": {
+    "N": 1024,
+    "error_max_rel": 3.0932533525483955e-13,
+    "tiempo_dft_s": 0.016867320999608637,
+    "tiempo_fft_s": 2.1267000192892738e-05,
+    "aceleracion": 793.1217777129452,
+    "operaciones_dft": 1048576,
+    "operaciones_fft": 5120,
+    "cociente_operaciones": 204.8
+  }
+}

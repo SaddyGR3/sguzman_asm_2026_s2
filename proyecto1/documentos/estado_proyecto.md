@@ -87,7 +87,7 @@ Valores clave que salieron de la simulación:
 | Qué | Estado |
 |---|---|
 | Paso 4 — nodo 3: método espectral causal, métricas y comparación P1–P5 | Implementado y verificado localmente en `simulacion-nodo3`; falta revisión del equipo y fusión a `development` |
-| Paso 5 — DFT directa contra FFT (N = 1024) y tabla de costo computacional, memoria y latencia de cada método | Pendiente |
+| Paso 5 — DFT directa contra FFT (N = 1024) y tabla de costo computacional, memoria y latencia de cada método | Implementado y verificado en `simulacion-dft`: 207 pruebas pasan y resultados generados; cambios locales revisados, pendientes de commit, push y PR |
 | Paso 6 — un solo script que genera todas las figuras y tablas (incluye polos y ceros y la respuesta en frecuencia del nodo 2) | Pendiente |
 | PDF del avance: proceso de diseño, criterios y discusión | **Sin responsable** |
 | Diagramas de validación del receptor: flujo de recepción, validación del contenido y montaje, a partir de las capturas guardadas | Pendiente |
@@ -96,6 +96,43 @@ Valores clave que salieron de la simulación:
 Material para el PDF que ya existe: el plan de frecuencias (justificación de fs, N, bandas y filtros), los resultados de la cadena analógica y del nodo 2 de arriba, y la salida del receptor de la PC como evidencia del emisor.
 
 ---
+
+### Verificación del paso 5 — 29 oct 2026
+
+Se agregaron `sim/dft.py`, `sim/costo.py`, sus pruebas y la sección **DFT y
+costo** del README de simulación. Verificación con Python 3.14.8, NumPy 2.5.4,
+SciPy 1.18.1, pytest 9.1.1 y matplotlib 3.11.2: **207 pruebas pasaron**,
+incluidas 19 nuevas. Se usó un entorno virtual temporal fuera del repositorio
+(`/tmp/asm-dft-validacion`), sin cambiar las dependencias declaradas.
+
+Desde `proyecto1/simulacion/`, con el entorno activo:
+
+```
+python -m pytest pruebas
+python -m sim.dft
+python -m sim.costo
+```
+
+Ambos módulos terminaron correctamente y generaron `resultados/dft_fft.json`
+y `resultados/costo.csv`. DFT contra FFT con N = 1024:
+
+| Señal | Error máximo relativo | DFT (ms) | FFT (ms) | Aceleración medida |
+|---|---:|---:|---:|---:|
+| P1 | 2.562e-13 | 16.0855 | 0.021558 | 746.15 |
+| Aleatoria | 3.093e-13 | 16.0307 | 0.019057 | 841.20 |
+
+Las mediciones son medianas de cinco ejecuciones en PC, no en el ESP32.
+Incluyen el bucle Python y las llamadas a NumPy: no aíslan únicamente la
+complejidad de los algoritmos.
+El cociente teórico de multiplicaciones complejas es 204.8 para ambas señales.
+Las cuatro filas de costo coinciden con 296 000, 296 000, 40 000 y
+65 536 000 multiplicaciones reales por segundo. Se corrigió la memoria de
+la DFT por frecuencia a **57 344 B (56 KiB)**: entrada, salida y términos
+`complex128`, e índices `float64`. El vector de términos se reutiliza; no se
+construye una matriz N×N. Se excluyen objetos Python y trabajo interno de
+NumPy; la justificación está en `plan_frecuencias.md`.
+La función `costo_espectral` queda disponible para el paso 6; su fila no está
+en el CSV inicial. No se cambió el contrato entre nodos ni las configuraciones.
 
 ## 4. Lo que falta para el 6 de noviembre (hardware)
 
