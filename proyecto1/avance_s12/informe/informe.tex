@@ -1,0 +1,272 @@
+\documentclass[10pt,a4paper,twocolumn]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-tabla]{babel}
+\usepackage[margin=1.8cm,columnsep=0.6cm]{geometry}
+\usepackage{amsmath,amssymb,booktabs,graphicx,float,caption,array,tabularx}
+\usepackage{microtype,xcolor}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue!45!black,urlcolor=blue!45!black,citecolor=blue!45!black}
+\graphicspath{{figuras/}}
+\captionsetup{font=small,labelfont=bf}
+\setlength{\parskip}{3pt}
+\newcommand{\ruta}[1]{\nolinkurl{#1}}
+% Figura definitiva de una columna: \figura{archivo}{pie}{etiqueta}; a dos columnas: \figuraancha
+\newcommand{\figura}[3]{\begin{figure}[!t]\centering\includegraphics[width=\columnwidth]{#1}\caption{#2}\label{#3}\end{figure}}
+\newcommand{\figuraancha}[3]{\begin{figure*}[!t]\centering\includegraphics[width=\textwidth]{#1}\caption{#2}\label{#3}\end{figure*}}
+% Espacio reservado mientras no exista la figura: \bloque{alto}{qué irá}{origen}{pie}{etiqueta}
+\newcommand{\bloque}[5]{\begin{figure}[!t]\centering\fcolorbox{black!40}{black!4}{\begin{minipage}[c][#1][c]{.92\columnwidth}\centering\footnotesize\textbf{Figura pendiente}\\[3pt]#2\\[3pt]\textit{Origen: #3}\end{minipage}}\caption{#4}\label{#5}\end{figure}}
+\newcommand{\bloqueancho}[5]{\begin{figure*}[!t]\centering\fcolorbox{black!40}{black!4}{\begin{minipage}[c][#1][c]{.95\textwidth}\centering\footnotesize\textbf{Figura pendiente}\\[3pt]#2\\[3pt]\textit{Origen: #3}\end{minipage}}\caption{#4}\label{#5}\end{figure*}}
+
+\begin{document}
+\twocolumn[{
+\begin{center}
+{\small Instituto Tecnológico de Costa Rica --- Escuela de Ingeniería en Computadores --- CE1110 Análisis de Señales Mixtas}\\[8pt]
+{\LARGE\bfseries Sistema distribuido de reducción adaptativa de ruido en tiempo real}\\[4pt]
+{\large Prototipo del sistema en alto nivel, emisor en el microcontrolador y estrategia de validación en el receptor}\\[10pt]
+Saddy Guzman Rojas (2023088184) \quad David García Cruz (2024115575)\\
+Válerin Calderón Bran (2020033313) \quad Luis Castro Montenegro (2013083843)\\[4pt]
+{\small Profesor: Luis Chavarría Zamora --- Segundo semestre de 2026 --- 30 de octubre de 2026}\\
+{\small Repositorio: \url{https://github.com/SaddyGR3/sguzman_asm_2026_s2}, carpeta \ruta{proyecto1/}}
+\end{center}
+\vspace{6pt}
+\noindent\textbf{Resumen.} Se presenta el diseño y la construcción de tres módulos del proyecto grupal\cite{proyecto}, según el taller \emph{FFT y sistemas de modulación}\cite{taller}: (1) el sistema completo simulado en Python con el plan de frecuencias, (2) el emisor en el microcontrolador y (3) la estrategia de validación en el receptor. La simulación incluye la cadena analógica, un filtro temporal (FIR e IIR) y uno espectral causal, sus métricas con tres semillas, la DFT contra la FFT y el costo de cada método. El emisor funciona en un ESP32 y un receptor independiente en la PC lo valida sin errores ni pérdidas.
+\vspace{10pt}
+}]
+
+% ======================================================================
+\section{Introducción}
+El sistema reduce ruido en tiempo real con tres ESP32 conectados por cable\cite{proyecto}. Este documento cubre lo que exige el taller\cite{taller}: el sistema en alto nivel con las frecuencias en que trabajará, el emisor implementado en el microcontrolador y los diagramas de la estrategia de validación en el receptor. El sistema completo en hardware corresponde a la entrega final. Como exige el enunciado del proyecto, las tablas y figuras de resultados las generan los programas de la simulación; el pie de cada tabla indica el comando que la produce.
+
+% ======================================================================
+\section{Arquitectura}\label{sec:arquitectura}
+\subsection{Sistema}
+El sistema final usa tres ESP32 (ESP32-WROOM-32D), uno por nodo (figura~\ref{fig:arquitectura}):
+\begin{itemize}
+\item \textbf{Nodo 1, adquisición y diagnóstico:} recibe el audio de la PC por una entrada analógica (acople, divisor y filtro anti-aliasing), lo muestrea con el ADC a 24 kHz y lo lleva a 8 kHz con un FIR de decimación; quita la continua, aplica ventana y FFT y diagnostica el ruido. Envía al nodo 2 los bloques de $x$ (INPUT) y al nodo 3 los de $x$ y $s$ (INPUT\_REF), cada uno seguido de un paquete de diagnóstico (DIAG).
+\item \textbf{Nodo 2, filtrado temporal:} aplica el FIR de la banda protegida o el notch IIR, según el tipo de ruido, y reproduce el resultado por su DAC, un filtro de reconstrucción y un amplificador PAM8403.
+\item \textbf{Nodo 3, filtrado espectral:} aplica FFT, una ganancia por bin e IFFT; calcula las métricas de las dos rutas y las muestra en una LCD, con un LED de error y botones para cambiar de método. También tiene su salida de audio, para comparar las dos rutas de oído.
+\end{itemize}
+Los enlaces usan la UART1 (TX en GPIO18, al nodo 2) y la UART2 (TX en GPIO17, al nodo 3) a 921\,600 baudios, con paquetes delimitados, CRC y número de secuencia; la UART0 queda para el USB y la consola. La banda protegida se configura en el nodo 1, que la reenvía a los otros nodos.
+
+\bloque{4.2cm}{Diagrama de bloques: PC (WAV) $\rightarrow$ entrada analógica $\rightarrow$ nodo 1 $\rightarrow$ UART1 $\rightarrow$ nodo 2 y UART2 $\rightarrow$ nodo 3 $\rightarrow$ reconstrucción $\rightarrow$ PAM8403 $\rightarrow$ parlante.}{diagrama a partir de \ruta{documentos/guia_conexiones_hardware.md}}{Arquitectura de los tres nodos y camino de la señal.}{fig:arquitectura}
+
+\subsection{Simulación}
+Cada módulo de Python modela una parte del sistema (tabla~\ref{tab:modulos}). Para cada prueba y semilla se generan $s$, el ruido $r$ y $x = s + r$; $x$ y $s$ pasan por la misma cadena de entrada ($x_8$, $s_8$); $x_8$ se filtra en el nodo 2 ($y_2$) y en el nodo 3 ($y_3$), y cada salida se compara con $s_8$. En esta entrega, el filtro del nodo 2 y el método del nodo 3 de cada prueba están fijados en la configuración según el ruido conocido de esa prueba (tabla~\ref{tab:pruebas}); en la placa los sugerirá el diagnóstico del nodo 1.
+\begin{table}[!t]\centering\caption{Módulos de la simulación (\ruta{proyecto1/simulacion/sim/}).}\label{tab:modulos}\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{>{\raggedright}p{0.36\columnwidth}p{0.56\columnwidth}}\toprule Módulo & Parte del sistema que modela\\\midrule
+\ruta{senales.py} & PC: señales P1--P5 y archivos WAV\\
+\ruta{analogico.py} & entrada y ADC del nodo 1; DAC y salida\\
+\ruta{protocolo.py} & paquetes de los enlaces\\
+\ruta{nodo2.py} & nodo 2: FIR y notch\\
+\ruta{nodo3.py}, \ruta{metricas.py} & nodo 3: método espectral y métricas\\
+\ruta{comparacion.py} & corrida de P1--P5 con 3 semillas\\
+\ruta{dft.py}, \ruta{costo.py} & DFT contra FFT; costo de cada método\\\bottomrule\end{tabular}\end{table}
+
+% ======================================================================
+\section{Plan de frecuencias}\label{sec:plan}
+Los parámetros base vienen de la Tarea 1\cite{tarea1} (tabla~\ref{tab:parametros}).
+\begin{table}[!t]\centering\caption{Parámetros base del sistema.}\label{tab:parametros}\small
+\begin{tabular}{ll}\toprule Parámetro & Valor\\\midrule
+$f_s$ & 8000 Hz\\
+$N$, avance $H$ & 1024 ($\Delta f = 7.8$ Hz), 512 (64 ms)\\
+Ventana & raíz de Hann periódica\\
+Formato & float32, normalizado en $[-1,1)$\\
+Banda del sistema & 100--3000 Hz\\
+Enlaces & 921\,600 baudios, 8N1\\\bottomrule\end{tabular}\end{table}
+
+\textbf{Bandas.} La banda del sistema (100--3000 Hz) deja 1 kHz de transición hasta Nyquist para un filtro analógico de 2.\textsuperscript{o} orden y excluye los 60 Hz de la red. La \emph{banda protegida} indica dónde está la señal útil en cada prueba; la configura el nodo 1 y la usan el FIR del nodo 2 y el método espectral del nodo 3.
+
+\textbf{Justificación conjunta.} $f_s = 8$ kHz cubre la banda y limita el volumen de datos; $N = 1024$ separa los tonos de las pruebas con una ventana de 128 ms; float32 evita reescalar entre etapas y es el formato de las rutinas de ESP-DSP\cite{espdsp}; y 921\,600 baudios alcanza para el enlace más cargado, el del nodo 3, que lleva $x$ y $s$ (tabla~\ref{tab:enlaces}).
+\begin{table}[!t]\centering\caption{Carga por bloque de 64 ms (tamaños máximos en el cable; 10 bits por byte).}\label{tab:enlaces}\small
+\begin{tabular}{lrrr}\toprule Enlace & Bytes & kbit/s & Uso\\\midrule
+Nodo 2 (INPUT, DIAG) & 2196 & 343 & 37\,\%\\
+Nodo 3 (INPUT\_REF, DIAG) & 4252 & 664 & 72\,\%\\\bottomrule\end{tabular}\end{table}
+
+\textbf{Pruebas.} Cada prueba se genera con 3 semillas y 10 s, con rampas de 20 ms (tabla~\ref{tab:pruebas}). La SNR se fija primero por potencia, $\text{SNR}=10\log_{10}\big(\sum s^2/\sum r^2\big)$, escalando el ruido; luego $s$ y $r$ se escalan con el mismo factor hasta que el pico de $x$ sea 0.8, el máximo que admite la entrada del ADC. Los WAV son estéreo: $x$ a la izquierda y $s$ a la derecha. P5 barre 4 niveles de agresividad para mostrar el compromiso entre quitar ruido y distorsionar la señal.
+\begin{table*}[!t]\centering\caption{Pruebas P1--P5 y método de cada ruta.}\label{tab:pruebas}\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lllrll}\toprule Prueba & Señal útil & Ruido & SNR & Nodo 2 & Nodo 3\\\midrule
+P1 & tono de 700 Hz & tono de 2150 Hz & 0 dB & notch & picos\\
+P2 & 300, 700 y 1100 Hz & gaussiano 2000--2800 Hz & 0 dB & FIR pasa bajas 1200 Hz & resta con protección\\
+P3 & melodía sintética & blanco 100--3000 Hz & 5 dB & FIR pasa bajas 3000 Hz & resta\\
+P4 & ráfagas de 700 Hz & impulsos (Poisson) & 15 dB & FIR pasa bajas 1200 Hz & resta\\
+P5 & 300, 700 y 1100 Hz & gaussiano 900--1300 Hz & 3 dB & notch 1100 Hz (barrido de $Q$) & resta (barrido de $\alpha$)\\\bottomrule\end{tabular}\end{table*}
+
+% ======================================================================
+\section{Cadena analógica}\label{sec:analogica}
+La simulación incluye el hardware de entrada y salida para trabajar con las atenuaciones y retardos reales.
+
+\textbf{Filtro analógico.} Un Sallen-Key de ganancia unitaria (LM358) sirve de anti-aliasing y de reconstrucción: $R_1 = R_2 = 6.8$ k$\Omega$, $C_1 = 10$ nF y $C_2 = 4.7$ nF, con
+\begin{gather}
+H(s)=\frac{\omega_0^2}{s^2+(\omega_0/Q)\,s+\omega_0^2},\\
+\omega_0=\frac{1}{\sqrt{R_1R_2C_1C_2}},\qquad Q=\frac{\sqrt{R_1R_2C_1C_2}}{C_2(R_1+R_2)},
+\end{gather}
+es decir $f_c = 3414$ Hz y $Q = 0.729$, aproximadamente Butterworth.
+
+\textbf{ADC.} Con atenuación de 12 dB el ADC del ESP32 mide de 150 a 2450 mV\cite{espidfadc}. Un acople de 10 $\mu$F y un divisor de 1.5 k$\Omega$ + 1 k$\Omega$ centran la entrada en 1.32 V, de modo que un pico de 0.8 queda entre 0.32 y 2.32 V ($x = (v-1.32)/1.25$). El modo continuo del ESP32 no baja de 20 kHz\cite{soccaps}, así que el nodo 1 muestrea a 24 kHz y baja a 8 kHz con un FIR de decimación de 37 coeficientes (Kaiser), calculado solo para 1 de cada 3 muestras; su retardo es de exactamente 6 muestras a 8 kHz. Sin este filtro, lo que hay entre 5 y 12 kHz se doblaría dentro de la banda útil: un tono de 7 kHz aparecería en 1 kHz.
+
+\textbf{DAC.} El DAC de 8 bits retiene cada valor un periodo, lo que atenúa la parte alta de la banda y deja imágenes alrededor de 8 kHz que el filtro de reconstrucción reduce. La tabla~\ref{tab:analogica} resume los resultados. Se supone una calibración ideal del ADC, que se verificará en la placa.
+\begin{table}[!t]\centering\caption{Cadena analógica simulada (\texttt{python -m sim.analogico}).}\label{tab:analogica}\small
+\begin{tabular}{lr}\toprule Magnitud & Valor\\\midrule
+Sallen-Key a 3 kHz & $-1.77$ dB\\
+Decimación: ondulación hasta 3 kHz & 0.036 dB\\
+Decimación: rechazo desde 5 kHz & 49.8 dB\\
+Alias de un tono de 7 kHz en la salida & $\approx -74$ dB\\
+Salida a 3 kHz (filtro y retención) & $-3.88$ dB\\
+Imagen del DAC de un tono de 300 Hz & $\approx -42$ dB\\\bottomrule\end{tabular}\end{table}
+
+\bloque{4.5cm}{Respuesta del Sallen-Key (10 Hz--24 kHz), del FIR de decimación (0--12 kHz) y de la salida: retención, Sallen-Key y su producto (0--4 kHz).}{\ruta{resultados/figuras/cadena_analogica.png}}{Respuesta en frecuencia de la cadena analógica.}{fig:analogica}
+
+% ======================================================================
+\section{Simulación del sistema}\label{sec:simulacion}
+El código está en \ruta{proyecto1/simulacion/} (tabla~\ref{tab:modulos}); los valores de diseño salen de \ruta{config/*.json} y 207 pruebas automáticas verifican cada módulo.
+
+\subsection{DFT directa contra FFT}
+La DFT se implementó desde su definición, $X[k]=\sum_{n=0}^{N-1}x[n]e^{-j2\pi kn/N}$\cite{proakis}, y se comparó con la FFT de NumPy para $N = 1024$ (tabla~\ref{tab:dft}). Coinciden hasta el redondeo; el cociente teórico de operaciones, $N^2/((N/2)\log_2N)$, es 204.8.
+\begin{table}[!t]\centering\caption{DFT contra FFT, $N = 1024$ (medianas de 5 ejecuciones en PC; \texttt{python -m sim.dft}).}\label{tab:dft}\small
+\begin{tabular}{lrrr}\toprule Señal & Error rel. & DFT (ms) & FFT (ms)\\\midrule
+Tramo de P1 & $2.6\times10^{-13}$ & 16.13 & 0.020\\
+Aleatoria & $3.1\times10^{-13}$ & 16.87 & 0.021\\\bottomrule\end{tabular}\end{table}
+\bloque{4cm}{$|X[k]|$ de la DFT directa y de la FFT superpuestas, y su diferencia en escala logarítmica.}{\ruta{resultados/figuras/dft_fft.png}}{DFT directa contra FFT para un tramo de P1.}{fig:dft}
+
+\subsection{Nodo 2: filtrado temporal}
+El nodo ejecuta $y[n]=\sum_{k=0}^{M}b_kx[n-k]-\sum_{k=1}^{N}a_ky[n-k]$ con dos candidatos.
+
+\textbf{FIR de la banda protegida.} Kaiser de 37 coeficientes siempre (retardo fijo con cualquier banda), 45 dB de diseño ($\beta \approx 3.975$) y transición de 600 Hz, con los cortes en cada borde de la banda $\pm$300 Hz. Es pasa bajas si el borde inferior es menor que 600 Hz (todas las pruebas) y pasa banda, como diferencia de dos pasa bajas, en otro caso. Como el nodo 2 recalculará los coeficientes en la placa cada vez que cambie la banda, se implementó con la fórmula explícita (sinc por ventana, con la función de Bessel $I_0$ por serie) y se validó contra \ruta{scipy.signal.firwin} con error $\le 10^{-6}$; con la banda 100--1200 Hz coincide exactamente con el FIR de la Tarea 1. Su función de transferencia,
+\begin{equation}
+H(z)=\sum_{k=0}^{36}h[k]z^{-k}=z^{-36}\sum_{k=0}^{36}h[k]z^{36-k},
+\end{equation}
+tiene 36 polos en $z = 0$: la región de convergencia causal es $|z| > 0$ y es siempre estable. Por su simetría tiene fase lineal y un retardo fijo de 18 muestras. Rechaza 46.1 dB (100--1200 Hz) y 45.3 dB (100--3000 Hz).
+
+\textbf{Notch IIR.} Con $\omega_0 = 2\pi f_0/f_s$ y $g = 1/(1+\tan(\omega_0/2Q))$,
+\begin{equation}
+H(z)=g\,\frac{1-2\cos\omega_0\,z^{-1}+z^{-2}}{1-2g\cos\omega_0\,z^{-1}+(2g-1)z^{-2}}.
+\end{equation}
+Sus ceros están sobre el círculo unitario en $e^{\pm j\omega_0}$ (ganancia nula en $f_0$) y sus polos tienen radio $r=\sqrt{2g-1}<1$: la ROC causal $|z|>r$ incluye el círculo unitario y el filtro es estable.
+
+\textbf{$Q$ de P1.} La frecuencia del notch la da la detección del nodo 1, con un error máximo de $\Delta f/2 = 3.9$ Hz. Se eligió la mayor $Q$ (redondeada a 0.5) que atenúa al menos 30 dB con ese error sin quitar más de 0.1 dB al tono de 700 Hz: $Q = 8.5$: $-30.2$ dB en el peor caso, $-38.2$ dB con el error real de P1 (1.56 Hz), 0.013 dB de pérdida en 700 Hz y polos con radio 0.905. La tabla~\ref{tab:notch} muestra el barrido de P5.
+\begin{table}[!t]\centering\caption{Notch en 1100 Hz del barrido de P5: radio de los polos y ganancia en los tonos útiles (\texttt{python -m sim.nodo2}).}\label{tab:notch}\small
+\begin{tabular}{rrrr}\toprule $Q$ & Radio & 300 Hz & 700 Hz\\\midrule
+10 & 0.958 & $-0.004$ dB & $-0.05$ dB\\
+2.75 & 0.852 & $-0.06$ dB & $-0.67$ dB\\
+1 & 0.607 & $-0.46$ dB & $-3.81$ dB\\\bottomrule\end{tabular}\end{table}
+\bloque{4.5cm}{Plano $z$: FIR 100--1200 Hz (36 polos en el origen, ROC $|z|>0$) y notch de P1 (ceros sobre el círculo, polos con radio 0.905, ROC $|z|>0.905$).}{\ruta{resultados/figuras/nodo2_polos_ceros.png}}{Polos, ceros y región de convergencia causal del nodo 2.}{fig:polos}
+\bloque{5cm}{Magnitud de los FIR (con la línea de $-45$ dB), magnitud de los notch (P1 y P5 con $Q$ = 10, 2.75 y 1) y fase del FIR (lineal) frente al notch.}{\ruta{resultados/figuras/nodo2_respuesta.png}}{Respuesta en frecuencia del nodo 2.}{fig:respuesta}
+
+\subsection{Nodo 3: filtrado espectral causal}
+Parte del método de la Tarea 1\cite{tarea1}, pero el estimador solo usa tramas actuales y pasadas, como en la placa. Tramas de 1024 con avance de 512 y raíz de Hann en análisis y síntesis (como $w[n]^2+w[n+H]^2=1$, con ganancia unitaria la salida reproduce la entrada); el piso de ruido es la mediana de las últimas 8 tramas, suavizada con una mediana de 31 bins. El método de \emph{picos} atenúa 60 dB los máximos que superan 6 veces el piso fuera de la banda protegida. La \emph{resta} aplica $G = \mathrm{clip}(1-\alpha\,\text{piso}/|X|, 0.05, 1)$\cite{boll}, y la \emph{protección de tonos} conserva los tonos estables de la banda protegida. La salida va 512 muestras (64 ms) atrasada.
+
+\subsection{Comparación de las rutas}
+Las métricas se calculan entre 1 y 9 s contra $s_8$, que pasó por la misma cadena que $x_8$, de modo que solo se compensa el retardo de cada ruta (18 muestras en el FIR, 0 en el notch y 512 en el nodo 3). Con $y$ la salida de una ruta, $y_s$ la misma ruta aplicada solo a $s_8$ y $r = x_8 - s_8$:
+\begin{gather}
+\text{MSE}=\tfrac{1}{K}\textstyle\sum(s_8-y)^2,\qquad \text{SNR}=10\log_{10}\frac{\sum s_8^2}{\sum(s_8-y)^2},\\
+E_{\text{útil}}=100\,\frac{\sum y_s^2}{\sum s_8^2}\ \%,\qquad A=10\log_{10}\frac{\sum r^2}{\sum (y-y_s)^2},
+\end{gather}
+donde $\Delta$SNR es la SNR de la salida menos la de $x_8$ y la atenuación $A$ se calcula en total y dentro de la banda de la interferencia (tablas~\ref{tab:metricas} y~\ref{tab:p5}).
+\begin{table*}[!t]\centering\caption{Resultados de P1--P4: media $\pm$ desviación de 3 semillas (\texttt{python -m sim.comparacion}). En P1 el notch está centrado exactamente en la interferencia y su atenuación en banda es numéricamente ilimitada.}\label{tab:metricas}\footnotesize
+\begin{tabular}{llrrrrr}\toprule
+Prueba & Ruta & SNR entrada & $\Delta$SNR & Energía útil & Aten. total & Aten. en banda\\
+ & & (dB) & (dB) & (\%) & (dB) & (dB)\\\midrule
+P1 & nodo 2 (notch) & 0.48 & $24.93\pm0.00$ & 99.7 & $65.9\pm1.0$ & $>200$\\
+   & nodo 3 (picos) &      & $51.32\pm0.04$ & 100.0 & $51.3\pm0.0$ & $59.3\pm0.0$\\
+P2 & nodo 2 (FIR) & 0.76 & $52.09\pm0.10$ & 99.6 & $57.8\pm0.0$ & $59.3\pm0.1$\\
+   & nodo 3 (resta con protección) & & $25.66\pm0.14$ & 99.9 & $25.7\pm0.1$ & $25.7\pm0.2$\\
+P3 & nodo 2 (FIR) & 5.29 & $0.01\pm0.00$ & 99.8 & $0.0\pm0.0$ & ---\\
+   & nodo 3 (resta) & & $5.94\pm0.09$ & 60.5 & $19.5\pm0.0$ & ---\\
+P4 & nodo 2 (FIR) & 15.39 & $3.04\pm0.04$ & 99.6 & $3.0\pm0.0$ & ---\\
+   & nodo 3 (resta) & & $6.49\pm0.25$ & 93.4 & $19.0\pm1.1$ & ---\\\bottomrule
+\end{tabular}\end{table*}
+\begin{table}[!t]\centering\caption{Compromiso en P5 (SNR de entrada 2.99 dB): media $\pm$ desviación de 3 semillas.}\label{tab:p5}\footnotesize\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{llrrr}\toprule Nivel & Ruta & $\Delta$SNR & E. útil & Aten. 900--1300\\
+ & & (dB) & (\%) & Hz (dB)\\\midrule
+Suave & $Q=10$ & $1.21\pm0.01$ & 93.2 & $2.1\pm0.0$\\
+      & $\alpha=2$ & $10.33\pm0.24$ & 93.2 & $18.5\pm0.5$\\
+Medio & $Q=2.75$ & $3.91\pm0.01$ & 89.5 & $7.2\pm0.1$\\
+      & $\alpha=3$ & $9.53\pm0.10$ & 92.5 & $25.0\pm0.6$\\
+Agresivo & $Q=1$ & $2.52\pm0.04$ & 73.6 & $15.0\pm0.1$\\
+         & $\alpha=8$ & $9.21\pm0.02$ & 90.8 & $26.0\pm0.0$\\
+Referencia & $Q=2.75$ & $3.91\pm0.01$ & 89.5 & $7.2\pm0.1$\\
+           & $\alpha=3$, prot. & $10.80\pm0.33$ & 97.0 & $15.1\pm1.9$\\\bottomrule\end{tabular}\end{table}
+\bloqueancho{5cm}{Por prueba: señales alineadas en 40 ms y espectros, con el nodo 2 y el nodo 3 en paneles separados frente a $s$ y $x$.}{\ruta{resultados/figuras/P1.png} a \ruta{P5.png} (se elige P1 y P5 para el documento)}{Señal limpia, contaminada y filtradas por las dos rutas.}{fig:comparacion}
+
+\subsection{Costo, memoria y latencia}
+La tabla~\ref{tab:costo} estima cada método en multiplicaciones reales por segundo, memoria y latencia algorítmica; son modelos para anticipar la carga en el ESP32, no mediciones. La FFT hace al método espectral unas 95 veces más barato que la DFT directa por trama.
+\begin{table}[!t]\centering\caption{Costo estimado (\texttt{python -m sim.costo}).}\label{tab:costo}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lrrr}\toprule Método & Mult./s & Memoria & Latencia\\\midrule
+FIR de decimación (nodo 1) & 296\,000 & 292 B & 0.75 ms\\
+FIR banda protegida (nodo 2) & 296\,000 & 292 B & 2.25 ms\\
+Notch IIR (nodo 2) & 40\,000 & 28 B & 0\\
+Espectral (nodo 3) & 688\,031 & 34\,860 B & 64 ms\\
+DFT directa por trama & 65\,536\,000 & 57\,344 B & ---\\\bottomrule\end{tabular}\end{table}
+
+% ======================================================================
+\section{Emisor en el microcontrolador}\label{sec:emisor}
+El emisor (\ruta{proyecto1/firmware/nodo1/}, ESP-IDF y ESP-DSP) genera cada 64 ms un bloque de 512 muestras a 8 kHz: $s$ con tonos de 300, 700 y 1100 Hz (amplitudes relativas 1, 0.55 y 0.30) y $x = s +$ una interferencia en 2150 Hz de amplitud 1.18, que da una SNR de 0 dB; todo con una escala común de 0.26. Los tonos se sintetizan con un acumulador de fase de 32 bits y una tabla de seno, elegida frente a \ruta{sinf()} por ser 7 veces más rápida (tabla~\ref{tab:generador}); su espuria de $-59$ dB queda bajo el ruido de cuantización del DAC de 8 bits ($\approx -48$ dB). Una FFT de arranque verifica los picos en la placa.
+\begin{table}[!t]\centering\caption{Generador medido en la placa.}\label{tab:generador}\small
+\begin{tabular}{lrrr}\toprule Método & Tiempo & Carga & Espuria\\\midrule
+Tabla & 501 $\mu$s & 0.8\,\% & $-59.4$ dB\\
+\ruta{sinf()} & 3551 $\mu$s & 5.6\,\% & $-77.7$ dB\\\bottomrule\end{tabular}\end{table}
+
+\textbf{Paquetes.} Cabecera de 32 B (identificador, tipo, origen, destino, banderas, sesión, secuencia, primera muestra y tamaños), datos en float32 y CRC-32\cite{zlib}, codificados con COBS\cite{cobs} y cerrados con un 0x00 que delimita los bloques. Al nodo 2 se envían INPUT y DIAG; al nodo 3, INPUT\_REF ($x$ y $s$ intercalados) y DIAG. La secuencia aumenta en 1 por paquete y una bandera marca el primer paquete de cada sesión. Al arrancar, el emisor escribe un 0x00 en cada UART para que un paquete cortado por un reinicio no se una al primero de la sesión nueva.
+
+\textbf{Verificación.} Prueba de lazo sin diferencias, 0 desbordes con periodo de 64\,000 $\mu$s, 536--564 $\mu$s de cómputo por bloque (menos del 1\,\%) y 922\,190 baudios medidos.
+
+% ======================================================================
+\section{Estrategia de validación en el receptor}\label{sec:validacion}
+La PC actúa como receptor mediante un adaptador USB-serie (YP-05, 3.3 V) y \ruta{receptor_nodo1.py}, que aplica la misma validación que harán los nodos 2 y 3 y reutiliza el módulo de protocolo de la simulación (figuras~\ref{fig:flujo}--\ref{fig:montaje}).
+\begin{itemize}
+\item \textbf{Flujo:} corte en cada 0x00, COBS, CRC, cabecera, sesión, secuencia, orden de datos y DIAG, y energía del bloque. Los errores durante un reinicio se cuentan aparte.
+\item \textbf{Contenido:} FFT del tramo continuo más largo; se exigen los picos en 300, 700, 1100 y 2150 Hz ($\pm$1 Hz) con los niveles del diseño ($\pm$0.5 dB) y, en el enlace del nodo 3, una SNR de 0 $\pm$ 0.2 dB.
+\end{itemize}
+\bloque{5.5cm}{Flujo de recepción: bytes $\rightarrow$ corte en 0x00 $\rightarrow$ COBS $\rightarrow$ CRC-32 $\rightarrow$ cabecera $\rightarrow$ sesión $\rightarrow$ secuencia $\rightarrow$ datos/DIAG $\rightarrow$ energía $\rightarrow$ contadores y veredicto.}{diagramas del receptor (en preparación)}{Flujo de recepción y validación de cada paquete.}{fig:flujo}
+\bloque{3.5cm}{Validación del contenido: tramo continuo $\rightarrow$ ventana de Hann $\rightarrow$ FFT $\rightarrow$ 4 picos $\rightarrow$ comparación con el diseño $\rightarrow$ SNR.}{diagramas del receptor (en preparación)}{Validación del contenido espectral.}{fig:contenido}
+\bloque{3.5cm}{ESP32 por USB a la PC (consola); TX de GPIO18 o GPIO17 al RX del YP-05 (3.3 V, GND común) y YP-05 por USB a la PC (receptor).}{diagramas del receptor (en preparación)}{Montaje de prueba con la PC como receptor.}{fig:montaje}
+
+Cada enlace se capturó 60 s; en el del nodo 3 se reinició el emisor a los 30 s. Las capturas, guardadas en el repositorio, dan el mismo resultado al reprocesarlas (tabla~\ref{tab:receptor}). Tras el reinicio la sesión nueva llegó completa desde su primer paquete, con la bandera de reinicio y la primera muestra en 0, y el único error fue el paquete que el reinicio dejó cortado.
+\begin{table}[!t]\centering\caption{Validación del emisor (60 s por enlace).}\label{tab:receptor}\small
+\begin{tabular}{lrr}\toprule & Nodo 3 & Nodo 2\\\midrule
+Paquetes válidos & 1855 & 1875\\
+Errores y paquetes perdidos & 0 & 0\\
+Reinicio con EN & a los 30 s & no\\
+Picos y niveles & exactos & exactos\\
+SNR medida & $+0.000$ dB & ---\\
+Resultado & OK & OK\\\bottomrule\end{tabular}\end{table}
+
+% ======================================================================
+\section{Discusión}
+Con ruido fuera de la banda útil (P1, P2) las dos rutas mejoran mucho. En P2 el FIR supera al método espectral porque su rechazo es fijo y no depende de estimar el piso. En P1 el notch se limita a unos $+25$ dB: anula la interferencia pero desfasa unos 2.5$^\circ$ el tono de 700 Hz, diferencia propia de un IIR frente a un filtro de fase lineal.
+
+En P3 el ruido ocupa la banda de la señal y el FIR no mejora nada; la resta sí ($+5.9$ dB), a costa de conservar el 61\,\% de la energía útil. En P5, bajar $Q$ o subir $\alpha$ aumenta la atenuación del ruido pero distorsiona la señal; la protección de tonos da el mejor equilibrio ($+10.8$ dB y 97\,\% de energía útil).
+
+El nodo 2 es barato y casi sin latencia; el nodo 3 necesita unas 2.3 veces las multiplicaciones del FIR y retarda 64 ms, pero es el único que maneja ruido superpuesto con la señal. Las dos cargas son pequeñas para un ESP32 y se medirán en la placa.
+
+Los resultados son de simulación: la calibración del ADC se supone ideal, en P1 la frecuencia del notch se toma conocida (su error de detección ya se consideró al elegir $Q$) y las métricas usan la referencia limpia, que en la prueba final con señal desconocida puede no estar disponible.
+
+% ======================================================================
+\section{Conclusiones}
+\begin{itemize}
+\item La simulación reproduce el sistema completo con su plan de frecuencias y todas sus tablas se regeneran desde el repositorio.
+\item El emisor funciona en la placa y transmite por los dos enlaces sin errores ni pérdidas, incluso tras un reinicio.
+\item La estrategia de validación del receptor está implementada y probada, y es la que usarán los nodos 2 y 3.
+\end{itemize}
+Queda para la entrega final: circuitos analógicos, adquisición por ADC, nodos 2 y 3 en la placa, integración y pruebas P1--P6.
+
+\section*{Reproducción}
+Desde \ruta{proyecto1/simulacion/}: \texttt{python -m pytest pruebas} y \texttt{python -m sim.informe}. Emisor: \texttt{receptor\_nodo1.py --archivo} sobre \ruta{herramientas_pc/capturas/}.
+
+\section*{Uso de herramientas de IA}
+[Completar por el equipo.]
+
+\begin{thebibliography}{99}\small
+\bibitem{taller} L. Chavarría Zamora. \emph{FFT y sistemas de modulación}. Taller, CE1110, TEC, segundo semestre de 2026.
+\bibitem{proyecto} L. Chavarría Zamora. \emph{Diseño de un sistema distribuido de reducción adaptativa de ruido en tiempo real}. Enunciado del proyecto grupal 1, versión 7, CE1110, TEC, 2026.
+\bibitem{tarea1} S. Guzman Rojas, D. García Cruz, V. Calderón Bran y L. Castro Montenegro. \emph{Caracterización espectral y prototipado de filtros para reducción de ruido}. Tarea 1, CE1110, TEC, 2026.
+\bibitem{proakis} J. G. Proakis y D. G. Manolakis. \emph{Digital Signal Processing}, 4.\textsuperscript{a} ed. Pearson, 2007.
+\bibitem{boll} S. F. Boll. ``Suppression of acoustic noise in speech using spectral subtraction''. \emph{IEEE Trans. Acoust., Speech, Signal Process.}, 27(2):113--120, 1979.
+\bibitem{cobs} S. Cheshire y M. Baker. ``Consistent overhead byte stuffing''. \emph{IEEE/ACM Trans. Netw.}, 7(2):159--172, 1999.
+\bibitem{espdsp} Espressif Systems. \emph{ESP-DSP}. \url{https://github.com/espressif/esp-dsp}.
+\bibitem{espidfadc} Espressif Systems. \emph{ESP-IDF: Analog to Digital Converter (ADC)}, ESP32, v4.4. \url{https://docs.espressif.com/projects/esp-idf/en/v4.4.8/esp32/api-reference/peripherals/adc.html}.
+\bibitem{soccaps} Espressif Systems. \emph{ESP-IDF}, \ruta{components/soc/esp32/include/soc/soc_caps.h}: \ruta{SOC_ADC_SAMPLE_FREQ_THRES_LOW}. \url{https://github.com/espressif/esp-idf}.
+\bibitem{zlib} J. L. Gailly y M. Adler. \emph{zlib manual}, función \ruta{crc32}. \url{https://zlib.net/manual.html}.
+\end{thebibliography}
+\end{document}
