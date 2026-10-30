@@ -87,8 +87,8 @@ Valores clave que salieron de la simulación:
 | Qué | Estado |
 |---|---|
 | Paso 4 — nodo 3: método espectral causal, métricas y comparación P1–P5 | Implementado y verificado localmente en `simulacion-nodo3`; falta revisión del equipo y fusión a `development` |
-| Paso 5 — DFT directa contra FFT (N = 1024) y tabla de costo computacional, memoria y latencia de cada método | Implementado y verificado en `simulacion-dft`: 207 pruebas pasan y resultados generados; cambios locales revisados, pendientes de commit, push y PR |
-| Paso 6 — un solo script que genera todas las figuras y tablas (incluye polos y ceros y la respuesta en frecuencia del nodo 2) | Pendiente |
+| Paso 5 — DFT directa contra FFT (N = 1024) y tabla de costo computacional, memoria y latencia de cada método | Integrado en `development` mediante el PR #12; verificación original con 207 pruebas y resultados generados |
+| Paso 6 — un solo script que genera todas las figuras y tablas (incluye polos y ceros y la respuesta en frecuencia del nodo 2) | Implementado y verificado en `simulacion-figuras`: 213 pruebas pasan; cuatro archivos de datos y nueve figuras generados; pendiente de commit, push y PR |
 | PDF del avance: proceso de diseño, criterios y discusión | **Sin responsable** |
 | Diagramas de validación del receptor: flujo de recepción, validación del contenido y montaje, a partir de las capturas guardadas | Pendiente |
 | Entrega: zip en TEC-Digital, PR `development` → `main` y tag `avance_s12` (ver `guia_git.md`) | Pendiente |
@@ -133,6 +133,28 @@ construye una matriz N×N. Se excluyen objetos Python y trabajo interno de
 NumPy; la justificación está en `plan_frecuencias.md`.
 La función `costo_espectral` queda disponible para el paso 6; su fila no está
 en el CSV inicial. No se cambió el contrato entre nodos ni las configuraciones.
+
+### Verificación del paso 6 — 29 oct 2026
+
+`python -m sim.informe`, desde `proyecto1/simulacion/`, regenera las tablas y
+figuras con una sola carga de configuración. Reutiliza `generar_comparacion`,
+`generar_dft` y `generar_costo`; los comandos individuales siguen disponibles.
+`costo.csv` ahora incluye el nodo 3: 688 031.25 multiplicaciones reales/s,
+34 860 B de memoria estimada y 64 ms de latencia algorítmica. La DFT conserva
+su cálculo por frecuencia y sus 56 KiB de arreglos principales.
+
+Se generan cuatro figuras de diseño (polos/ceros/ROC, respuesta del nodo 2,
+cadena analógica y DFT/FFT), además de P1–P5 con tiempo y espectros de los
+nodos 2 y 3 separados. Las tablas contienen 72 filas de métricas y 24 grupos
+de resumen. Se verificaron 213 pruebas con Python 3.14.8 y las versiones de
+`requirements.txt`; se ejecutó el comando completo y se revisaron las figuras.
+La línea de referencia de decimación identifica el parámetro Kaiser de 50 dB
+de la configuración, no un nuevo criterio de aceptación. Las configuraciones
+y los algoritmos de filtrado permanecen iguales.
+
+Falta integrar el paso 6 en `development` y luego incorporar sus figuras y
+los diagramas del receptor al borrador de `docs-informe`. Las imágenes y los
+CSV de comparación se regeneran localmente; su exclusión de Git se conserva.
 
 ## 4. Lo que falta para el 6 de noviembre (hardware)
 

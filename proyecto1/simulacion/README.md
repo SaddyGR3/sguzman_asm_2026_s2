@@ -71,7 +71,12 @@ resultados/figuras/P1.png–P5.png   comparación temporal y espectral, generada
 sim/dft.py             DFT por frecuencia desde su definición y comparación con FFT
 sim/costo.py           estimación de multiplicaciones, memoria y latencia por método
 resultados/dft_fft.json  errores, tiempos y operaciones, generados por sim.dft
-resultados/costo.csv     cuatro filas de costo, memoria y latencia, generadas por sim.costo
+resultados/costo.csv     cinco filas de costo, memoria y latencia, generadas por sim.costo
+sim/informe.py           punto de entrada para regenerar las tablas y figuras del informe
+resultados/figuras/nodo2_polos_ceros.png  plano z, ROC causal y estabilidad del FIR y notch
+resultados/figuras/nodo2_respuesta.png   magnitud y fase de los filtros del nodo 2
+resultados/figuras/cadena_analogica.png  entrada, decimación y reconstrucción analógica
+resultados/figuras/dft_fft.png           espectros DFT/FFT y diferencia numérica
 ```
 
 ## Generar las señales
@@ -211,7 +216,7 @@ coeficientes, B = N/2+1 y T el historial de tramas):
 | DFT por frecuencia | `4*N²*fs/H` | `56*N` | 0 como referencia de costo |
 | Espectral | `(4*N*log2(N)+2*N+2*B)*fs/H` | `4*(3*N+(3+T)*B)` | H muestras |
 
-Con la configuración actual, las cuatro filas exportadas son:
+Con la configuración actual, las cinco filas exportadas son:
 
 | Método | Mult. reales/s | Memoria base (B) | Latencia (ms) |
 |---|---:|---:|---:|
@@ -219,6 +224,7 @@ Con la configuración actual, las cuatro filas exportadas son:
 | FIR banda protegida nodo 2 | 296 000 | 292 | 2.25 |
 | Notch nodo 2 | 40 000 | 28 | 0 |
 | DFT por frecuencia | 65 536 000 | 57 344 | 0 (referencia) |
+| Espectral nodo 3 | 688 031.25 | 34 860 | 64 |
 
 La memoria de la DFT incluye tres arreglos `complex128` de N elementos
 (entrada, salida y términos: 16 KiB cada uno) y los índices `float64` (8 KiB):
@@ -237,10 +243,10 @@ Python. Las latencias excluyen tiempo de cómputo, UART y reproducción: cero
 en la DFT no significa ejecución instantánea, y el notch puede tener retardo
 de grupo aunque se use cero para alinear las métricas.
 
-`costo_espectral(N, H, fs, historial_tramas)` está disponible para el script
-de figuras del paso 6, que debe leer el historial de `config/nodo3.json`.
-Con historial 8 estima 688 031.25 mult./s, 34 860 B y 64 ms. Esta fila no
-forma parte del CSV inicial de cuatro métodos.
+`tabla_costo` conserva las cuatro filas independientes del nodo 3.
+`generar_costo` agrega una quinta mediante `costo_espectral`, con el historial
+de `config/nodo3.json`, y la exporta junto a las demás. Con historial 8 estima
+688 031.25 mult./s, 34 860 B y 64 ms. Los decimales se conservan en la consola.
 
 Desde `proyecto1/simulacion/`, con el entorno activo:
 
@@ -264,3 +270,52 @@ En esta ejecución, el error relativo fue 2.562e-13 para P1 y 3.093e-13 para
 la señal aleatoria. Las medianas DFT/FFT fueron 16.0855/0.021558 ms y
 16.0307/0.019057 ms, respectivamente: aceleraciones medidas de 746.15 y 841.20.
 Estos tiempos corresponden a la PC usada para la verificación; no al ESP32.
+
+## Figuras y tablas del informe
+
+Desde esta carpeta, con el entorno activo:
+
+```
+python -m sim.informe
+```
+
+Es el comando para regenerar el material antes de armar el PDF. Carga las
+configuraciones una sola vez y reutiliza los cálculos existentes. Produce:
+
+- `resultados/comparacion.csv`: métricas de entrada y ambas rutas para P1–P5.
+- `resultados/comparacion_resumen.csv`: medias y desviaciones por condición.
+- `resultados/dft_fft.json`: precisión, tiempos y operaciones de ambas transformadas.
+- `resultados/costo.csv`: los cinco métodos, incluido el nodo 3.
+- `resultados/figuras/P1.png` a `P5.png`: tiempo y espectros separados por nodo.
+- `resultados/figuras/nodo2_polos_ceros.png`: ceros, polos, ROC causal y estabilidad.
+- `resultados/figuras/nodo2_respuesta.png`: magnitud de los FIR y notch, y fase.
+- `resultados/figuras/cadena_analogica.png`: Sallen-Key, decimación y salida con retención.
+- `resultados/figuras/dft_fft.png`: espectros superpuestos y diferencia absoluta.
+
+Las cuatro figuras nuevas se guardan a 150 dpi. En la figura de decimación,
+la línea horizontal identifica el parámetro Kaiser de 50 dB que figura en
+`config/cadena_analogica.json`, no una garantía de rechazo mínimo ni un nuevo
+criterio de aceptación. Se usa este parámetro en lugar de la referencia fija
+de −45 dB propuesta en la guía del paso 6.
+
+Los comandos `python -m sim.comparacion`, `python -m sim.dft` y
+`python -m sim.costo` siguen funcionando por separado. Para generar todo en
+otra carpeta desde Python, se puede llamar a `sim.informe.generar_todo(salida)`.
+
+Las figuras P1–P5 tienen tres paneles: 40 ms de señales alineadas desde los
+5 s, espectro del nodo 2 frente a limpia/contaminada y espectro del nodo 3
+frente a esas mismas referencias. Cada señal conserva su color en todos los
+paneles y la contaminada se dibuja con transparencia. El espectro conserva
+la ventana de Hann periódica y el tramo de evaluación configurado. No se
+normaliza cada curva por separado: las magnitudes permiten comparar niveles.
+Los límites superiores se comparten entre los dos paneles espectrales para
+facilitar la comparación; el límite inferior es −100 dB.
+
+Verificación final del paso 6, 29 oct 2026: **213 pruebas pasaron** con las
+dependencias fijadas y Python 3.14.8. `python -m sim.informe` terminó sin
+errores y generó en `resultados/` cuatro archivos de datos y nueve figuras,
+revisadas visualmente. Las tablas contienen 72 filas de métricas, 24 grupos
+de resumen y cinco métodos de costo. Las pruebas también verifican los tres
+paneles, sus leyendas, colores y la alineación temporal de la salida del nodo 3.
+Las figuras y CSV de comparación son regenerables y permanecen ignorados por
+Git, según las reglas existentes; el script los crea antes de armar el PDF.
