@@ -10,7 +10,7 @@ from pathlib import Path
 from shutil import get_terminal_size
 from textwrap import fill
 
-from sim import analogico, nodo2, senales
+from sim import analogico, nodo2, nodo3, senales
 
 
 def _fila(metodo, multiplicaciones, memoria, latencia, fs, nota):
@@ -99,27 +99,32 @@ def tabla_costo(cfg_pruebas, cfg_n2, cfg_analogica):
             costo_dft_trama(glob["N"], fs, glob["H"])]
 
 
-if __name__ == "__main__":
-    filas = tabla_costo(senales.cargar_config(), nodo2.cargar_config_nodo2(),
-                        analogico.cargar_config_analogica())
-    destino = Path(__file__).resolve().parents[1] / "resultados" / "costo.csv"
+def generar_costo(cfg_pruebas, cfg_n2, cfg_analogica, cfg_n3, salida):
+    """Exporta e imprime los cinco métodos, incluido el nodo 3."""
+    filas = tabla_costo(cfg_pruebas, cfg_n2, cfg_analogica)
+    glob = cfg_pruebas["global"]
+    espectral = costo_espectral(glob["N"], glob["H"], glob["fs_Hz"],
+                                cfg_n3["historial_tramas"])
+    espectral["metodo"] = "Espectral nodo 3"
+    filas.append(espectral)
+    destino = Path(salida) / "costo.csv"
     destino.parent.mkdir(parents=True, exist_ok=True)
     with destino.open("w", encoding="utf-8", newline="") as archivo:
-        escritor = csv.DictWriter(archivo, fieldnames=list(filas[0]))
+        escritor = csv.DictWriter(archivo, fieldnames=list(filas[0]), lineterminator="\n")
         escritor.writeheader()
         escritor.writerows(filas)
 
     print("\nCosto estimado por método\n")
     ancho_metodo = max(len("Método"), *(len(fila["metodo"]) for fila in filas))
-    encabezado = (f"{'Método':<{ancho_metodo}} | {'Mult./s':>12} | {'Equiv. f32':>10} | "
+    encabezado = (f"{'Método':<{ancho_metodo}} | {'Mult./s':>15} | {'Equiv. f32':>10} | "
                   f"{'Bytes':>8} | {'Retardo (m)':>11} | {'Retardo (ms)':>12}")
     print(encabezado)
     print("-" * len(encabezado))
     for fila in filas:
-        multiplicaciones = f"{fila['mult_por_segundo']:,.0f}".replace(",", " ")
+        multiplicaciones = f"{fila['mult_por_segundo']:,.2f}".replace(",", " ")
         valores = f"{fila['memoria_valores']:,}".replace(",", " ")
         memoria = f"{fila['memoria_bytes']:,}".replace(",", " ")
-        print(f"{fila['metodo']:<{ancho_metodo}} | {multiplicaciones:>12} | {valores:>10} | "
+        print(f"{fila['metodo']:<{ancho_metodo}} | {multiplicaciones:>15} | {valores:>10} | "
               f"{memoria:>8} | {fila['latencia_muestras']:>11g} | "
               f"{fila['latencia_ms']:>12.3f}")
     print("\nm = muestras; equiv. f32 = unidades de memoria de 4 bytes.")
@@ -128,3 +133,10 @@ if __name__ == "__main__":
     for fila in filas:
         print(f"\n{fila['metodo']}:")
         print(fill(fila["nota"], width=ancho, initial_indent="  ", subsequent_indent="  "))
+    return filas
+
+
+if __name__ == "__main__":
+    generar_costo(senales.cargar_config(), nodo2.cargar_config_nodo2(),
+                  analogico.cargar_config_analogica(), nodo3.cargar_config_nodo3(),
+                  Path(__file__).resolve().parents[1] / "resultados")

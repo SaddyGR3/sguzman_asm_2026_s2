@@ -58,9 +58,11 @@ def test_comando_costo_exporta_e_imprime(tmp_path, capsys):
     runpy.run_path(str(copia), run_name="__main__")
     with (tmp_path / "resultados" / "costo.csv").open(encoding="utf-8", newline="") as archivo:
         filas = list(csv.DictReader(archivo))
-    assert len(filas) == 4
-    assert float(filas[-1]["mult_por_segundo"]) == 65536000
-    assert int(filas[-1]["memoria_bytes"]) == 57344
+    assert len(filas) == 5
+    assert float(filas[3]["mult_por_segundo"]) == 65536000
+    assert int(filas[3]["memoria_bytes"]) == 57344
+    assert filas[-1]["metodo"] == "Espectral nodo 3"
+    assert float(filas[-1]["mult_por_segundo"]) == 688031.25
     salida = capsys.readouterr().out
     assert "Retardo (ms)" in salida
     assert all(fila["metodo"] in salida for fila in filas)

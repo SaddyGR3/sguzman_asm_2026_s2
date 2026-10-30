@@ -72,8 +72,8 @@ def comparar_dft_fft(x, repeticiones):
     }
 
 
-if __name__ == "__main__":
-    config = senales.cargar_config()
+def senal_p1(config):
+    """Selecciona N muestras de P1 desde el segundo 1, con su primera semilla."""
     N = config["global"]["N"]
     inicio = config["global"]["fs_Hz"]  # Un segundo, fuera de la rampa inicial.
     semilla = config["pruebas"]["P1"]["semillas"][0]
@@ -81,12 +81,18 @@ if __name__ == "__main__":
     senal_p1 = caso["x"][inicio:inicio + N]
     if senal_p1.size != N:
         raise ValueError("P1 no tiene N muestras disponibles después del primer segundo.")
+    return senal_p1
+
+
+def generar_dft(config, salida):
+    """Compara ambas señales, guarda el JSON e imprime los resultados."""
+    N = config["global"]["N"]
     # Cinco mediciones y semilla cero: condiciones del experimento comparativo.
     resultados = {
-        "P1": comparar_dft_fft(senal_p1, 5),
+        "P1": comparar_dft_fft(senal_p1(config), 5),
         "aleatoria": comparar_dft_fft(np.random.default_rng(0).standard_normal(N), 5),
     }
-    destino = Path(__file__).resolve().parents[1] / "resultados" / "dft_fft.json"
+    destino = Path(salida) / "dft_fft.json"
     destino.parent.mkdir(parents=True, exist_ok=True)
     with destino.open("w", encoding="utf-8") as archivo:
         json.dump(resultados, archivo, indent=2, ensure_ascii=False, allow_nan=False)
@@ -103,3 +109,8 @@ if __name__ == "__main__":
               f"{1000 * fila['tiempo_fft_s']:>10.4f} | "
               f"{fila['aceleracion']:>11.2f}x | {fila['cociente_operaciones']:>11.2f}")
     print("\nAceleración: razón de tiempos medidos; op. DFT/FFT: razón teórica de operaciones.")
+    return resultados
+
+
+if __name__ == "__main__":
+    generar_dft(senales.cargar_config(), Path(__file__).resolve().parents[1] / "resultados")

@@ -135,14 +135,14 @@ def resumir(filas):
 
 
 def figura_prueba(caso, prueba, destino, fs, i0, i1):
-    """Guarda señal temporal y espectro con las tres rutas alineadas."""
+    """Guarda tiempo y espectros separados de los nodos 2 y 3, alineados."""
     # Solo se carga matplotlib al pedir figuras; las pruebas numéricas no lo necesitan.
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig, (eje_t, eje_f) = plt.subplots(2, 1, figsize=(11, 7), constrained_layout=True)
+    fig, (eje_t, eje_n2, eje_n3) = plt.subplots(3, 1, figsize=(11, 10), constrained_layout=True)
     inicio = round(5 * fs)
     fin = inicio + round(0.04 * fs)
     tiempo = np.arange(inicio, fin) / fs
@@ -150,28 +150,42 @@ def figura_prueba(caso, prueba, destino, fs, i0, i1):
              ("contaminada (x)", caso["x8"], 0),
              ("nodo 2", caso["y2"], caso["retardo2"]),
              ("nodo 3", caso["y3"], caso["retardo3"]))
+    colores = {"limpia (s)": "tab:green", "contaminada (x)": "tab:gray",
+               "nodo 2": "tab:blue", "nodo 3": "tab:orange"}
+    espectros = {}
     for nombre, senal, retardo in rutas:
-        eje_t.plot(tiempo, senal[inicio + retardo:fin + retardo], label=nombre)
+        eje_t.plot(tiempo, senal[inicio + retardo:fin + retardo], label=nombre,
+                   color=colores[nombre], alpha=0.5 if nombre == "contaminada (x)" else 1)
         tramo = senal[i0 + retardo:i1 + retardo]
         ventana = np.hanning(tramo.size + 1)[:-1]  # Hann periódica
         espectro = np.abs(np.fft.rfft(tramo * ventana))
         frecuencias = np.fft.rfftfreq(tramo.size, 1 / fs)
         # Piso numérico únicamente para dibujar magnitudes exactamente nulas.
-        eje_f.plot(frecuencias, 20 * np.log10(np.maximum(espectro, 1e-10)), label=nombre)
+        espectros[nombre] = (frecuencias, 20 * np.log10(np.maximum(espectro, 1e-10)))
     eje_t.set(title=f"{prueba}: señales alineadas", xlabel="Tiempo (s)")
     eje_t.set_ylabel("Amplitud normalizada")
     eje_t.grid(True)
     eje_t.legend()
-    eje_f.set(title="Espectro del tramo de evaluación", xlabel="Frecuencia (Hz)",
-              ylabel="Magnitud (dB)")
-    eje_f.set_xlim(0, fs / 2)
-    eje_f.set_ylim(bottom=-100)  # El piso de -200 dB es solo numérico y no aporta a la comparación.
-    eje_f.grid(True)
-    eje_f.legend()
+    for eje, ruta, titulo in ((eje_n2, "nodo 2", "Nodo 2 (filtrado temporal)"),
+                              (eje_n3, "nodo 3", "Nodo 3 (filtrado espectral)")):
+        for nombre in ("contaminada (x)", "limpia (s)", ruta):
+            frecuencias, magnitud = espectros[nombre]
+            eje.plot(frecuencias, magnitud, label=nombre, color=colores[nombre],
+                     alpha=0.5 if nombre == "contaminada (x)" else 1)
+        eje.set(title=titulo, xlabel="Frecuencia (Hz)", ylabel="Magnitud (dB)",
+                xlim=(0, fs / 2))
+        eje.set_ylim(bottom=-100)
+        eje.grid(True)
+        eje.legend()
+    limite_superior = max(eje_n2.get_ylim()[1], eje_n3.get_ylim()[1])
+    eje_n2.set_ylim(-100, limite_superior)
+    eje_n3.set_ylim(-100, limite_superior)
     destino = Path(destino)
     destino.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(destino, dpi=150)
-    plt.close(fig)
+    try:
+        fig.savefig(destino, dpi=150)
+    finally:
+        plt.close(fig)
 
 
 def _escribir_csv(ruta, filas, columnas):
@@ -183,11 +197,11 @@ def _escribir_csv(ruta, filas, columnas):
         escritor.writerows(filas)
 
 
-if __name__ == "__main__":
-    configuraciones = cargar_configuraciones()
+def generar_comparacion(configuraciones, salida):
+    """Genera las tablas y figuras existentes en la carpeta indicada."""
+    salida = Path(salida)
     filas = comparar_todo(configuraciones)
     resumen = resumir(filas)
-    salida = RAIZ / "resultados"
     _escribir_csv(salida / "comparacion.csv", filas, COLUMNAS)
     columnas_resumen = ("prueba", "nivel", "ruta", "n") + tuple(
         columna for nombre in METRICAS_NUMERICAS
@@ -209,3 +223,8 @@ if __name__ == "__main__":
                        if fila["prueba"] == prueba and fila["nivel"] == nombre_nivel}
             print(f"{prueba:7} {nombre_nivel:12} {valores['entrada']:12.2f} "
                   f"{valores['nodo2']:13.2f} {valores['nodo3']:13.2f}")
+    return filas, resumen
+
+
+if __name__ == "__main__":
+    generar_comparacion(cargar_configuraciones(), RAIZ / "resultados")
