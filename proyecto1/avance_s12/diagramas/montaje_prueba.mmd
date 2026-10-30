@@ -1,0 +1,16 @@
+flowchart LR
+    ESP[ESP32 nodo 1]
+    PC[PC]
+    CON[Consola del nodo 1\n/dev/ttyUSB0]
+    REC[receptor_nodo1.py\n/dev/ttyUSB1]
+    YP[Adaptador YP-05\nRX conectado]
+
+    ESP -- USB --> CON
+    ESP -- GPIO18: TX N2 --> YP
+    ESP -- GPIO17: TX N3 --> YP
+    YP -- USB --> REC
+    PC --- CON
+    PC --- REC
+
+    CFG[YP-05: jumper en 3.3 V\nGND comun con ESP32\nTX del YP-05 sin conectar\nVCC sin conectar]
+    YP --- CFG

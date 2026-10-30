@@ -1,0 +1,38 @@
+flowchart TD
+    A[Puerto serie o archivo] --> B[Leer hasta 4096 bytes]
+    B --> C[Troceador: agregar al buffer]
+    C --> D{Existe 0x00?}
+    D -- No --> E{Buffer mayor que 4150 B?}
+    E -- No --> B
+    E -- Si --> F[Registrar err_trama y descartar hasta el siguiente 0x00]
+    F --> B
+    D -- Si --> G[Cortar fragmento anterior al 0x00]
+    G --> H{Fragmento vacio?}
+    H -- Si --> I[Ignorar y contar informativo]
+    H -- No --> J[leer_paquete]
+    J --> K[Validar tamano y COBS]
+    K --> L[Validar longitud minima y CRC-32]
+    L --> M[Validar magic y version]
+    M --> N[Validar tipo, longitud y formato]
+    N --> O[Validar valores finitos y destino]
+    K --> P{Error de trama o COBS?}
+    L --> P
+    P -- Si --> Q[Dejar error pendiente]
+    Q --> B
+    O --> R{Paquete valido?}
+    R -- No --> S[Incrementar contador de error]
+    R -- Si --> T{Cambio de session_id?}
+    T -- Si --> U[Resolver pendientes como transicion de sesion]
+    T -- No --> V[Resolver pendientes como errores normales]
+    U --> W[Registrar sesion y secuencia]
+    V --> W
+    W --> X[Validar banderas, origen, cable y paridad]
+    X --> Y{Tipo DIAG?}
+    Y -- Si --> Z[Validar valores DIAG y energia Sigma x2]
+    Y -- No --> AA[Agregar muestras al tramo continuo]
+    Z --> AB[Continuar hasta el final de la captura]
+    AA --> AB
+    I --> B
+    S --> B
+    AB --> AC[Contar errores y analizar el tramo mas largo]
+    AC --> AD[Resultado: OK o FALLA]
