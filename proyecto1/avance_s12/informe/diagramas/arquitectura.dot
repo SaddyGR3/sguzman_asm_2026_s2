@@ -1,0 +1,23 @@
+digraph arquitectura {
+  graph [rankdir=TB, bgcolor="white", pad=0.15, nodesep=0.4, ranksep=0.45];
+  node [shape=box, style="rounded,filled", fillcolor="#eef5fb", color="#41657d", fontname="DejaVu Sans", fontsize=11, margin="0.15,0.12"];
+  edge [fontname="DejaVu Sans", fontsize=9, color="#41657d", arrowsize=0.7];
+  pc [label="PC\nAudio: x y referencia s"];
+  entrada [label="Entrada analógica\nAcople + Sallen-Key\nADC 24 kHz → FIR ÷3"];
+  n1 [label="Nodo 1 · ESP32\n8 kHz · bloques de 512\nDiagnóstico y transmisión"];
+  n2 [label="Nodo 2 · ESP32\nFIR / notch temporal"];
+  n3 [label="Nodo 3 · ESP32\nFFT → ganancias → IFFT\nMétricas / LCD"];
+  salida2 [label="DAC → reconstrucción\nPAM8403 → parlante"];
+  salida3 [label="DAC → reconstrucción\nPAM8403 → parlante"];
+  avance [label="En este avance:\ntonos generados en el nodo 1", fillcolor="#fff3dc"];
+  pc -> entrada -> n1;
+  {rank=same; pc; entrada; avance;}
+  {rank=same; n2; n3;}
+  {rank=same; salida2; salida3;}
+  n1 -> n2 [label="UART1\nx + DIAG"];
+  n1 -> n3 [label="UART2\nx, s + DIAG"];
+  n2 -> n3 [label="Salida temporal\npara comparar", style=dashed, constraint=false];
+  n2 -> salida2;
+  n3 -> salida3;
+  avance -> n1 [style=dashed];
+}

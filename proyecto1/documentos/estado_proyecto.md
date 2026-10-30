@@ -88,8 +88,8 @@ Valores clave que salieron de la simulación:
 |---|---|
 | Paso 4 — nodo 3: método espectral causal, métricas y comparación P1–P5 | Implementado y verificado localmente en `simulacion-nodo3`; falta revisión del equipo y fusión a `development` |
 | Paso 5 — DFT directa contra FFT (N = 1024) y tabla de costo computacional, memoria y latencia de cada método | Integrado en `development` mediante el PR #12; verificación original con 207 pruebas y resultados generados |
-| Paso 6 — un solo script que genera todas las figuras y tablas (incluye polos y ceros y la respuesta en frecuencia del nodo 2) | Implementado y verificado en `simulacion-figuras`: 213 pruebas pasan; cuatro archivos de datos y nueve figuras generados; pendiente de commit, push y PR |
-| PDF del avance: proceso de diseño, criterios y discusión | **Sin responsable** |
+| Paso 6 — un solo script que genera todas las figuras y tablas (incluye polos y ceros y la respuesta en frecuencia del nodo 2) | Integrado en `development` mediante el PR #14: 213 pruebas pasan; cuatro archivos de datos y nueve figuras generados |
+| PDF del avance: proceso de diseño, criterios y discusión | En revisión en `integracion-informe-s12`: 13 figuras, tablas DFT/costo sincronizadas, auditoría editorial y cotejos numéricos registrados fuera del PDF; declaración de IA redactada con el uso observado; falta aprobación final del equipo |
 | Diagramas de validación del receptor: flujo de recepción, validación del contenido y montaje a partir de las capturas guardadas | Completado en `avance-diagramas`: cuatro diagramas Mermaid, tabla y salidas completas de N2 y N3. Se ejecutaron `python proyecto1/herramientas_pc/receptor_nodo1.py --archivo proyecto1/herramientas_pc/capturas/captura_n3.bin --enlace n3` y el comando equivalente con `captura_n2.bin --enlace n2`; ambas capturas terminaron en `RESULTADO: OK` |
 | Entrega: zip en TEC-Digital, PR `development` → `main` y tag `avance_s12` (ver `guia_git.md`) | Pendiente |
 

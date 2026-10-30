@@ -2,9 +2,9 @@
   "P1": {
     "N": 1024,
     "error_max_rel": 2.5622205270321984e-13,
-    "tiempo_dft_s": 0.016079400998933124,
-    "tiempo_fft_s": 2.0882998796878383e-05,
-    "aceleracion": 769.975670416487,
+    "tiempo_dft_s": 0.021828339999046875,
+    "tiempo_fft_s": 4.835599975194782e-05,
+    "aceleracion": 451.40913456489153,
     "operaciones_dft": 1048576,
     "operaciones_fft": 5120,
     "cociente_operaciones": 204.8
@@ -12,9 +12,9 @@
   "aleatoria": {
     "N": 1024,
     "error_max_rel": 3.0932533525483955e-13,
-    "tiempo_dft_s": 0.016146556999956374,
-    "tiempo_fft_s": 1.9506000171531923e-05,
-    "aceleracion": 827.7738571704466,
+    "tiempo_dft_s": 0.021517361001315294,
+    "tiempo_fft_s": 3.523399936966598e-05,
+    "aceleracion": 610.6987962269263,
     "operaciones_dft": 1048576,
     "operaciones_fft": 5120,
     "cociente_operaciones": 204.8

@@ -1,0 +1,18 @@
+digraph contenido {
+  graph [rankdir=TB, bgcolor="white", pad=0.15, nodesep=0.35, ranksep=0.35];
+  node [shape=box, style="rounded,filled", fillcolor="#eef5fb", color="#41657d", fontname="DejaVu Sans", fontsize=11, margin="0.14,0.11"];
+  edge [fontname="DejaVu Sans", fontsize=9, color="#41657d", arrowsize=0.7];
+  tramo [label="Tramo continuo más largo de una sesión\nRecortar a segundos enteros y convertir a float64"];
+  fft [label="Hann periódica → FFT real\nBuscar 4 máximos separados al menos 20 Hz"];
+  picos [label="Comparar frecuencias: 300, 700, 1100 y 2150 Hz (±1 Hz)\nNiveles relativos: −1.44, −6.63, −11.90 y 0 dB (±0.5 dB)"];
+  enlace [shape=diamond, label="¿Enlace N3?", fillcolor="#fff3dc"];
+  snr [label="Con referencia s: SNR = 10 log₁₀(Σs² / Σ(x−s)²)\nAceptar 0 ± 0.2 dB"];
+  sinref [label="N2: no se calcula SNR\nNo transporta referencia s"];
+  resultado [label="Comparar todos los criterios\nRegistrar PASS o falla de contenido", fillcolor="#edf7ed"];
+  tramo -> fft -> picos -> enlace;
+  enlace -> snr [label="Sí"];
+  enlace -> sinref [label="No"];
+  {rank=same; snr; sinref;}
+  snr -> resultado;
+  sinref -> resultado;
+}

@@ -1,0 +1,28 @@
+digraph recepcion {
+  graph [rankdir=TB, bgcolor="white", pad=0.15, nodesep=0.35, ranksep=0.4];
+  node [shape=box, style="rounded,filled", fillcolor="#eef5fb", color="#41657d", fontname="DejaVu Sans", fontsize=11, margin="0.14,0.11"];
+  edge [fontname="DejaVu Sans", fontsize=9, color="#41657d", arrowsize=0.7];
+  bytes [label="Leer puerto o captura → búfer\nDescartar el fragmento anterior al primer 0x00"];
+  corte [label="Separar en 0x00; ignorar tramas vacías\nMás de 4150 B sin delimitador: error y resincronización"];
+  paquete [label="Validar tamaño → COBS → longitud mínima → CRC-32\nLuego magic, versión, tipo, longitud, formato, finitos y destino"];
+  valido [shape=diamond, label="¿Paquete válido?", fillcolor="#fff3dc"];
+  error [label="Tamaño / COBS / corto / CRC / trama:\nerror pendiente hasta el siguiente paquete válido\nOtros errores: incrementar contador", fillcolor="#fff0ee"];
+  sesion [label="Resolver errores pendientes según session_id\nSi cambia: transición informativa; si no: errores normales\nValidar sesión, reinicio, origen, cable y banderas"];
+  secuencia [label="Validar secuencia y first_sample\nSalto: pérdidas y corte del tramo; retroceso: error\nDatos en secuencia par; DIAG en impar"];
+  datos [label="Datos: acumular muestras del tramo continuo"];
+  diag [label="DIAG: verificar parámetros y energía Σx²"];
+  fin [label="Al finalizar: resolver pendientes, contadores\ny análisis del contenido → OK / FALLA", fillcolor="#edf7ed"];
+  continuar [shape=diamond, label="¿Quedan bytes?", fillcolor="#fff3dc"];
+  bytes -> corte -> paquete -> valido;
+  valido -> error [label="No"];
+  error -> bytes [label="Continuar", style=dashed];
+  valido -> sesion [label="Sí"];
+  sesion -> secuencia;
+  secuencia -> datos [label="INPUT / INPUT_REF"];
+  secuencia -> diag [label="DIAG"];
+  {rank=same; datos; diag;}
+  datos -> continuar;
+  diag -> continuar;
+  continuar -> bytes [label="Sí", style=dashed, constraint=false];
+  continuar -> fin [label="No"];
+}
