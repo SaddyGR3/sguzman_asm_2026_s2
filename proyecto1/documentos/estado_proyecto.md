@@ -90,7 +90,7 @@ Valores clave que salieron de la simulación:
 | Paso 5 — DFT directa contra FFT (N = 1024) y tabla de costo computacional, memoria y latencia de cada método | Implementado y verificado en `simulacion-dft`: 207 pruebas pasan y resultados generados; cambios locales revisados, pendientes de commit, push y PR |
 | Paso 6 — un solo script que genera todas las figuras y tablas (incluye polos y ceros y la respuesta en frecuencia del nodo 2) | Pendiente |
 | PDF del avance: proceso de diseño, criterios y discusión | **Sin responsable** |
-| Diagramas de validación del receptor: flujo de recepción, validación del contenido y montaje a partir de las capturas guardadas | Completado en `avance-diagramas`: cuatro diagramas Mermaid, tabla y salidas completas de N2 y N3, ambas capturas terminaron en `RESULTADO: OK` |
+| Diagramas de validación del receptor: flujo de recepción, validación del contenido y montaje a partir de las capturas guardadas | Completado en `avance-diagramas`: cuatro diagramas Mermaid, tabla y salidas completas de N2 y N3. Se ejecutaron `python proyecto1/herramientas_pc/receptor_nodo1.py --archivo proyecto1/herramientas_pc/capturas/captura_n3.bin --enlace n3` y el comando equivalente con `captura_n2.bin --enlace n2`; ambas capturas terminaron en `RESULTADO: OK` |
 | Entrega: zip en TEC-Digital, PR `development` → `main` y tag `avance_s12` (ver `guia_git.md`) | Pendiente |
 
 Material para el PDF que ya existe: el plan de frecuencias (justificación de fs, N, bandas y filtros), los resultados de la cadena analógica y del nodo 2 de arriba, y la salida del receptor de la PC como evidencia del emisor.
