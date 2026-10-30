@@ -92,9 +92,14 @@ if __name__ == "__main__":
         json.dump(resultados, archivo, indent=2, ensure_ascii=False, allow_nan=False)
         archivo.write("\n")
 
-    print(f"{'Señal':<12} {'Error relativo':>15} {'DFT (s)':>12} {'FFT (s)':>12} "
-          f"{'Aceleración':>13} {'Cociente teórico':>18}")
+    print("\nDFT directa frente a FFT (mediana de 5 mediciones)\n")
+    encabezado = (f"{'Señal':<10} | {'Error relativo':>14} | {'DFT (ms)':>10} | "
+                  f"{'FFT (ms)':>10} | {'Aceleración':>12} | {'Op. DFT/FFT':>11}")
+    print(encabezado)
+    print("-" * len(encabezado))
     for nombre, fila in resultados.items():
-        print(f"{nombre:<12} {fila['error_max_rel']:>15.3e} "
-              f"{fila['tiempo_dft_s']:>12.6g} {fila['tiempo_fft_s']:>12.6g} "
-              f"{fila['aceleracion']:>13.2f} {fila['cociente_operaciones']:>18.2f}")
+        print(f"{nombre:<10} | {fila['error_max_rel']:>14.3e} | "
+              f"{1000 * fila['tiempo_dft_s']:>10.3f} | "
+              f"{1000 * fila['tiempo_fft_s']:>10.4f} | "
+              f"{fila['aceleracion']:>11.2f}x | {fila['cociente_operaciones']:>11.2f}")
+    print("\nAceleración: razón de tiempos medidos; op. DFT/FFT: razón teórica de operaciones.")

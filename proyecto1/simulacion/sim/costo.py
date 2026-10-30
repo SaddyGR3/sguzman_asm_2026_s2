@@ -7,6 +7,8 @@ memoria_valores expresa unidades equivalentes a float32, no el tipo de cada arre
 import csv
 from math import log2
 from pathlib import Path
+from shutil import get_terminal_size
+from textwrap import fill
 
 from sim import analogico, nodo2, senales
 
@@ -107,10 +109,22 @@ if __name__ == "__main__":
         escritor.writeheader()
         escritor.writerows(filas)
 
-    print(f"{'Método':<28} {'Mult. reales/s':>15} {'Equiv. f32':>12} "
-          f"{'Bytes':>8} {'Retardo (muestras)':>19} {'Retardo (ms)':>13}")
+    print("\nCosto estimado por método\n")
+    ancho_metodo = max(len("Método"), *(len(fila["metodo"]) for fila in filas))
+    encabezado = (f"{'Método':<{ancho_metodo}} | {'Mult./s':>12} | {'Equiv. f32':>10} | "
+                  f"{'Bytes':>8} | {'Retardo (m)':>11} | {'Retardo (ms)':>12}")
+    print(encabezado)
+    print("-" * len(encabezado))
     for fila in filas:
-        print(f"{fila['metodo']:<28} {fila['mult_por_segundo']:>15.2f} "
-              f"{fila['memoria_valores']:>12} {fila['memoria_bytes']:>8} "
-              f"{fila['latencia_muestras']:>19g} {fila['latencia_ms']:>13.3f}")
-        print(f"  {fila['nota']}")
+        multiplicaciones = f"{fila['mult_por_segundo']:,.0f}".replace(",", " ")
+        valores = f"{fila['memoria_valores']:,}".replace(",", " ")
+        memoria = f"{fila['memoria_bytes']:,}".replace(",", " ")
+        print(f"{fila['metodo']:<{ancho_metodo}} | {multiplicaciones:>12} | {valores:>10} | "
+              f"{memoria:>8} | {fila['latencia_muestras']:>11g} | "
+              f"{fila['latencia_ms']:>12.3f}")
+    print("\nm = muestras; equiv. f32 = unidades de memoria de 4 bytes.")
+    print("\nSupuestos de las estimaciones:")
+    ancho = max(40, min(100, get_terminal_size().columns))
+    for fila in filas:
+        print(f"\n{fila['metodo']}:")
+        print(fill(fila["nota"], width=ancho, initial_indent="  ", subsequent_indent="  "))
