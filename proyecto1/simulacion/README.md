@@ -68,6 +68,10 @@ sim/comparacion.py      P1–P5 por tres semillas, comparación y figuras
 resultados/comparacion.csv          métricas por corrida y ruta, generadas por sim.comparacion
 resultados/comparacion_resumen.csv  medias y desviaciones, generadas por sim.comparacion
 resultados/figuras/P1.png–P5.png   comparación temporal y espectral, generada por sim.comparacion
+sim/dft.py             DFT por frecuencia desde su definición y comparación con FFT
+sim/costo.py           estimación de multiplicaciones, memoria y latencia por método
+resultados/dft_fft.json  errores, tiempos y operaciones, generados por sim.dft
+resultados/costo.csv     cuatro filas de costo, memoria y latencia, generadas por sim.costo
 ```
 
 ## Generar las señales
@@ -173,3 +177,90 @@ que las pruebas de los otros módulos. Las tablas y figuras solo se generan al
 ejecutar explícitamente `python -m sim.comparacion`, para incorporarlas al PDF.
 Las pruebas de integración verifican la alineación, la causalidad y los
 criterios de P1, P2 y P5.
+
+## DFT y costo
+
+`sim.dft` calcula la DFT directamente desde su definición:
+`X[k] = sum(x[n]*exp(-2j*pi*k*n/N))`, en `complex128`. Calcula una frecuencia
+k a la vez, sin matriz N×N, y reutiliza un vector para los exponentes, los
+factores y los productos mediante operaciones de NumPy con `out`.
+La compara con `numpy.fft.fft` para N muestras de P1 desde el segundo 1
+(primera semilla de la configuración) y para una señal normal aleatoria
+con semilla 0. N se obtiene de `config/pruebas.json`.
+
+Se informa el error máximo relativo `max|DFT-FFT|/max|FFT|` y la mediana de
+cinco mediciones con `perf_counter` para cada método. El tiempo de la DFT
+incluye generar los factores y ejecutar el bucle; la conversión inicial de la señal queda fuera
+de las mediciones. Para una señal nula, el error relativo se define como cero.
+El conteo teórico es N² multiplicaciones complejas para la DFT y
+`(N/2)*log2(N)` para una FFT radix-2: con N = 1024 son 1 048 576 y 5120,
+respectivamente, una relación de **204.8**. Esa relación no predice exactamente
+la aceleración medida ni describe el algoritmo interno de NumPy. Los tiempos
+también incluyen el bucle Python y las llamadas a NumPy: comparan estas
+implementaciones, no únicamente la complejidad de los algoritmos.
+
+`sim.costo` toma los parámetros de `config/pruebas.json`, `config/nodo2.json`
+y `config/cadena_analogica.json`. Estima multiplicaciones reales por segundo,
+memoria base y latencia algorítmica con estas fórmulas (L es el número de
+coeficientes, B = N/2+1 y T el historial de tramas):
+
+| Método | Mult. reales/s | Memoria base en bytes | Latencia |
+|---|---|---|---|
+| FIR, incluida decimación | `L*fs_salida` | `4*(2*L-1)` | `(L-1)/2` muestras a fs de entrada |
+| Notch biquad | `5*fs` | `4*(5+2)` | 0 muestras de alineación; desfase dependiente de frecuencia |
+| DFT por frecuencia | `4*N²*fs/H` | `56*N` | 0 como referencia de costo |
+| Espectral | `(4*N*log2(N)+2*N+2*B)*fs/H` | `4*(3*N+(3+T)*B)` | H muestras |
+
+Con la configuración actual, las cuatro filas exportadas son:
+
+| Método | Mult. reales/s | Memoria base (B) | Latencia (ms) |
+|---|---:|---:|---:|
+| FIR decimación nodo 1 | 296 000 | 292 | 0.75 |
+| FIR banda protegida nodo 2 | 296 000 | 292 | 2.25 |
+| Notch nodo 2 | 40 000 | 28 | 0 |
+| DFT por frecuencia | 65 536 000 | 57 344 | 0 (referencia) |
+
+La memoria de la DFT incluye tres arreglos `complex128` de N elementos
+(entrada, salida y términos: 16 KiB cada uno) y los índices `float64` (8 KiB):
+**56 KiB** para N = 1024. Todos crecen proporcionalmente a N; no se guarda
+una matriz cuadrática. Se corrigió el supuesto de 12 KiB de la guía original
+para representar la implementación elegida y su espacio de trabajo. La columna
+`memoria_valores` del CSV expresa unidades equivalentes de 4 bytes; no indica
+que los arreglos de la DFT sean float32. Se excluyen objetos Python, escalares
+y trabajo interno de NumPy, por lo que no es el pico de RAM.
+Tampoco es la memoria total del experimento de comparación.
+
+Los conteos no incluyen sumas ni el costo de generar los factores con
+exponenciales. El modelo espectral omite medianas y detección de ruido;
+su memoria supone buffers float32, no el consumo real de la simulación en
+Python. Las latencias excluyen tiempo de cómputo, UART y reproducción: cero
+en la DFT no significa ejecución instantánea, y el notch puede tener retardo
+de grupo aunque se use cero para alinear las métricas.
+
+`costo_espectral(N, H, fs, historial_tramas)` está disponible para el script
+de figuras del paso 6, que debe leer el historial de `config/nodo3.json`.
+Con historial 8 estima 688 031.25 mult./s, 34 860 B y 64 ms. Esta fila no
+forma parte del CSV inicial de cuatro métodos.
+
+Desde `proyecto1/simulacion/`, con el entorno activo:
+
+```
+python -m pytest pruebas/test_dft.py pruebas/test_costo.py
+python -m pytest pruebas
+python -m sim.dft
+python -m sim.costo
+```
+
+Los dos últimos comandos crean `resultados/dft_fft.json` y
+`resultados/costo.csv`; las pruebas no modifican los resultados del proyecto
+(la prueba del comando de costo escribe un CSV en un directorio temporal). Los tiempos
+dependen del equipo y de su carga, por lo que no se exige una aceleración
+mínima en las pruebas. Los valores de las tablas anteriores son estimaciones
+del diseño, no resultados medidos en la placa.
+
+Verificación del 29 oct 2026: **207 pruebas pasaron** con Python 3.14.8 y las
+versiones fijadas en `requirements.txt`. Ambos comandos terminaron correctamente.
+En esta ejecución, el error relativo fue 2.562e-13 para P1 y 3.093e-13 para
+la señal aleatoria. Las medianas DFT/FFT fueron 16.0855/0.021558 ms y
+16.0307/0.019057 ms, respectivamente: aceleraciones medidas de 746.15 y 841.20.
+Estos tiempos corresponden a la PC usada para la verificación; no al ESP32.

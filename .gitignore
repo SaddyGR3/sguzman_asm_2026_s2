@@ -15,3 +15,11 @@ __pycache__/
 
 # Configuración local del editor
 /.vscode/
+
+# Archivos auxiliares de LaTeX
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.toc
