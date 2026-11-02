@@ -30,6 +30,31 @@ pio device monitor -p /dev/ttyUSB0 -b 115200
 
 O con los botones de PlatformIO en VS Code.
 
+## Salida por DAC
+
+En `src/main.cpp`, `SALIDA_DAC = true` habilita GPIO25 (DAC canal 0) a 8 kHz
+con reloj APLL y seis búferes DMA de 512 bytes. Al arrancar, el firmware informa
+qué señal está activa. El estado inicial es `DAC_SENAL_LIMPIA_INICIAL = false`:
+saca `x`, con la interferencia de 2150 Hz; la señal limpia `s_util` contiene
+solo los tonos de 300, 700 y 1100 Hz.
+
+Conecta un botón entre GPIO32 y GND. Cada pulsación alterna la salida entre `x`
+y `s`; el monitor indica el cambio como `DAC: señal contaminada (x)` o
+`DAC: señal limpia (s)`.
+
+Montaje: GPIO25 → capacitor de 10 µF → entrada del PAM8403 con perilla de volumen
+→ parlante. Une las masas del ESP32 y del amplificador. Empieza con la perilla
+al mínimo y sube poco a poco.
+
+Con `DAC_SENAL_LIMPIA = false` se oye la mezcla de tonos con un pitido agudo
+de 2150 Hz; con `true` el pitido desaparece. Un siseo agudo de fondo es normal:
+falta el filtro de reconstrucción.
+
+El resumen muestra `DAC` (bytes de 8 bits aceptados, acumulados) y
+`desbordes_dac` (bloques que no entraron completos). La escritura no espera
+espacio DMA y descarta el resto si no cabe. Comprueba que `desbordes_dac`
+permanezca en 0 (o casi 0) y `overruns` en 0.
+
 ## Problemas conocidos
 
 - **Subida lenta:** `upload_speed = 115200` en `platformio.ini`. A velocidades mayores la subida falló con esta placa.
