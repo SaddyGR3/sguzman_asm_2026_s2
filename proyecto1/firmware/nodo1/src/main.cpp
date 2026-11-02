@@ -7,6 +7,7 @@
 #include "esp_err.h"
 #include "esp_random.h"
 #include "esp_timer.h"
+#include "driver/dac_continuous.h"
 #include "driver/gpio.h"
 #include "driver/uart.h"
 #include "dsps_fft2r.h"
@@ -16,6 +17,15 @@
 // true: lazo de prueba con puentes GPIO18->GPIO19 y GPIO17->GPIO16 en la misma placa.
 // false: para la PC, no se copia al anillo, no se lee RX y no se compara.
 constexpr bool PRUEBA_LAZO = false;
+
+constexpr bool SALIDA_DAC = true;
+constexpr gpio_num_t PIN_BOTON_DAC = GPIO_NUM_32;
+constexpr bool DAC_SENAL_LIMPIA_INICIAL = false;
+constexpr uint32_t FRECUENCIA_DAC = 8000;
+constexpr uint32_t BUFERES_DMA_DAC = 6;
+constexpr size_t TAM_BUFER_DMA_DAC = 512;  // bytes físicos: 256 muestras por búfer
+
+static bool dac_senal_limpia = DAC_SENAL_LIMPIA_INICIAL;
 
 constexpr int N_FFT = 1024;      // dos bloques de 512
 constexpr int EXCLUSION = 12;    // bins que separan un pico de otro
@@ -44,6 +54,47 @@ static float xs[2 * HOP];               // x y s intercalados para INPUT_REF
 static float muestras[N_FFT];
 static float fft_buf[2 * N_FFT];        // real e imaginario intercalados
 static float mag_db[N_FFT / 2 + 1];
+
+static dac_continuous_handle_t dac = nullptr;
+static uint8_t salida_dac[HOP];
+static uint64_t bytes_dac = 0;            // bytes de 8 bits aceptados (acumulado)
+static uint32_t desbordes_dac = 0;        // bloques incompletos (acumulado)
+
+// APLL permite 8 kHz en el ESP32. El driver expande cada código a 16 bits
+// con CONFIG_DAC_DMA_AUTO_16BIT_ALIGN: los seis búferes guardan tres bloques.
+static void iniciar_dac()
+{
+    dac_continuous_config_t cfg = {};
+    cfg.chan_mask = DAC_CHANNEL_MASK_CH0;   // GPIO25
+    cfg.desc_num = BUFERES_DMA_DAC;
+    cfg.buf_size = TAM_BUFER_DMA_DAC;
+    cfg.freq_hz = FRECUENCIA_DAC;
+    cfg.offset = 0;
+    cfg.clk_src = DAC_DIGI_CLK_SRC_APLL;
+    cfg.chan_mode = DAC_CHANNEL_MODE_SIMUL;
+    ESP_ERROR_CHECK(dac_continuous_new_channels(&cfg, &dac));
+    ESP_ERROR_CHECK(dac_continuous_enable(dac));
+}
+
+// Copia al DMA sin esperar espacio. Si no cabe todo, descarta el resto del
+// bloque para no retrasar el siguiente periodo ni los envíos por UART.
+static void escribir_dac()
+{
+    const float* senal = dac_senal_limpia ? s_util : x;
+    for (int k = 0; k < HOP; ++k) {
+        int codigo = static_cast<int>(roundf(127.5f + 127.5f * senal[k]));
+        if (codigo < 0) codigo = 0;
+        if (codigo > 255) codigo = 255;
+        salida_dac[k] = static_cast<uint8_t>(codigo);
+    }
+
+    size_t escritos = 0;
+    const esp_err_t error = dac_continuous_write(dac, salida_dac, sizeof(salida_dac),
+                                                &escritos, 0);
+    bytes_dac += escritos;
+    if (escritos < sizeof(salida_dac)) ++desbordes_dac;
+    if (error != ESP_ERR_TIMEOUT) ESP_ERROR_CHECK(error);
+}
 
 // FFT de 1024 muestras de x = s + i, generadas directamente sobre los generadores
 // (avanzan su fase).
@@ -334,6 +385,19 @@ extern "C" void app_main(void)
         enlace_n3.enviados += 1;
     }
 
+    if (SALIDA_DAC) iniciar_dac();
+
+    gpio_config_t boton_dac_cfg = {};
+    boton_dac_cfg.pin_bit_mask = 1ULL << PIN_BOTON_DAC;
+    boton_dac_cfg.mode = GPIO_MODE_INPUT;
+    boton_dac_cfg.pull_up_en = GPIO_PULLUP_ENABLE;
+    boton_dac_cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    boton_dac_cfg.intr_type = GPIO_INTR_DISABLE;
+    ESP_ERROR_CHECK(gpio_config(&boton_dac_cfg));
+    int boton_dac_anterior = gpio_get_level(PIN_BOTON_DAC);
+    printf("DAC: señal %s (%c)\n", dac_senal_limpia ? "limpia" : "contaminada",
+           dac_senal_limpia ? 's' : 'x');
+
     // Temporizador periódico: cada 64 ms avisa a esta tarea que toca un bloque.
     tarea_principal = xTaskGetCurrentTaskHandle();
     esp_timer_create_args_t args = {};
@@ -371,6 +435,14 @@ extern "C" void app_main(void)
         // seguía en proceso: cada uno de más es un overrun.
         const uint32_t n = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         if (n > 1) overruns += n - 1;
+
+        const int boton_dac_actual = gpio_get_level(PIN_BOTON_DAC);
+        if (boton_dac_anterior == 1 && boton_dac_actual == 0) {
+            dac_senal_limpia = !dac_senal_limpia;
+            printf("DAC: señal %s (%c)\n", dac_senal_limpia ? "limpia" : "contaminada",
+                   dac_senal_limpia ? 's' : 'x');
+        }
+        boton_dac_anterior = boton_dac_actual;
 
         const int64_t inicio = esp_timer_get_time();
         if (inicio_anterior >= 0) {
@@ -433,6 +505,9 @@ extern "C" void app_main(void)
         enviar_bloque(enlace_n2, sal_input, cable_input, sal_diag2, cable_diag);
         enviar_bloque(enlace_n3, sal_ref, cable_ref, sal_diag3, cable_diag3);
 
+        // El DAC va después de ambos envíos y no espera espacio en el DMA.
+        if (SALIDA_DAC) escribir_dac();
+
         // Lazo de prueba: lee RX al final, así el envío (con plazo) va primero.
         if (PRUEBA_LAZO) {
             leer_lazo(enlace_n2);
@@ -442,13 +517,14 @@ extern "C" void app_main(void)
         // El resumen va al final: el printf cae en el tiempo libre del periodo.
         if (v_bloques == BLOQUES_VENTANA) {
             const uint32_t prom = v_periodos ? static_cast<uint32_t>(v_per_suma / v_periodos) : 0;
-            printf("bloques %lu | first_sample %llu | periodo prom %lu us (min %lu, max %lu) | generar max %lu us | empaquetar max %lu us | cable INPUT %lu REF %lu DIAG %lu | pila libre %lu B | overruns %lu\n",
+            printf("bloques %lu | first_sample %llu | periodo prom %lu us (min %lu, max %lu) | generar max %lu us | empaquetar max %lu us | cable INPUT %lu REF %lu DIAG %lu | pila libre %lu B | overruns %lu | DAC %llu B | desbordes_dac %lu\n",
                    (unsigned long)bloques, (unsigned long long)first_sample,
                    (unsigned long)prom, (unsigned long)v_per_min, (unsigned long)v_per_max,
                    (unsigned long)v_gen_max, (unsigned long)v_emp_max,
                    (unsigned long)cable_input, (unsigned long)cable_ref, (unsigned long)cable_diag,
                    (unsigned long)uxTaskGetStackHighWaterMark(NULL),
-                   (unsigned long)overruns);
+                   (unsigned long)overruns, (unsigned long long)bytes_dac,
+                   (unsigned long)desbordes_dac);
             printf("tx N2 %llu B (esc max %lu us, desb %lu) | tx N3 %llu B (esc max %lu us, desb %lu)\n",
                    (unsigned long long)enlace_n2.enviados, (unsigned long)enlace_n2.esc_max_us,
                    (unsigned long)enlace_n2.desbordes_tx,
