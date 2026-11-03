@@ -1,4 +1,9 @@
 #include <cstdio>
+#include <cmath>
+#include <cstdlib>
+#include <cstring>
+#include <fcntl.h>
+#include <unistd.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
@@ -16,11 +21,120 @@ constexpr gpio_num_t PIN_BOTON = GPIO_NUM_32;
 static ModoFiltro modo = MODO_INICIAL;
 static int boton_anterior = 1;
 static float salida[MUESTRAS_BLOQUE];
+static char linea_comando[96];
+static size_t longitud_comando = 0;
+static bool descartando_comando = false;
 
 static const char* nombre_modo()
 {
     static const char* const nombres[] = {"SIN FILTRO", "FIR", "NOTCH"};
     return nombres[static_cast<int>(modo)];
+}
+
+static void seleccionar_modo(ModoFiltro nuevo)
+{
+    modo = nuevo;
+    printf("Filtro: %s\n", nombre_modo());
+}
+
+static void imprimir_fir()
+{
+    const auto& c = filtros_coeficientes();
+    printf("FIR coeficientes [");
+    for (int n = 0; n < COEFICIENTES_FIR; ++n) {
+        printf(n == 0 ? "%.9g" : ", %.9g", c.fir[n]);
+    }
+    printf("]\n");
+}
+
+static void imprimir_notch()
+{
+    const auto& c = filtros_coeficientes();
+    printf("Notch b [%.9g, %.9g, %.9g] a [%.9g, %.9g, %.9g]\n",
+           c.b[0], c.b[1], c.b[2], c.a[0], c.a[1], c.a[2]);
+}
+
+static void imprimir_estado()
+{
+    const auto& cfg = filtros_configuracion();
+    printf("Estado: %s | banda %.6g-%.6g Hz | notch %.6g Hz Q %.6g\n",
+           nombre_modo(), cfg.banda_inferior_hz, cfg.banda_superior_hz,
+           cfg.notch_hz, cfg.q_notch);
+    imprimir_fir();
+    imprimir_notch();
+}
+
+static bool leer_numero(const char* texto, double& valor)
+{
+    if (texto == nullptr) return false;
+    char* fin = nullptr;
+    valor = std::strtod(texto, &fin);
+    return fin != texto && *fin == '\0' && std::isfinite(valor);
+}
+
+static void ejecutar_comando(char* linea)
+{
+    char* resto = nullptr;
+    const char* comando = strtok_r(linea, " \t", &resto);
+    const char* primero = strtok_r(nullptr, " \t", &resto);
+    const char* segundo = strtok_r(nullptr, " \t", &resto);
+    const char* extra = strtok_r(nullptr, " \t", &resto);
+
+    if (comando && std::strcmp(comando, "estado") == 0 && !primero) {
+        imprimir_estado();
+        return;
+    }
+    if (comando && std::strcmp(comando, "modo") == 0 && primero && !segundo) {
+        if (std::strcmp(primero, "sin") == 0) seleccionar_modo(ModoFiltro::SIN_FILTRO);
+        else if (std::strcmp(primero, "fir") == 0) seleccionar_modo(ModoFiltro::FIR);
+        else if (std::strcmp(primero, "notch") == 0) seleccionar_modo(ModoFiltro::NOTCH);
+        else printf("Error: comando o valores invalidos\n");
+        return;
+    }
+    double uno, dos;
+    if (comando && primero && segundo && !extra &&
+        leer_numero(primero, uno) && leer_numero(segundo, dos)) {
+        if (std::strcmp(comando, "banda") == 0 &&
+            uno >= 100.0 && dos <= 3000.0 && uno < dos) {
+            filtros_cambiar_banda(uno, dos);
+            printf("Banda: %.6g-%.6g Hz\n", uno, dos);
+            imprimir_fir();
+            return;
+        }
+        if (std::strcmp(comando, "notch") == 0 &&
+            uno >= 100.0 && uno <= 3000.0 && dos >= 0.5 && dos <= 20.0) {
+            filtros_cambiar_notch(uno, dos);
+            printf("Notch: %.6g Hz Q %.6g\n", uno, dos);
+            imprimir_notch();
+            return;
+        }
+    }
+    printf("Error: comando o valores invalidos\n");
+}
+
+static void leer_consola()
+{
+    // UART0 del USB ya está registrado como stdin; read no espera con O_NONBLOCK.
+    char recibidos[64];
+    const ssize_t n = read(STDIN_FILENO, recibidos, sizeof(recibidos));
+    for (ssize_t i = 0; i < n; ++i) {
+        const char c = recibidos[i];
+        if (c == '\r' || c == '\n') {
+            if (descartando_comando) printf("Error: linea demasiado larga\n");
+            else if (longitud_comando > 0) {
+                linea_comando[longitud_comando] = '\0';
+                ejecutar_comando(linea_comando);
+            }
+            longitud_comando = 0;
+            descartando_comando = false;
+        } else if (!descartando_comando) {
+            if (longitud_comando + 1 < sizeof(linea_comando)) {
+                linea_comando[longitud_comando++] = c;
+            } else {
+                descartando_comando = true;
+            }
+        }
+    }
 }
 
 static void procesar_input(const uint8_t* datos)
@@ -29,11 +143,10 @@ static void procesar_input(const uint8_t* datos)
     const int boton_actual = gpio_get_level(PIN_BOTON);
     if (boton_anterior == 1 && boton_actual == 0) {
         switch (modo) {
-            case ModoFiltro::SIN_FILTRO: modo = ModoFiltro::FIR; break;
-            case ModoFiltro::FIR: modo = ModoFiltro::NOTCH; break;
-            case ModoFiltro::NOTCH: modo = ModoFiltro::SIN_FILTRO; break;
+            case ModoFiltro::SIN_FILTRO: seleccionar_modo(ModoFiltro::FIR); break;
+            case ModoFiltro::FIR: seleccionar_modo(ModoFiltro::NOTCH); break;
+            case ModoFiltro::NOTCH: seleccionar_modo(ModoFiltro::SIN_FILTRO); break;
         }
-        printf("Filtro: %s\n", nombre_modo());
     }
     boton_anterior = boton_actual;
 
@@ -71,6 +184,10 @@ extern "C" void app_main(void)
     filtros_iniciar();
     salida_dac_iniciar();
     recepcion_iniciar(procesar_input);
+    const int banderas_consola = fcntl(STDIN_FILENO, F_GETFL, 0);
+    ESP_ERROR_CHECK(banderas_consola >= 0 &&
+                    fcntl(STDIN_FILENO, F_SETFL, banderas_consola | O_NONBLOCK) == 0
+                    ? ESP_OK : ESP_FAIL);
     const auto& c = filtros_coeficientes();
     printf("Nodo 2: UART1 RX GPIO19 TX GPIO18 sin uso, 921600 8N1, RX 16384 B | "
            "DAC GPIO25 8000 Hz APLL DMA 6x512 B, timeout 0 ms | LED GPIO4 | "
@@ -85,6 +202,8 @@ extern "C" void app_main(void)
     uint32_t desbordes_anteriores = 0;
     for (;;) {
         const bool hubo_bytes = recepcion_leer();
+        // Los comandos se aplican después de terminar todos los INPUT de la lectura.
+        leer_consola();
         const int64_t ahora_us = esp_timer_get_time();
         const bool error_rx = recepcion_actualizar(ahora_us);
         const auto& d = salida_dac_contadores();

@@ -1,7 +1,8 @@
 # Nodo 2: receptor UART, filtros y salida DAC
 
 Recibe la señal contaminada `x` del nodo 1 y permite escucharla sin filtro,
-con un FIR pasa bajas o con un notch, mediante un botón.
+con un FIR de la banda protegida o con un notch, mediante un botón o comandos
+en el monitor USB.
 Valida COBS, CRC-32/ISO-HDLC y cabecera de INPUT y DIAG. UART1 recibe a 921600
 baudios, 8N1, con 16 KB de búfer y lecturas de hasta 1024 bytes sin espera.
 Al arrancar descarta hasta el primer `0x00`; ignora las tramas vacías.
@@ -31,14 +32,37 @@ más cortas que el periodo de un bloque (64 ms).
 | Modo | Salida y qué debe oírse |
 | --- | --- |
 | SIN FILTRO | La señal `x`, con los tres tonos y el pitido de 2150 Hz. |
-| FIR | Pasa bajas Kaiser de 37 coeficientes, corte 1500 Hz; reduce el pitido y conserva los tonos. Retardo de 18 muestras (2.25 ms). |
-| NOTCH | Rechazo en 2150 Hz, Q = 8.5; reduce el pitido y conserva los tonos. |
+| FIR | Kaiser de 37 coeficientes. Al arrancar es pasa bajas con corte de 1500 Hz; reduce el pitido y conserva los tonos. Retardo de 18 muestras (2.25 ms). |
+| NOTCH | Al arrancar rechaza 2150 Hz con Q = 8.5; reduce el pitido y conserva los tonos. |
 
-Los coeficientes se calculan una vez al arrancar en `double` y se guardan en
-`float`. Ambos filtros procesan siempre las 512 muestras y conservan sus estados
-entre bloques y cambios de modo. Las entradas no finitas se sustituyen por cero
-solo para los filtros; en `SIN FILTRO` se conserva la conversión del DAC.
+Los coeficientes se calculan en `double` al arrancar o al cambiarlos y se guardan
+en `float`. Ambos filtros procesan siempre las 512 muestras y conservan sus estados
+entre bloques y cambios de modo. Al cambiar los parámetros de un filtro se reinicia
+solo su propio estado. Las entradas no finitas se sustituyen por cero solo para los
+filtros; en `SIN FILTRO` se conserva la conversión del DAC.
 El recorte se hace únicamente al convertir al DAC. Al cambiar puede oírse un clic.
+
+## Comandos desde el monitor
+
+El monitor de **nodo 2** usa el mismo cable USB con el que se programa la placa:
+no hace falta ningún cable adicional para los comandos. `platformio.ini` tiene
+`send_on_enter`; escribir cada comando en el monitor y pulsar **Enter**. Los
+comandos se leen sin espera y se aplican entre paquetes INPUT completos.
+
+| Comando | Efecto |
+| --- | --- |
+| `estado` | Muestra modo, banda, notch y todos los coeficientes vigentes. |
+| `modo sin`, `modo fir`, `modo notch` | Elige qué se oye por el parlante, igual que el botón. |
+| `banda <inf> <sup>` | Recalcula el FIR para la banda protegida en Hz. |
+| `notch <f> <q>` | Centra el notch en `f` Hz con factor de calidad `q`. |
+
+Se admite `100 ≤ inf < sup ≤ 3000`, `100 ≤ f ≤ 3000` y `0.5 ≤ q ≤ 20`.
+Con banda inferior menor que 600 Hz, el FIR es pasa bajas con corte `sup + 300` Hz.
+Desde 600 Hz, es pasa banda con cortes `inf - 300` y `sup + 300` Hz.
+Un valor fuera de rango o un comando desconocido imprime una línea `Error:` y
+no cambia la configuración. Los valores iniciales son banda **100–1200 Hz** y
+notch **2150 Hz, Q = 8.5**. Solo se guardan en RAM: al reiniciar vuelven los
+valores iniciales.
 
 ## Conexiones
 
@@ -63,8 +87,8 @@ pio run -e esp32dev -t upload --upload-port /dev/ttyUSB_NODO2
 pio device monitor --port /dev/ttyUSB_NODO2 --baud 115200
 ```
 
-Reemplazar `/dev/ttyUSB_NODO2` por el puerto real. Estos comandos son instrucciones
-para la prueba; no se ejecutaron durante la implementación.
+Reemplazar `/dev/ttyUSB_NODO2` por el puerto real. En VS Code, abrir el monitor
+de la placa **nodo2** y escribir los comandos en su terminal.
 
 ## Contadores del monitor
 
@@ -92,23 +116,33 @@ duplicados y secuencias anteriores no suman pérdidas ni retroceden la referenci
 ## Prueba entre placas
 
 1. Subir **nodo2** desde la barra de PlatformIO y abrir su monitor en su puerto.
-2. Revisar la configuración al arrancar: `SIN FILTRO`, botón GPIO32, primeros
+2. En el monitor del nodo 2, escribir `estado` y pulsar Enter. Debe decir
+   `SIN FILTRO`, banda 100–1200 Hz, notch 2150 Hz Q 8.5. La línea de arranque
+   también muestra el botón GPIO32 y los primeros
    coeficientes FIR aproximadamente `[0.001128111831, 0.002301285580, 0]`,
    notch `b ≈ [0.909373858311, 0.213770873244, 0.909373858311]` y
    `a ≈ [1, 0.213770873244, 0.818747716622]`. Se imprimen los valores almacenados
    en `float`: comparar con tolerancia de `1e-6`, no exigir los doce decimales.
 3. Con el nodo 1 encendido y conectado, escuchar la mezcla y el pitido de 2150 Hz.
-4. Pulsar y soltar el botón: en `FIR` el pitido debe dejar de distinguirse y deben
-   quedar los tonos; otra pulsación pasa a `NOTCH`, también sin el pitido; otra
-   vuelve a `SIN FILTRO` y reaparece. Puede oírse un clic al cambiar.
-5. Comprobar los contadores en los tres modos:
+4. Enviar `modo fir`: el pitido debe bajar. Enviar `banda 100 3000`: el pitido
+   vuelve a oírse porque 2150 Hz queda dentro de la banda. Enviar
+   `banda 100 1200`: el pitido vuelve a bajar. El monitor imprime los 37
+   coeficientes nuevos después de cada cambio.
+5. Enviar `modo notch` y luego `notch 1100 1`: el pitido de 2150 Hz vuelve
+   y se pierde el tono útil de 1100 Hz. Enviar `notch 2150 8.5`: el pitido baja.
+   `estado` debe mostrar los valores restaurados y los coeficientes actuales.
+6. Probar `modo sin`, `modo fir`, `modo notch` y el botón GPIO32: cada cambio
+   debe reflejarse en `Filtro: <modo>`. Al cambiar puede oírse un clic.
+7. Enviar `banda 100 3500` y `notch 2150 0`: cada uno debe imprimir un error;
+   `estado` debe conservar los valores válidos anteriores.
+8. Comprobar los contadores en los tres modos:
    INPUT y DIAG deben aumentar unos 15–16 por segundo (~15.6 INPUT/s), con todos
    los errores, `perdidos` y `desbordes_dac` en cero y LED apagado.
-6. Desconectar el cable de GPIO19: el LED se enciende al cumplirse 200 ms sin INPUT
+9. Desconectar el cable de GPIO19: el LED se enciende al cumplirse 200 ms sin INPUT
    y el watchdog escribe silencio una vez. El audio deja de sonar; comprobar si
    hay clics de transición. Al reconectar debe recuperarse automáticamente.
    Pueden aumentar pérdidas y errores si se corta o recupera una trama a medias.
-7. Presionar EN en el nodo 1: debe aumentar `sesiones` y continuar la recepción
+10. Presionar EN en el nodo 1: debe aumentar `sesiones` y continuar la recepción
    sin pérdidas atribuidas al reinicio de secuencia. Con el enlace en reposo no
    deberían aparecer errores; un reinicio en plena trama puede dejar un error
    de trama truncada antes de recuperar la sincronización.
