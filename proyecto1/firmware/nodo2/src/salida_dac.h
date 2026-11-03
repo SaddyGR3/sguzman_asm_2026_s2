@@ -7,7 +7,7 @@ struct ContadoresDac {
 };
 
 void salida_dac_iniciar();
-// Recibe los 2048 bytes little-endian de un INPUT ya validado.
-void salida_dac_input(const uint8_t* datos);
+// Recibe las 512 muestras de la salida seleccionada, antes de cuantizar.
+void salida_dac_input(const float* muestras);
 void salida_dac_silencio();
 const ContadoresDac& salida_dac_contadores();

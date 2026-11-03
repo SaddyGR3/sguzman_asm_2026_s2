@@ -24,9 +24,11 @@ static bool silencio_enviado = false;
 static int64_t ultimo_input_us = 0;  // al iniciar sirve de referencia para el watchdog
 static int64_t ultimo_error_us = -1;
 static ContadoresRecepcion contadores;
+static void (*al_recibir_input)(const uint8_t*) = nullptr;
 
-void recepcion_iniciar()
+void recepcion_iniciar(void (*procesar_input)(const uint8_t*))
 {
+    al_recibir_input = procesar_input;
     crc32_iniciar();
     uart_config_t cfg = {};
     cfg.baud_rate = 921600;
@@ -119,7 +121,7 @@ static void procesar_trama()
         tiene_input = true;
         ultimo_input_us = esp_timer_get_time();
         silencio_enviado = false;
-        salida_dac_input(decodificado + TAM_CABECERA);
+        al_recibir_input(decodificado + TAM_CABECERA);
     } else {
         ++contadores.diag;
     }

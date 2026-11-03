@@ -40,10 +40,10 @@ static void escribir_codigos()
     if (error != ESP_ERR_TIMEOUT) ESP_ERROR_CHECK(error);
 }
 
-void salida_dac_input(const uint8_t* datos)
+void salida_dac_input(const float* muestras)
 {
     for (size_t k = 0; k < MUESTRAS_BLOQUE; ++k) {
-        const float v = get_f32(datos + 4 * k);
+        const float v = muestras[k];
         if (!std::isfinite(v)) {
             codigos[k] = 128;
         } else if (v <= -1.0f) {
