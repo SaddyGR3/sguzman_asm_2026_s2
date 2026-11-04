@@ -1,8 +1,9 @@
-"""Receptor del nodo 1 en la PC (herramienta de la PC, no es firmware).
+"""Receptor de enlaces seriales en la PC (herramienta de la PC, no es firmware).
 
 Recibe y valida los paquetes que envía el emisor (nodo 1) por un adaptador USB-serie, o
 desde una captura cruda guardada antes. Revisa decodificación, cabecera, secuencia, orden,
 DIAG y, sobre el tramo continuo más largo, el espectro de x (y la SNR en el enlace N3).
+Con --enlace n2out valida los FIR_OUT que envía el nodo 2 al nodo 3.
 
 Uso, un enlace a la vez:
     python receptor_nodo1.py --puerto /dev/ttyUSB1 --enlace n3 --segundos 60 --guardar cap.bin
@@ -383,6 +384,110 @@ class Receptor:
                 f"transición {self.info['errores_transicion_sesion']} | sesiones {len(self.sesiones)}")
 
 
+class ReceptorFirOut:
+    """Valida el flujo FIR_OUT de N2 a N3 sin exigir DIAG del nodo 1."""
+
+    def __init__(self):
+        self.troceador = Troceador()
+        self.err = Counter()
+        self.detalles = []
+        self.paquetes = 0
+        self.sesiones = 0
+        self.sesion = None
+        self.ultima_seq = None
+        self.ultimo_first = None
+        self.pendientes = Counter()
+        self.errores_transicion = 0
+
+    def _error(self, causa, detalle):
+        self.err[causa] += 1
+        if len(self.detalles) < 20:
+            self.detalles.append(f"{causa}: {detalle}")
+
+    def alimentar(self, datos):
+        for trama in self.troceador.alimentar(datos):
+            if trama == "trama":
+                self.pendientes["err_trama"] += 1
+                continue
+            if not trama:
+                continue
+            try:
+                cab, _ = protocolo.leer_paquete(trama, destino_esperado=3)
+            except protocolo.ErrorPaquete as e:
+                if e.causa in CAUSAS_TRANSICION:
+                    self.pendientes["err_" + e.causa] += 1
+                else:
+                    self._error("err_" + e.causa, str(e))
+                continue
+            self._registrar(cab, len(trama) + 1)
+
+    def _registrar(self, cab, largo_cable):
+        seq = cab["sequence"]
+        first = cab["first_sample"]
+        if self.pendientes:
+            if self.sesion is not None and cab["session_id"] != self.sesion:
+                self.errores_transicion += sum(self.pendientes.values())
+            else:
+                self.err.update(self.pendientes)
+            self.pendientes.clear()
+        if cab["src"] != 2:
+            self._error("err_src", f"sequence {seq}: src {cab['src']}")
+            return
+        if cab["type"] != protocolo.TIPO_FIR_OUT:
+            self._error("err_tipo", f"sequence {seq}: tipo {cab['type']}")
+            return
+        self.paquetes += 1
+        if largo_cable > protocolo.max_wire(cab["payload_bytes"]):
+            self._error("err_cable", f"sequence {seq}: {largo_cable} B")
+        if cab["flags"] != (protocolo.FLAG_REINICIO if seq == 0 else 0):
+            self._error("err_banderas", f"sequence {seq}: flags {cab['flags']:#06x}")
+
+        if cab["session_id"] != self.sesion:
+            if self.sesion is not None and seq != 0:
+                self._error("inicio_sesion_perdido", f"sesión nueva empieza en {seq}")
+            self.sesion = cab["session_id"]
+            self.sesiones += 1
+            self.ultima_seq = None
+            self.ultimo_first = None
+
+        if self.ultima_seq is not None:
+            salto = (seq - self.ultima_seq) & 0xFFFFFFFF
+            if salto == 0 or salto >= 0x80000000:
+                self._error("err_secuencia_retroceso", f"{self.ultima_seq} -> {seq}")
+                return
+            if salto > 1:
+                self.err["paquetes_perdidos"] += salto - 1
+            esperado = self.ultimo_first + HOP * salto
+            if first != esperado:
+                self._error("err_first_sample", f"sequence {seq}: {first}, esperado {esperado}")
+        self.ultima_seq = seq
+        self.ultimo_first = first
+
+    def resumen_progreso(self, t):
+        return (f"[{t:5.1f} s] FIR_OUT {self.paquetes} | errores {sum(self.err.values())} | "
+                f"sesiones {self.sesiones}")
+
+    def terminar(self):
+        self.err.update(self.pendientes)
+        self.pendientes.clear()
+        if self.paquetes == 0:
+            self._error("sin_paquetes", "no se recibió ningún FIR_OUT")
+        print(f"\nFIR_OUT válidos: {self.paquetes} | sesiones: {self.sesiones} | "
+              f"paquetes perdidos: {self.err['paquetes_perdidos']} | "
+              f"tramas de transición: {self.errores_transicion}")
+        print("ERRORES")
+        for causa, cantidad in sorted(self.err.items()):
+            if cantidad:
+                print(f"  {causa}: {cantidad}")
+        if any(self.err.values()):
+            print("RESULTADO: FALLA")
+            for detalle in self.detalles[:10]:
+                print("  " + detalle)
+            return 1
+        print("RESULTADO: OK")
+        return 0
+
+
 # --- análisis de datos ---
 
 def hann_periodica(n):
@@ -449,10 +554,12 @@ def analizar_tramo(mejor, mejor_n, enlace):
 def capturar_en_vivo(args, receptor):
     """Lee el puerto serie durante --segundos; opcionalmente guarda los bytes crudos."""
     import serial  # solo hace falta en vivo
-    destino = open(args.guardar, "wb") if args.guardar else None
+    from serial.tools import list_ports
+    destino = None
     try:
         with serial.Serial(args.puerto, args.baudios, bytesize=8, parity="N", stopbits=1,
                            timeout=0.05) as ser:
+            destino = open(args.guardar, "wb") if args.guardar else None
             ser.reset_input_buffer()    # descarta lo que haya quedado en el búfer del sistema
             t0 = time.monotonic()
             proximo = t0 + 5.0
@@ -465,6 +572,14 @@ def capturar_en_vivo(args, receptor):
                 if time.monotonic() >= proximo:
                     print(receptor.resumen_progreso(time.monotonic() - t0), flush=True)
                     proximo += 5.0
+    except serial.SerialException as exc:
+        puertos = sorted(p.device for p in list_ports.comports())
+        print(f"No se pudo abrir {args.puerto}: {exc}", file=sys.stderr)
+        print("Puertos serie detectados: " + (", ".join(puertos) if puertos else "ninguno"),
+              file=sys.stderr)
+        print("Conectá el YP-05 por USB y buscá su puerto con "
+              "`python3 -m serial.tools.list_ports -v`.", file=sys.stderr)
+        raise SystemExit(2)
     finally:
         if destino:
             destino.close()
@@ -478,11 +593,11 @@ def leer_archivo(ruta, receptor):
 
 
 def leer_argumentos():
-    p = argparse.ArgumentParser(description="Receptor y validador de los paquetes del nodo 1.")
+    p = argparse.ArgumentParser(description="Receptor y validador de los paquetes seriales.")
     fuente = p.add_mutually_exclusive_group(required=True)
     fuente.add_argument("--puerto", help="por ejemplo /dev/ttyUSB1")
     fuente.add_argument("--archivo", help="captura cruda previa")
-    p.add_argument("--enlace", choices=sorted(ENLACES), required=True)
+    p.add_argument("--enlace", choices=sorted((*ENLACES, "n2out")), required=True)
     p.add_argument("--segundos", type=float, default=60.0, help="duración en vivo (60 por defecto)")
     p.add_argument("--baudios", type=int, default=921600)
     p.add_argument("--guardar", help="guarda los bytes crudos recibidos (solo en vivo)")
@@ -494,7 +609,7 @@ def leer_argumentos():
 
 def main():
     args = leer_argumentos()
-    receptor = Receptor(args.enlace)
+    receptor = ReceptorFirOut() if args.enlace == "n2out" else Receptor(args.enlace)
     if args.puerto:
         capturar_en_vivo(args, receptor)
     else:

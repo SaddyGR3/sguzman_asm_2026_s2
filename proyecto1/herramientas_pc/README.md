@@ -11,6 +11,8 @@ Recibe un enlace del emisor (nodo 1) por un adaptador USB-serie (YP-05, FT232RL)
 - en el enlace N3, la SNR de 0 dB.
 
 Termina con `RESULTADO: OK` o `RESULTADO: FALLA` y la lista de fallas.
+Con `--enlace n2out` también valida los paquetes FIR_OUT de nodo 2 hacia nodo 3:
+CRC, COBS, sesión, secuencia, banderas y avance de `first_sample`.
 
 ## Instalación
 
@@ -28,13 +30,17 @@ Un enlace a la vez:
 
 - jumper del YP-05 en 3.3 V;
 - RX del YP-05 a GPIO18 (enlace N2) o a GPIO17 (enlace N3);
+- para FIR_OUT, RX del YP-05 a GPIO17 **del nodo 2**;
 - GND común entre el YP-05 y la ESP32;
 - TX del YP-05 sin conectar;
 - no conectar VCC.
 
 ## Puertos
 
-Ejecuta `ls /dev/ttyUSB*` antes y después de conectar el YP-05. Normalmente la ESP32 es `/dev/ttyUSB0` y el YP-05 `/dev/ttyUSB1`.
+Ejecuta `python3 -m serial.tools.list_ports -v` antes y después de conectar el
+YP-05; el puerto nuevo es el que debes poner en `--puerto`. Puede ser
+`/dev/ttyUSB0`, `/dev/ttyUSB1` u otro nombre. El puerto del nodo 2, usado por
+su monitor serie, no es el del YP-05.
 
 ## Uso
 
@@ -42,7 +48,7 @@ Ejecuta `ls /dev/ttyUSB*` antes y después de conectar el YP-05. Normalmente la 
 |---|---|
 | `--puerto` | puerto serie, por ejemplo `/dev/ttyUSB1` |
 | `--archivo` | captura cruda guardada antes; excluyente con `--puerto` |
-| `--enlace {n2,n3}` | obligatorio. `n2`: INPUT, un canal. `n3`: INPUT_REF, x y s |
+| `--enlace {n2,n3,n2out}` | obligatorio. `n2`: INPUT del nodo 1. `n3`: INPUT_REF del nodo 1. `n2out`: FIR_OUT del nodo 2. |
 | `--segundos` | duración de la captura en vivo (60 por defecto) |
 | `--baudios` | 921600 por defecto |
 | `--guardar` | ruta donde guardar los bytes crudos recibidos; solo en vivo |
@@ -52,6 +58,7 @@ Desde la raíz del repositorio:
 ```
 python proyecto1/herramientas_pc/receptor_nodo1.py --puerto /dev/ttyUSB1 --enlace n3 --segundos 60 --guardar captura_n3.bin
 python proyecto1/herramientas_pc/receptor_nodo1.py --archivo proyecto1/herramientas_pc/capturas/captura_n3.bin --enlace n3
+python proyecto1/herramientas_pc/receptor_nodo1.py --puerto /dev/ttyUSB1 --enlace n2out --segundos 60
 ```
 
 ## Capturas

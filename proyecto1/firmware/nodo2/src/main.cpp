@@ -13,6 +13,7 @@
 #include "protocolo.h"
 #include "recepcion.h"
 #include "salida_dac.h"
+#include "transmision.h"
 
 enum class ModoFiltro { SIN_FILTRO, FIR, NOTCH };
 constexpr ModoFiltro MODO_INICIAL = ModoFiltro::SIN_FILTRO;
@@ -24,6 +25,9 @@ static float salida[MUESTRAS_BLOQUE];
 static char linea_comando[96];
 static size_t longitud_comando = 0;
 static bool descartando_comando = false;
+static uint64_t suma_proc_us = 0;
+static uint64_t max_proc_us = 0;
+static uint32_t bloques_proc = 0;
 
 static const char* nombre_modo()
 {
@@ -120,6 +124,7 @@ static void leer_consola()
     for (ssize_t i = 0; i < n; ++i) {
         const char c = recibidos[i];
         if (c == '\r' || c == '\n') {
+            if (descartando_comando || longitud_comando > 0) putchar('\n');
             if (descartando_comando) printf("Error: linea demasiado larga\n");
             else if (longitud_comando > 0) {
                 linea_comando[longitud_comando] = '\0';
@@ -127,9 +132,17 @@ static void leer_consola()
             }
             longitud_comando = 0;
             descartando_comando = false;
-        } else if (!descartando_comando) {
+        } else if (c == '\b' || c == '\x7f') {
+            if (longitud_comando > 0) {
+                --longitud_comando;
+                printf("\b \b");
+                fflush(stdout);
+            }
+        } else if (!descartando_comando && (c == '\t' || (c >= ' ' && c <= '~'))) {
             if (longitud_comando + 1 < sizeof(linea_comando)) {
                 linea_comando[longitud_comando++] = c;
+                putchar(c);
+                fflush(stdout);
             } else {
                 descartando_comando = true;
             }
@@ -137,7 +150,7 @@ static void leer_consola()
     }
 }
 
-static void procesar_input(const uint8_t* datos)
+static void procesar_input(const uint8_t* datos, uint64_t first_sample)
 {
     // Una lectura del botón por INPUT, incluso si RX trae varios paquetes juntos.
     const int boton_actual = gpio_get_level(PIN_BOTON);
@@ -150,6 +163,7 @@ static void procesar_input(const uint8_t* datos)
     }
     boton_anterior = boton_actual;
 
+    const int64_t inicio_proc_us = esp_timer_get_time();
     for (size_t k = 0; k < MUESTRAS_BLOQUE; ++k) {
         const float x = get_f32(datos + 4 * k);
         float fir, notch;
@@ -161,6 +175,11 @@ static void procesar_input(const uint8_t* datos)
         }
     }
     salida_dac_input(salida);
+    const uint64_t duracion_us = static_cast<uint64_t>(esp_timer_get_time() - inicio_proc_us);
+    suma_proc_us += duracion_us;
+    if (duracion_us > max_proc_us) max_proc_us = duracion_us;
+    ++bloques_proc;
+    transmision_enviar(salida, first_sample);
 }
 
 extern "C" void app_main(void)
@@ -184,13 +203,14 @@ extern "C" void app_main(void)
     filtros_iniciar();
     salida_dac_iniciar();
     recepcion_iniciar(procesar_input);
+    transmision_iniciar();
     const int banderas_consola = fcntl(STDIN_FILENO, F_GETFL, 0);
     ESP_ERROR_CHECK(banderas_consola >= 0 &&
                     fcntl(STDIN_FILENO, F_SETFL, banderas_consola | O_NONBLOCK) == 0
                     ? ESP_OK : ESP_FAIL);
     const auto& c = filtros_coeficientes();
     printf("Nodo 2: UART1 RX GPIO19 TX GPIO18 sin uso, 921600 8N1, RX 16384 B | "
-           "DAC GPIO25 8000 Hz APLL DMA 6x512 B, timeout 0 ms | LED GPIO4 | "
+           "DAC GPIO25 8000 Hz APLL DMA 6x512 B, timeout 0 ms | UART2 TX GPIO17 921600 | LED GPIO4 | "
            "watchdog INPUT 200 ms | monitor UART0 115200 | Filtro: %s | botón GPIO32 | "
            "FIR primeros 3 [%.12f, %.12f, %.12f] | "
            "notch b [%.12f, %.12f, %.12f] a [%.12f, %.12f, %.12f]\n",
@@ -214,17 +234,31 @@ extern "C" void app_main(void)
         const bool error_dac = ultimo_error_dac_us >= 0 && ahora_us - ultimo_error_dac_us < 500000;
         ESP_ERROR_CHECK(gpio_set_level(GPIO_NUM_4, error_rx || error_dac ? 1 : 0));
 
-        if (ahora_us - ultimo_resumen_us >= 1000000) {
+        if (longitud_comando > 0 || descartando_comando) {
+            // Mientras se escribe, no intercalar resúmenes con el eco del comando.
+            ultimo_resumen_us = ahora_us;
+            suma_proc_us = 0;
+            max_proc_us = 0;
+            bloques_proc = 0;
+        } else if (ahora_us - ultimo_resumen_us >= 1000000) {
             const auto& r = recepcion_contadores();
+            const uint64_t prom_proc_us = bloques_proc ? suma_proc_us / bloques_proc : 0;
             printf("Filtro: %s | INPUT %llu | DIAG %llu | err_trama %llu | err_cobs %llu | "
                    "err_crc %llu | err_cabecera %llu | perdidos %llu | sesiones %llu | "
-                   "DAC %llu B | desbordes_dac %lu\n",
+                   "DAC %llu B | desbordes_dac %lu | proc prom %llu us max %llu us | "
+                   "FIR_OUT %llu | descartes_tx %llu\n",
                    nombre_modo(),
                    (unsigned long long)r.input, (unsigned long long)r.diag,
                    (unsigned long long)r.err_trama, (unsigned long long)r.err_cobs,
                    (unsigned long long)r.err_crc, (unsigned long long)r.err_cabecera,
                    (unsigned long long)r.perdidos, (unsigned long long)r.sesiones,
-                   (unsigned long long)d.bytes, (unsigned long)d.desbordes);
+                   (unsigned long long)d.bytes, (unsigned long)d.desbordes,
+                   (unsigned long long)prom_proc_us, (unsigned long long)max_proc_us,
+                   (unsigned long long)transmision_enviados(),
+                   (unsigned long long)transmision_descartados());
+            suma_proc_us = 0;
+            max_proc_us = 0;
+            bloques_proc = 0;
             ultimo_resumen_us = ahora_us;
         }
         // Un tick son 10 ms con la configuración actual; RX se drena antes de dormir.
