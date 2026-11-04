@@ -8,8 +8,20 @@ struct CoeficientesFiltros {
     float a[3];
 };
 
-// Calcula los coeficientes una vez al arrancar y deja los estados en cero.
+struct ConfiguracionFiltros {
+    double banda_inferior_hz;
+    double banda_superior_hz;
+    double notch_hz;
+    double q_notch;
+};
+
+// Prepara los valores iniciales: banda 100-1200 Hz y notch 2150 Hz, Q 8.5.
 void filtros_iniciar();
 const CoeficientesFiltros& filtros_coeficientes();
+const ConfiguracionFiltros& filtros_configuracion();
+// Recalcula solo el filtro indicado y reinicia únicamente su estado.
+// El llamador valida los rangos antes de usar estas funciones.
+void filtros_cambiar_banda(double inferior_hz, double superior_hz);
+void filtros_cambiar_notch(double frecuencia_hz, double q);
 // Actualiza ambos filtros por muestra, sin recorte; entrada no finita se trata como 0.
 void filtros_procesar(float entrada, float& salida_fir, float& salida_notch);
