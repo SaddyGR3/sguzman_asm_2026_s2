@@ -21,6 +21,8 @@ constexpr uint32_t VREF_DEFECTO_MV = 1100;
 static adc_continuous_handle_t adc = nullptr;
 static adc_cali_handle_t calibracion = nullptr;
 static uint8_t lectura[1024];
+// Trabajo por tramo de lectura para medir las etapas con pocas marcas de tiempo.
+static float voltajes[sizeof(lectura) / SOC_ADC_DIGI_RESULT_BYTES];
 static size_t posicion_lectura = 0, bytes_lectura = 0;
 static float historial[N_COEFICIENTES_DECIMACION];
 static size_t posicion_fir = 0, fase = 0;
@@ -153,9 +155,11 @@ uint32_t entrada_adc_leer_bloque(float* x)
 {
     size_t crudas = 0, salidas = 0;
     uint32_t procesamiento_us = 0;
+    uint32_t calibracion_us = 0, filtrado_us = 0;
     while (crudas < CRUDAS_BLOQUE) {
         if (bytes_lectura - posicion_lectura < SOC_ADC_DIGI_RESULT_BYTES) completar_lectura();
         const int64_t inicio = esp_timer_get_time();
+        size_t validas = 0;
         while (posicion_lectura + SOC_ADC_DIGI_RESULT_BYTES <= bytes_lectura && crudas < CRUDAS_BLOQUE) {
             adc_digi_output_data_t dato;
             memcpy(&dato, lectura + posicion_lectura, sizeof(dato));
@@ -170,7 +174,11 @@ uint32_t entrada_adc_leer_bloque(float* x)
             if (crudo > ventana.crudo_max) ventana.crudo_max = crudo;
             ++crudas_ventana;
             ++crudas;
-            const float v = decimar(static_cast<float>(mv));
+            voltajes[validas++] = static_cast<float>(mv);
+        }
+        const int64_t fin_calibracion = esp_timer_get_time();
+        for (size_t j = 0; j < validas; ++j) {
+            const float v = decimar(voltajes[j]);
             // Misma fase que filtrar(x)[::3]: entradas 0, 3, 6, ...
             if (fase == 0) {
                 x[salidas++] = quitar_dc_normalizar(v);
@@ -178,11 +186,16 @@ uint32_t entrada_adc_leer_bloque(float* x)
             }
             fase = (fase + 1) % FACTOR_DECIMACION;
         }
-        procesamiento_us += static_cast<uint32_t>(esp_timer_get_time() - inicio);
+        const int64_t fin_filtrado = esp_timer_get_time();
+        calibracion_us += static_cast<uint32_t>(fin_calibracion - inicio);
+        filtrado_us += static_cast<uint32_t>(fin_filtrado - fin_calibracion);
+        procesamiento_us += static_cast<uint32_t>(fin_filtrado - inicio);
     }
     // Se consumen también las dos entradas posteriores a la salida 512: cada
     // bloque contiene exactamente 1536 entradas y mantiene la fase global.
     if (procesamiento_us > ventana.procesamiento_max_us) ventana.procesamiento_max_us = procesamiento_us;
+    if (calibracion_us > ventana.calibracion_max_us) ventana.calibracion_max_us = calibracion_us;
+    if (filtrado_us > ventana.filtrado_max_us) ventana.filtrado_max_us = filtrado_us;
     return procesamiento_us;
 }
 

@@ -14,6 +14,8 @@ struct ResumenAdc {
     double frecuencia_adc = 0.0;
     double frecuencia_salida = 0.0;
     uint32_t procesamiento_max_us = 0;
+    uint32_t calibracion_max_us = 0;
+    uint32_t filtrado_max_us = 0;
     ContadoresAdc acumulados;
 };
 
