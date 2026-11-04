@@ -121,9 +121,18 @@ class Troceador:
 class Receptor:
     """Valida los paquetes de un enlace y acumula contadores, sesiones y muestras."""
 
-    def __init__(self, enlace):
+    def __init__(self, enlace, solo_protocolo=False):
         self.cfg = ENLACES[enlace]
         self.enlace = enlace
+        self.solo_protocolo = solo_protocolo
+        self.duracion = None          # segundos reales en vivo; inferidos al leer archivo
+        self.por_tipo = Counter()
+        self.banderas = Counter()     # (máscara de un bit, nombre del tipo)
+        self.ref_n = 0
+        self.ref_min = np.full(2, np.inf)
+        self.ref_max = np.full(2, -np.inf)
+        self.ref_cuadrados = np.zeros(2, dtype=np.float64)
+        self.intervalos_datos = {}    # número de sesión -> [primer first_sample, último]
         self.troceador = Troceador()
         self.err = Counter()
         self.info = Counter()
@@ -180,6 +189,8 @@ class Receptor:
         for causa, n in self.pendientes.items():
             if transicion:
                 self.info["errores_transicion_sesion"] += n
+                if self.solo_protocolo:
+                    self.err["err_" + causa] += n
             else:
                 self.err["err_" + causa] += n
         self.pendientes.clear()
@@ -222,6 +233,16 @@ class Receptor:
 
     def _revisar_banderas(self, s, cab):
         """0x0001 siempre en INPUT_REF; 0x0004 solo en sequence 0 de una sesión vista desde su inicio."""
+        if self.solo_protocolo:
+            nombre = NOMBRE_TIPO.get(cab["type"], str(cab["type"]))
+            for bit in range(16):
+                mascara = 1 << bit
+                if cab["flags"] & mascara:
+                    self.banderas[mascara, nombre] += 1
+            if cab["type"] == protocolo.TIPO_INPUT_REF and not cab["flags"] & protocolo.FLAG_REFERENCIA:
+                s.fallas_bandera += 1
+                self._error("err_banderas", f"sequence {cab['sequence']}: falta referencia 0x0001")
+            return
         esperado = protocolo.FLAG_REFERENCIA if cab["type"] == protocolo.TIPO_INPUT_REF else 0
         if s.desde_inicio and cab["sequence"] == 0:
             esperado |= protocolo.FLAG_REINICIO
@@ -257,6 +278,8 @@ class Receptor:
         if tipo != esperado:
             self._error("err_tipo_paridad", f"sequence {seq}: tipo {tipo}, esperado {esperado}")
             return
+        if self.solo_protocolo:
+            self.por_tipo[NOMBRE_TIPO[tipo]] += 1
         if tipo == protocolo.TIPO_DIAG:
             self._revisar_diag(s, cab, datos)
         else:
@@ -275,11 +298,25 @@ class Receptor:
             self._error("err_primer_bloque", f"first_sample {first} en sequence 0")
         prev = s.datos_prev
         consecutivo = prev is not None and seq == prev["seq"] + 2
+        if self.solo_protocolo and prev is not None:
+            consecutivo = seq == ((prev["seq"] + 2) & 0xFFFFFFFF)
         if not (consecutivo and first == prev["first"] + HOP):
             if consecutivo:
                 self._error("err_first_sample", f"sequence {seq}: first_sample {first}, "
                                                 f"esperado {prev['first'] + HOP}")
             self._cerrar_tramo(s)
+        if self.solo_protocolo:
+            intervalo = self.intervalos_datos.setdefault(len(self.sesiones), [first, first])
+            intervalo[0] = min(intervalo[0], first)
+            intervalo[1] = max(intervalo[1], first)
+            if sref is not None:
+                valores = muestras.astype(np.float64)
+                self.ref_n += valores.shape[0]
+                self.ref_min = np.minimum(self.ref_min, valores.min(axis=0))
+                self.ref_max = np.maximum(self.ref_max, valores.max(axis=0))
+                self.ref_cuadrados += np.sum(valores * valores, axis=0)
+            s.datos_prev = {"seq": seq, "first": first}
+            return
         s.tramo_x.append(x)
         if sref is not None:
             s.tramo_s.append(sref)
@@ -289,6 +326,10 @@ class Receptor:
     def _revisar_diag(self, s, cab, datos):
         """Valores fijos del DIAG y comparación con los datos del mismo bloque."""
         d = protocolo.desempaquetar_diag(datos)
+        if self.solo_protocolo:
+            if any(isinstance(v, float) and not np.isfinite(v) for v in d.values()):
+                self._error("err_no_finito", f"sequence {cab['sequence']}: DIAG contiene floats no finitos")
+            return
         fallas = [k for k, v in DIAG_ESPERADO.items() if d[k] != v]
         if d["inicio_ventana"] != cab["first_sample"]:
             fallas.append("inicio_ventana")
@@ -333,11 +374,14 @@ class Receptor:
         fallas = [f"{k} = {n}" for k, n in self.err.items() if n]
         self._imprimir_sesiones()
         self._imprimir_contadores()
-        lineas, fallas_analisis = analizar_tramo(self.mejor, self.mejor_n, self.enlace)
-        print("\nANÁLISIS")
-        for linea in lineas:
-            print("  " + linea)
-        fallas += fallas_analisis
+        if self.solo_protocolo:
+            self._imprimir_solo_protocolo()
+        else:
+            lineas, fallas_analisis = analizar_tramo(self.mejor, self.mejor_n, self.enlace)
+            print("\nANÁLISIS")
+            for linea in lineas:
+                print("  " + linea)
+            fallas += fallas_analisis
         if self.paquetes == 0:
             fallas.append("no se recibió ningún paquete válido")
 
@@ -351,6 +395,38 @@ class Receptor:
         print("\nRESULTADO: OK")
         return 0
 
+    def _imprimir_solo_protocolo(self):
+        duracion = self.duracion
+        origen = "captura en vivo"
+        if duracion is None:
+            # Una captura cruda no tiene marcas de tiempo. Se infiere el tiempo
+            # nominal por los índices de datos y fs=8000, separando sesiones.
+            duracion = sum((fin - inicio + HOP) / FS
+                           for inicio, fin in self.intervalos_datos.values())
+            origen = "inferida de first_sample a 8000 Hz"
+        print(f"\nSOLO PROTOCOLO | duración {duracion:.3f} s ({origen})")
+        for tipo in (NOMBRE_TIPO[self.cfg["tipo_datos"]], "DIAG"):
+            cantidad = self.por_tipo[tipo]
+            tasa = f"{cantidad / duracion:.3f}/s" if duracion > 0 else "N/D"
+            print(f"  {tipo}: {cantidad} paquetes, {tasa}")
+        print("BANDERAS (paquetes con cada bit, por tipo)")
+        if not self.banderas:
+            print("  ninguna")
+        for mascara in sorted({bit for bit, _ in self.banderas}):
+            tipos = ", ".join(f"{tipo} {self.banderas[mascara, tipo]}"
+                              for tipo in sorted(self.por_tipo)
+                              if self.banderas[mascara, tipo])
+            print(f"  {mascara:#06x}: {tipos}")
+        if self.enlace == "n3":
+            if self.ref_n:
+                rms = np.sqrt(self.ref_cuadrados / self.ref_n)
+                print(f"INPUT_REF: {self.ref_n} muestras por canal")
+                for k, nombre in enumerate(("x (columna 0)", "s (columna 1)")):
+                    print(f"  {nombre}: min {self.ref_min[k]:.6g}, max {self.ref_max[k]:.6g}, "
+                          f"RMS {rms[k]:.6g}")
+            else:
+                print("INPUT_REF: sin muestras")
+
     def _imprimir_sesiones(self):
         print("\nSESIONES")
         if not self.sesiones:
@@ -359,9 +435,10 @@ class Receptor:
             origen = "desde su inicio" if s.desde_inicio else "a medias"
             tipos = ", ".join(f"{k} {v}" for k, v in sorted(s.por_tipo.items()))
             reinicio = "FALLA" if s.fallas_bandera else "OK"
+            etiqueta = "banderas" if self.solo_protocolo else "banderas/0x0004"
             print(f"  sesión {i} ({s.id:#010x}, observada {origen}): {tipos}; "
                   f"sequence {s.primera_seq}..{s.ultima_seq}; perdidos {s.perdidos}; "
-                  f"banderas/0x0004 {reinicio}")
+                  f"{etiqueta} {reinicio}")
 
     def _imprimir_contadores(self):
         print("\nCONTADORES (cuentan para el veredicto)")
@@ -572,6 +649,8 @@ def capturar_en_vivo(args, receptor):
                 if time.monotonic() >= proximo:
                     print(receptor.resumen_progreso(time.monotonic() - t0), flush=True)
                     proximo += 5.0
+            if getattr(receptor, "solo_protocolo", False):
+                receptor.duracion = time.monotonic() - t0
     except serial.SerialException as exc:
         puertos = sorted(p.device for p in list_ports.comports())
         print(f"No se pudo abrir {args.puerto}: {exc}", file=sys.stderr)
@@ -601,15 +680,19 @@ def leer_argumentos():
     p.add_argument("--segundos", type=float, default=60.0, help="duración en vivo (60 por defecto)")
     p.add_argument("--baudios", type=int, default=921600)
     p.add_argument("--guardar", help="guarda los bytes crudos recibidos (solo en vivo)")
+    p.add_argument("--solo-protocolo", action="store_true",
+                   help="valida n2/n3 sin exigir DIAG, tonos ni SNR propios del generador")
     args = p.parse_args()
     if args.guardar and args.archivo:
         p.error("--guardar solo se usa con --puerto")
+    if args.solo_protocolo and args.enlace == "n2out":
+        p.error("--solo-protocolo se usa con --enlace n2 o n3")
     return args
 
 
 def main():
     args = leer_argumentos()
-    receptor = ReceptorFirOut() if args.enlace == "n2out" else Receptor(args.enlace)
+    receptor = ReceptorFirOut() if args.enlace == "n2out" else Receptor(args.enlace, args.solo_protocolo)
     if args.puerto:
         capturar_en_vivo(args, receptor)
     else:

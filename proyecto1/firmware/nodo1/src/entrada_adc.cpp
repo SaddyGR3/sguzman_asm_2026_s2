@@ -1,6 +1,7 @@
 #include "entrada_adc.h"
 #include "coeficientes_decimacion.h"
 #include <cmath>
+#include <climits>
 #include <cstdio>
 #include <cstring>
 #include "freertos/FreeRTOS.h"
@@ -9,31 +10,46 @@
 #include "esp_adc/adc_cali_scheme.h"
 #include "esp_attr.h"
 #include "esp_err.h"
+#include "esp_heap_caps.h"
 #include "esp_timer.h"
 #include "soc/soc_caps.h"
 
 constexpr size_t SALIDAS_BLOQUE = 512;
 constexpr size_t FACTOR_DECIMACION = 3;
-constexpr size_t CRUDAS_BLOQUE = SALIDAS_BLOQUE * FACTOR_DECIMACION;
-constexpr uint32_t FRECUENCIA_ADC = 24000;
+constexpr size_t PARES_BLOQUE = SALIDAS_BLOQUE * FACTOR_DECIMACION;
+constexpr uint32_t FRECUENCIA_ADC_TOTAL = 48000;
 constexpr uint32_t VREF_DEFECTO_MV = 1100;
+constexpr size_t CODIGOS_ADC = 4096;
+
+struct EstadoCanal {
+    float historial[N_COEFICIENTES_DECIMACION] = {};
+    size_t posicion = 0;
+    unsigned fase = 0;
+    bool historial_listo = false, dc_listo = false;
+    float v_anterior = 0.0f, y_anterior = 0.0f;
+    ResumenCanalAdc ventana;
+    uint32_t crudas_ventana = 0, salidas_ventana = 0;
+    uint32_t saturaciones = 0;
+};
 
 static adc_continuous_handle_t adc = nullptr;
 static adc_cali_handle_t calibracion = nullptr;
-static uint8_t lectura[1024];
-// Trabajo por tramo de lectura para medir las etapas con pocas marcas de tiempo.
-static float voltajes[sizeof(lectura) / SOC_ADC_DIGI_RESULT_BYTES];
+// Una tabla en RAM interna, reservada al arrancar: 8 KB si cabe en int16_t,
+// o 16 KB en int32_t. Sin reservas ni llamadas de calibración en el lazo.
+static int16_t* tabla16 = nullptr;
+static int32_t* tabla32 = nullptr;
+static uint8_t lectura[2048];
+static float voltajes[512][2];
 static size_t posicion_lectura = 0, bytes_lectura = 0;
-static float historial[N_COEFICIENTES_DECIMACION];
-static size_t posicion_fir = 0, fase = 0;
-static bool historial_listo = false, dc_listo = false;
-static float v_anterior = 0.0f, y_anterior = 0.0f, polo_dc = 0.0f;
-static float limite_superior = 0.0f;
+static bool x_pendiente = false;
+static float mv_x_pendiente = 0.0f;
+static EstadoCanal canal_x, canal_s;
+static bool s_anterior_lista = false;
+static float s_anterior = 0.0f;
+static float polo_dc = 0.0f, limite_superior = 0.0f;
 static portMUX_TYPE cerrojo_pool = portMUX_INITIALIZER_UNLOCKED;
-static uint32_t desbordes_pool = 0;
-static uint32_t saturaciones = 0;
+static uint32_t desbordes_pool = 0, desalineaciones = 0;
 static ResumenAdc ventana;
-static uint64_t crudas_ventana = 0, salidas_ventana = 0;
 static int64_t inicio_ventana_us = 0;
 
 // Solo cuenta el evento desde ISR. No se reinician el ADC ni los estados.
@@ -44,6 +60,33 @@ static bool IRAM_ATTR aviso_desborde(adc_continuous_handle_t,
     ++desbordes_pool;
     portEXIT_CRITICAL_ISR(&cerrojo_pool);
     return false;
+}
+
+static void iniciar_tabla_calibracion()
+{
+    bool cabe16 = true;
+    for (size_t raw = 0; raw < CODIGOS_ADC; ++raw) {
+        int mv;
+        ESP_ERROR_CHECK(adc_cali_raw_to_voltage(calibracion, raw, &mv));
+        if (mv < INT16_MIN || mv > INT16_MAX) cabe16 = false;
+    }
+    if (cabe16) {
+        tabla16 = static_cast<int16_t*>(heap_caps_malloc(CODIGOS_ADC * sizeof(int16_t),
+                                                        MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+        ESP_ERROR_CHECK(tabla16 ? ESP_OK : ESP_ERR_NO_MEM);
+    } else {
+        tabla32 = static_cast<int32_t*>(heap_caps_malloc(CODIGOS_ADC * sizeof(int32_t),
+                                                        MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+        ESP_ERROR_CHECK(tabla32 ? ESP_OK : ESP_ERR_NO_MEM);
+    }
+    for (size_t raw = 0; raw < CODIGOS_ADC; ++raw) {
+        int mv;
+        ESP_ERROR_CHECK(adc_cali_raw_to_voltage(calibracion, raw, &mv));
+        if (tabla16) tabla16[raw] = static_cast<int16_t>(mv);
+        else tabla32[raw] = mv;
+    }
+    printf("ADC: tabla raw->mV de 4096 valores, %s (%u B), misma calibración para x y s\n",
+           cabe16 ? "int16_t" : "int32_t", cabe16 ? 8192u : 16384u);
 }
 
 void entrada_adc_iniciar()
@@ -64,35 +107,39 @@ void entrada_adc_iniciar()
         printf("ADC: AVISO sin calibración eFuse; line fitting con Vref por defecto %lu mV\n",
                (unsigned long)VREF_DEFECTO_MV);
     }
+    iniciar_tabla_calibracion();
 
     adc_continuous_handle_cfg_t memoria = {};
-    memoria.max_store_buf_size = 16384;
+    memoria.max_store_buf_size = 32768;
     memoria.conv_frame_size = sizeof(lectura);
     ESP_ERROR_CHECK(adc_continuous_new_handle(&memoria, &adc));
-    adc_digi_pattern_config_t patron = {};
-    patron.atten = ADC_ATTEN_DB_12;
-    patron.channel = ADC_CHANNEL_0;   // GPIO36 (VP)
-    patron.unit = ADC_UNIT_1;
-    patron.bit_width = ADC_BITWIDTH_12;
+    adc_digi_pattern_config_t patrones[2] = {};
+    patrones[0].channel = ADC_CHANNEL_0;   // GPIO36: x
+    patrones[1].channel = ADC_CHANNEL_3;   // GPIO39: s
+    for (auto& patron : patrones) {
+        patron.atten = ADC_ATTEN_DB_12;
+        patron.unit = ADC_UNIT_1;
+        patron.bit_width = ADC_BITWIDTH_12;
+    }
     adc_continuous_config_t cfg = {};
-    cfg.pattern_num = 1;
-    cfg.adc_pattern = &patron;
-    cfg.sample_freq_hz = FRECUENCIA_ADC;
+    cfg.pattern_num = 2;
+    cfg.adc_pattern = patrones;
+    cfg.sample_freq_hz = FRECUENCIA_ADC_TOTAL;  // 24 kHz por canal
     cfg.conv_mode = ADC_CONV_SINGLE_UNIT_1;
     // ESP-IDF 6.1 selecciona TYPE1 automáticamente en el ESP32 clásico.
     ESP_ERROR_CHECK(adc_continuous_config(adc, &cfg));
     adc_continuous_evt_cbs_t eventos = {};
     eventos.on_pool_ovf = aviso_desborde;
     ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(adc, &eventos, nullptr));
-    polo_dc = static_cast<float>(exp(-2.0 * 3.14159265358979323846 * 10.0 / 8000.0));
+    polo_dc = expf(-2.0f * 3.14159265358979323846f * 10.0f * (1.0f / 8000.0f));
     limite_superior = nextafterf(1.0f, 0.0f);
-    printf("ADC1 canal 0 GPIO36: 24000 Hz, 12 bits, 12 dB, DMA 1024 B, pool 16384 B | "
-           "FIR 37, decimación /3, salida 8000 Hz | DC 10 Hz, escala 1200 mV\n");
+    printf("ADC1 GPIO36 canal 0 = x, GPIO39 canal 3 = s: 48000 Hz total, 24000 Hz por canal, "
+           "12 bits, 12 dB, DMA 2048 B, pool 32768 B | FIR 37 /3, salida 8000 Hz por canal | "
+           "s compensada media muestra | DC 10 Hz, escala 1200 mV\n");
     inicio_ventana_us = esp_timer_get_time();
     ESP_ERROR_CHECK(adc_continuous_start(adc));
 }
 
-// Conserva bytes pendientes incluso si una lectura termina dentro de un resultado.
 static void completar_lectura()
 {
     const size_t sobrantes = bytes_lectura - posicion_lectura;
@@ -110,89 +157,115 @@ static void completar_lectura()
     }
 }
 
-static float decimar(float mv)
+static float calibrar(EstadoCanal& c, uint16_t crudo)
 {
-    if (!historial_listo) {
-        for (auto& valor : historial) valor = mv;
-        historial_listo = true;
+    const int mv = tabla16 ? tabla16[crudo] : tabla32[crudo];
+    if (c.crudas_ventana == 0 || mv < c.ventana.mv_min) c.ventana.mv_min = mv;
+    if (c.crudas_ventana == 0 || mv > c.ventana.mv_max) c.ventana.mv_max = mv;
+    if (crudo < c.ventana.crudo_min) c.ventana.crudo_min = crudo;
+    if (crudo > c.ventana.crudo_max) c.ventana.crudo_max = crudo;
+    ++c.crudas_ventana;
+    return static_cast<float>(mv);
+}
+
+static float decimar(EstadoCanal& c, float mv)
+{
+    if (!c.historial_listo) {
+        for (auto& valor : c.historial) valor = mv;
+        c.historial_listo = true;
     }
-    historial[posicion_fir] = mv;
+    c.historial[c.posicion] = mv;
     float filtrado = 0.0f;
-    if (fase == 0) {
-        size_t j = posicion_fir;
+    if (c.fase == 0) {
+        size_t j = c.posicion;
         for (size_t k = 0; k < N_COEFICIENTES_DECIMACION; ++k) {
-            filtrado += COEFICIENTES_DECIMACION[k] * historial[j];
+            filtrado += COEFICIENTES_DECIMACION[k] * c.historial[j];
             j = j == 0 ? N_COEFICIENTES_DECIMACION - 1 : j - 1;
         }
     }
-    posicion_fir = (posicion_fir + 1) % N_COEFICIENTES_DECIMACION;
+    if (++c.posicion == N_COEFICIENTES_DECIMACION) c.posicion = 0;
     return filtrado;
 }
 
-static float quitar_dc_normalizar(float v)
+static float quitar_dc_normalizar(EstadoCanal& c, float v)
 {
-    if (!dc_listo) {
-        v_anterior = v;
-        y_anterior = 0.0f;
-        dc_listo = true;
+    if (!c.dc_listo) {
+        c.v_anterior = v;
+        c.y_anterior = 0.0f;
+        c.dc_listo = true;
     }
-    const float y = v - v_anterior + polo_dc * y_anterior;
-    v_anterior = v;
-    y_anterior = y;
-    const float normalizado = y / 1200.0f;
+    const float y = v - c.v_anterior + polo_dc * c.y_anterior;
+    c.v_anterior = v;
+    c.y_anterior = y;
+    const float normalizado = y * (1.0f / 1200.0f);
     if (normalizado < -1.0f) {
-        ++saturaciones;
+        ++c.saturaciones;
         return -1.0f;
     }
     if (normalizado > limite_superior) {
-        ++saturaciones;
+        ++c.saturaciones;
         return limite_superior;
     }
     return normalizado;
 }
 
-uint32_t entrada_adc_leer_bloque(float* x)
+uint32_t entrada_adc_leer_bloque(float* x, float* s)
 {
-    size_t crudas = 0, salidas = 0;
-    uint32_t procesamiento_us = 0;
+    size_t pares = 0, salidas = 0;
     uint32_t calibracion_us = 0, filtrado_us = 0;
-    while (crudas < CRUDAS_BLOQUE) {
+    while (pares < PARES_BLOQUE) {
         if (bytes_lectura - posicion_lectura < SOC_ADC_DIGI_RESULT_BYTES) completar_lectura();
         const int64_t inicio = esp_timer_get_time();
-        size_t validas = 0;
-        while (posicion_lectura + SOC_ADC_DIGI_RESULT_BYTES <= bytes_lectura && crudas < CRUDAS_BLOQUE) {
+        size_t validos = 0;
+        while (posicion_lectura + SOC_ADC_DIGI_RESULT_BYTES <= bytes_lectura && pares < PARES_BLOQUE) {
             adc_digi_output_data_t dato;
             memcpy(&dato, lectura + posicion_lectura, sizeof(dato));
             posicion_lectura += SOC_ADC_DIGI_RESULT_BYTES;
-            if (dato.type1.channel != ADC_CHANNEL_0) continue;
-            const uint16_t crudo = dato.type1.data;
-            int mv = 0;
-            ESP_ERROR_CHECK(adc_cali_raw_to_voltage(calibracion, crudo, &mv));
-            if (crudas_ventana == 0 || mv < ventana.mv_min) ventana.mv_min = mv;
-            if (crudas_ventana == 0 || mv > ventana.mv_max) ventana.mv_max = mv;
-            if (crudo < ventana.crudo_min) ventana.crudo_min = crudo;
-            if (crudo > ventana.crudo_max) ventana.crudo_max = crudo;
-            ++crudas_ventana;
-            ++crudas;
-            voltajes[validas++] = static_cast<float>(mv);
+            if (dato.type1.channel == ADC_CHANNEL_0) {
+                if (x_pendiente) ++desalineaciones;  // Descarta la x anterior.
+                mv_x_pendiente = calibrar(canal_x, dato.type1.data);
+                x_pendiente = true;
+            } else if (dato.type1.channel == ADC_CHANNEL_3) {
+                const float mv_s = calibrar(canal_s, dato.type1.data);
+                if (!x_pendiente) {
+                    ++desalineaciones;
+                    continue;
+                }
+                voltajes[validos][0] = mv_x_pendiente;
+                voltajes[validos++][1] = mv_s;
+                x_pendiente = false;
+                ++pares;
+            }
         }
         const int64_t fin_calibracion = esp_timer_get_time();
-        for (size_t j = 0; j < validas; ++j) {
-            const float v = decimar(voltajes[j]);
-            // Misma fase que filtrar(x)[::3]: entradas 0, 3, 6, ...
-            if (fase == 0) {
-                x[salidas++] = quitar_dc_normalizar(v);
-                ++salidas_ventana;
+        for (size_t j = 0; j < validos; ++j) {
+            const float mv_s = voltajes[j][1];
+            if (!s_anterior_lista) {
+                s_anterior = mv_s;
+                s_anterior_lista = true;
             }
-            fase = (fase + 1) % FACTOR_DECIMACION;
+            // s se convierte 20.83 us después de x: promediar s[n-1] y s[n]
+            // la atrasa media muestra de 24 kHz y alinea su instante con x.
+            // Queda una ganancia cos(pi*f/24000): ~-0.04 dB a 700 Hz y
+            // ~-0.7 dB a 3 kHz. La x se conserva sin esta compensación.
+            const float s_alineada = 0.5f * (s_anterior + mv_s);
+            s_anterior = mv_s;
+            const float vx = decimar(canal_x, voltajes[j][0]);
+            const float vs = decimar(canal_s, s_alineada);
+            if (canal_x.fase == 0) {
+                x[salidas] = quitar_dc_normalizar(canal_x, vx);
+                s[salidas++] = quitar_dc_normalizar(canal_s, vs);
+                ++canal_x.salidas_ventana;
+                ++canal_s.salidas_ventana;
+            }
+            if (++canal_x.fase == FACTOR_DECIMACION) canal_x.fase = 0;
+            if (++canal_s.fase == FACTOR_DECIMACION) canal_s.fase = 0;
         }
         const int64_t fin_filtrado = esp_timer_get_time();
         calibracion_us += static_cast<uint32_t>(fin_calibracion - inicio);
         filtrado_us += static_cast<uint32_t>(fin_filtrado - fin_calibracion);
-        procesamiento_us += static_cast<uint32_t>(fin_filtrado - inicio);
     }
-    // Se consumen también las dos entradas posteriores a la salida 512: cada
-    // bloque contiene exactamente 1536 entradas y mantiene la fase global.
+    const uint32_t procesamiento_us = calibracion_us + filtrado_us;
     if (procesamiento_us > ventana.procesamiento_max_us) ventana.procesamiento_max_us = procesamiento_us;
     if (calibracion_us > ventana.calibracion_max_us) ventana.calibracion_max_us = calibracion_us;
     if (filtrado_us > ventana.filtrado_max_us) ventana.filtrado_max_us = filtrado_us;
@@ -205,8 +278,21 @@ ContadoresAdc entrada_adc_contadores()
     portENTER_CRITICAL(&cerrojo_pool);
     c.desbordes_pool = desbordes_pool;
     portEXIT_CRITICAL(&cerrojo_pool);
-    c.saturaciones = saturaciones;
+    c.desalineaciones = desalineaciones;
+    c.saturaciones = canal_x.saturaciones + canal_s.saturaciones;
     return c;
+}
+
+static ResumenCanalAdc cerrar_ventana(EstadoCanal& c, double segundos)
+{
+    ResumenCanalAdc resumen = c.ventana;
+    if (segundos > 0.0) {
+        resumen.frecuencia_adc = c.crudas_ventana / segundos;
+        resumen.frecuencia_salida = c.salidas_ventana / segundos;
+    }
+    c.ventana = ResumenCanalAdc{};
+    c.crudas_ventana = c.salidas_ventana = 0;
+    return resumen;
 }
 
 ResumenAdc entrada_adc_resumen()
@@ -214,13 +300,10 @@ ResumenAdc entrada_adc_resumen()
     const int64_t ahora = esp_timer_get_time();
     const double segundos = static_cast<double>(ahora - inicio_ventana_us) / 1000000.0;
     ResumenAdc resumen = ventana;
-    if (segundos > 0.0) {
-        resumen.frecuencia_adc = crudas_ventana / segundos;
-        resumen.frecuencia_salida = salidas_ventana / segundos;
-    }
+    resumen.x = cerrar_ventana(canal_x, segundos);
+    resumen.s = cerrar_ventana(canal_s, segundos);
     resumen.acumulados = entrada_adc_contadores();
     ventana = ResumenAdc{};
-    crudas_ventana = salidas_ventana = 0;
     inicio_ventana_us = ahora;
     return resumen;
 }
