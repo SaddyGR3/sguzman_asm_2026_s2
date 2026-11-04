@@ -17,7 +17,7 @@
 #include "protocolo.h"
 #include "entrada_adc.h"
 
-// Luis cambia esta constante para probar la entrada por cable en GPIO36.
+// Entrada estéreo por cable: GPIO36 = x, GPIO39 = referencia s.
 enum class Fuente { GENERADOR, ADC };
 constexpr Fuente FUENTE_ENTRADA = Fuente::ADC;
 
@@ -125,7 +125,8 @@ static void imprimir_linea_diag(const ResultadoDiagnostico& r, const ResumenAdc*
         printf(" | pico -- | contraste --");
     }
     if (r.parcial || r.calentamiento) printf(" | calentando");
-    if (adc != nullptr) printf(" | ADC %d-%d mV", adc->mv_min, adc->mv_max);
+    if (adc != nullptr) printf(" | ADC x %d-%d | s %d-%d mV",
+                               adc->x.mv_min, adc->x.mv_max, adc->s.mv_min, adc->s.mv_max);
     if (desbordes || overruns || saturaciones) {
         printf(" | ALERTA desbordes %lu overruns %lu saturaciones %lu",
                (unsigned long)desbordes, (unsigned long)overruns, (unsigned long)saturaciones);
@@ -402,10 +403,8 @@ extern "C" void app_main(void)
     // Cabeceras del primer INPUT y del primer INPUT_REF (la cabecera no depende de los datos).
     paquete_input(0, FLAG_REINICIO, 0);
     imprimir_cabecera("INPUT");
-    if (FUENTE_ENTRADA == Fuente::GENERADOR) {
-        paquete_ref(0, FLAG_REINICIO, 0);
-        imprimir_cabecera("INPUT_REF");
-    }
+    paquete_ref(0, FLAG_REINICIO, 0);
+    imprimir_cabecera("INPUT_REF");
 
     // UART1 -> nodo 2 y UART2 -> nodo 3. El anillo de TX del driver es NOSPLIT con ítem
     // máximo ALIGN4(tamaño/2) - 8: con 8 KB el tope es 4088 B y uart_get_tx_buffer_free_size
@@ -472,7 +471,8 @@ extern "C" void app_main(void)
         ESP_ERROR_CHECK(esp_timer_start_periodic(temporizador, PERIODO_US));
     } else {
         printf("Fuente ADC: DAC local desactivado por uso compartido de I2S0; "
-               "GPIO32 sin función; escuchar en nodo 2. UART2 solo DIAG, sin INPUT_REF.\n");
+               "GPIO32 sin función; escuchar en nodo 2. GPIO36=x, GPIO39=s, "
+               "48000 Hz total. UART2 envía INPUT_REF + DIAG.\n");
         entrada_adc_iniciar();
     }
 
@@ -496,6 +496,7 @@ extern "C" void app_main(void)
     uint32_t v_emp_max = 0;
     uint32_t v_analisis_max = 0;
     uint32_t desbordes_previos = 0, overruns_previos = 0, saturaciones_previas = 0;
+    ContadoresAdc adc_bloque_anterior;
     size_t cable_input = 0, cable_ref = 0, cable_diag = 0, cable_diag3 = 0;
 
     int64_t inicio_anterior = -1;   // la primera iteración no tiene periodo
@@ -530,14 +531,16 @@ extern "C" void app_main(void)
         const uint64_t muestra_inicial = first_sample;
 
         uint32_t procesamiento_adc_us = 0;
+        ContadoresAdc adc_bloque;
         if (FUENTE_ENTRADA == Fuente::GENERADOR) {
             // Generadores continuos: la fase pasa de un bloque al siguiente.
             gen_s.generar(s_util, HOP);
             gen_i.generar(i_interf, HOP);
             for (int k = 0; k < HOP; ++k) x[k] = s_util[k] + i_interf[k];
         } else {
-            // Bloquea hasta adquirir 1536 muestras válidas y obtener 512 salidas.
-            procesamiento_adc_us = entrada_adc_leer_bloque(x);
+            // Completa 1536 pares y 512 salidas de x y s del mismo intervalo.
+            procesamiento_adc_us = entrada_adc_leer_bloque(x, s_util);
+            adc_bloque = entrada_adc_contadores();
         }
         const int64_t fin_gen = esp_timer_get_time();
         const uint32_t duracion = FUENTE_ENTRADA == Fuente::GENERADOR
@@ -550,6 +553,14 @@ extern "C" void app_main(void)
         uint16_t flags_analisis = 0;
         if (diagnostico.parcial) flags_analisis |= FLAG_VENTANA_PARCIAL;
         if (diagnostico.calentamiento) flags_analisis |= FLAG_CALENTAMIENTO;
+        if (FUENTE_ENTRADA == Fuente::ADC) {
+            if (adc_bloque.desbordes_pool != adc_bloque_anterior.desbordes_pool ||
+                adc_bloque.desalineaciones != adc_bloque_anterior.desalineaciones) {
+                flags_analisis |= FLAG_DISCONTINUIDAD;
+            }
+            // Eventos posteriores a esta lectura se señalan en el siguiente bloque.
+            adc_bloque_anterior = adc_bloque;
+        }
         const int64_t inicio_empaquetado = esp_timer_get_time();
 
         first_sample += HOP;
@@ -560,10 +571,8 @@ extern "C" void app_main(void)
         float energia = 0.0f;
         for (int k = 0; k < HOP; ++k) {
             energia += x[k] * x[k];
-            if (FUENTE_ENTRADA == Fuente::GENERADOR) {
-                xs[2 * k] = x[k];
-                xs[2 * k + 1] = s_util[k];
-            }
+            xs[2 * k] = x[k];
+            xs[2 * k + 1] = s_util[k];
         }
 
         Diag d;
@@ -582,9 +591,8 @@ extern "C" void app_main(void)
         d.tiempo_us = diagnostico.tiempo_us;
         d.overruns = overruns;
         if (FUENTE_ENTRADA == Fuente::ADC) {
-            const ContadoresAdc adc = entrada_adc_contadores();
-            d.perdidas = adc.desbordes_pool;
-            d.saturaciones = adc.saturaciones;
+            d.perdidas = adc_bloque.desbordes_pool;
+            d.saturaciones = adc_bloque.saturaciones;
         }
         d.inicio_ventana = diagnostico.inicio_ventana;
         armar_diag(d, diag64);
@@ -595,10 +603,8 @@ extern "C" void app_main(void)
         cable_diag = paquete_diag(NODO_2, seq_n2++, muestra_inicial, flags_analisis, sal_diag2);
 
         // Enlace N1 -> N3: INPUT_REF y DIAG.
-        if (FUENTE_ENTRADA == Fuente::GENERADOR) {
-            cable_ref = paquete_ref(seq_n3++, flags_analisis | (primer_n3 ? FLAG_REINICIO : 0), muestra_inicial);
-            primer_n3 = false;
-        }
+        cable_ref = paquete_ref(seq_n3++, flags_analisis | (primer_n3 ? FLAG_REINICIO : 0), muestra_inicial);
+        primer_n3 = false;
         cable_diag3 = paquete_diag(NODO_3, seq_n3++, muestra_inicial, flags_analisis, sal_diag3);
 
         const uint32_t empaquetado = static_cast<uint32_t>(esp_timer_get_time() - inicio_empaquetado);
@@ -606,8 +612,7 @@ extern "C" void app_main(void)
 
         // Envío por UART: datos y después DIAG, un bloque por enlace.
         enviar_bloque(enlace_n2, sal_input, cable_input, sal_diag2, cable_diag);
-        enviar_bloque(enlace_n3, FUENTE_ENTRADA == Fuente::GENERADOR ? sal_ref : nullptr,
-                     cable_ref, sal_diag3, cable_diag3);
+        enviar_bloque(enlace_n3, sal_ref, cable_ref, sal_diag3, cable_diag3);
 
         // El DAC va después de ambos envíos y no espera espacio en el DMA.
         if (FUENTE_ENTRADA == Fuente::GENERADOR && SALIDA_DAC) escribir_dac();
@@ -652,12 +657,18 @@ extern "C" void app_main(void)
                 if (FUENTE_ENTRADA == Fuente::ADC) {
                     const ResumenAdc adc = entrada_adc_resumen();
                     contadores_resumen = adc.acumulados;
-                    printf("ADC crudo min %u max %u | mV min %d max %d | frecuencia ADC %.1f Hz "
-                           "salida %.1f Hz | desbordes_pool %lu | saturaciones %lu | "
+                    printf("ADC x crudo %u-%u mV %d-%d | s crudo %u-%u mV %d-%d | "
+                           "frecuencia ADC x %.1f s %.1f Hz | salida x %.1f s %.1f Hz | "
+                           "desalineaciones %lu | desbordes_pool %lu | saturaciones %lu | "
                            "procesamiento max %lu us (sin espera) | calibración max %lu us | "
                            "FIR+pasa altos+normalización max %lu us\n",
-                           static_cast<unsigned>(adc.crudo_min), static_cast<unsigned>(adc.crudo_max),
-                           adc.mv_min, adc.mv_max, adc.frecuencia_adc, adc.frecuencia_salida,
+                           static_cast<unsigned>(adc.x.crudo_min), static_cast<unsigned>(adc.x.crudo_max),
+                           adc.x.mv_min, adc.x.mv_max,
+                           static_cast<unsigned>(adc.s.crudo_min), static_cast<unsigned>(adc.s.crudo_max),
+                           adc.s.mv_min, adc.s.mv_max,
+                           adc.x.frecuencia_adc, adc.s.frecuencia_adc,
+                           adc.x.frecuencia_salida, adc.s.frecuencia_salida,
+                           (unsigned long)adc.acumulados.desalineaciones,
                            (unsigned long)adc.acumulados.desbordes_pool,
                            (unsigned long)adc.acumulados.saturaciones,
                            (unsigned long)adc.procesamiento_max_us,
