@@ -13,6 +13,11 @@
 #include "dsps_fft2r.h"
 #include "generador.h"
 #include "protocolo.h"
+#include "entrada_adc.h"
+
+// Luis cambia esta constante para probar la entrada por cable en GPIO36.
+enum class Fuente { GENERADOR, ADC };
+constexpr Fuente FUENTE_ENTRADA = Fuente::GENERADOR;
 
 // true: lazo de prueba con puentes GPIO18->GPIO19 y GPIO17->GPIO16 en la misma placa.
 // false: para la PC, no se copia al anillo, no se lee RX y no se compara.
@@ -221,7 +226,7 @@ static void enviar_bloque(Enlace& e, const uint8_t* datos, size_t l1,
     // El margen de 64 B cubre la descripción (20 B), los encabezados (8 B por trozo) y el
     // relleno a múltiplo de 4 de las dos escrituras, que la función no descuenta del todo.
     if (libre >= l1 + l2 + MARGEN_TX) {
-        uart_write_bytes(e.puerto, datos, l1);
+        if (l1 > 0) uart_write_bytes(e.puerto, datos, l1);
         uart_write_bytes(e.puerto, diag, l2);
         const int64_t t1 = esp_timer_get_time();
         const uint32_t escritura = static_cast<uint32_t>(t1 - t0);
@@ -345,8 +350,10 @@ extern "C" void app_main(void)
     // Cabeceras del primer INPUT y del primer INPUT_REF (la cabecera no depende de los datos).
     paquete_input(0, FLAG_REINICIO, 0);
     imprimir_cabecera("INPUT");
-    paquete_ref(0, FLAG_REINICIO, 0);
-    imprimir_cabecera("INPUT_REF");
+    if (FUENTE_ENTRADA == Fuente::GENERADOR) {
+        paquete_ref(0, FLAG_REINICIO, 0);
+        imprimir_cabecera("INPUT_REF");
+    }
 
     // UART1 -> nodo 2 y UART2 -> nodo 3. El anillo de TX del driver es NOSPLIT con ítem
     // máximo ALIGN4(tamaño/2) - 8: con 8 KB el tope es 4088 B y uart_get_tx_buffer_free_size
@@ -360,10 +367,12 @@ extern "C" void app_main(void)
     printf("UART1 baud real %lu | UART2 baud real %lu\n", (unsigned long)baud1, (unsigned long)baud2);
 
     // Verificación espectral, una sola vez al arrancar.
-    if (dsps_fft2r_init_fc32(NULL, N_FFT) != ESP_OK) {
-        printf("Error al iniciar la FFT de ESP-DSP\n");
-    } else {
-        analizar(gen_s, gen_i);
+    if (FUENTE_ENTRADA == Fuente::GENERADOR) {
+        if (dsps_fft2r_init_fc32(NULL, N_FFT) != ESP_OK) {
+            printf("Error al iniciar la FFT de ESP-DSP\n");
+        } else {
+            analizar(gen_s, gen_i);
+        }
     }
 
     // Vacía RX para que el ruido del arranque no cuente en el lazo.
@@ -385,28 +394,35 @@ extern "C" void app_main(void)
         enlace_n3.enviados += 1;
     }
 
-    if (SALIDA_DAC) iniciar_dac();
+    int boton_dac_anterior = 1;
+    if (FUENTE_ENTRADA == Fuente::GENERADOR) {
+        if (SALIDA_DAC) iniciar_dac();
 
-    gpio_config_t boton_dac_cfg = {};
-    boton_dac_cfg.pin_bit_mask = 1ULL << PIN_BOTON_DAC;
-    boton_dac_cfg.mode = GPIO_MODE_INPUT;
-    boton_dac_cfg.pull_up_en = GPIO_PULLUP_ENABLE;
-    boton_dac_cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    boton_dac_cfg.intr_type = GPIO_INTR_DISABLE;
-    ESP_ERROR_CHECK(gpio_config(&boton_dac_cfg));
-    int boton_dac_anterior = gpio_get_level(PIN_BOTON_DAC);
-    printf("DAC: señal %s (%c)\n", dac_senal_limpia ? "limpia" : "contaminada",
-           dac_senal_limpia ? 's' : 'x');
+        gpio_config_t boton_dac_cfg = {};
+        boton_dac_cfg.pin_bit_mask = 1ULL << PIN_BOTON_DAC;
+        boton_dac_cfg.mode = GPIO_MODE_INPUT;
+        boton_dac_cfg.pull_up_en = GPIO_PULLUP_ENABLE;
+        boton_dac_cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
+        boton_dac_cfg.intr_type = GPIO_INTR_DISABLE;
+        ESP_ERROR_CHECK(gpio_config(&boton_dac_cfg));
+        boton_dac_anterior = gpio_get_level(PIN_BOTON_DAC);
+        printf("DAC: señal %s (%c)\n", dac_senal_limpia ? "limpia" : "contaminada",
+               dac_senal_limpia ? 's' : 'x');
 
-    // Temporizador periódico: cada 64 ms avisa a esta tarea que toca un bloque.
-    tarea_principal = xTaskGetCurrentTaskHandle();
-    esp_timer_create_args_t args = {};
-    args.callback = aviso_bloque;
-    args.dispatch_method = ESP_TIMER_TASK;
-    args.name = "bloque";
-    esp_timer_handle_t temporizador = nullptr;
-    ESP_ERROR_CHECK(esp_timer_create(&args, &temporizador));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(temporizador, PERIODO_US));
+        // Solo el generador usa el temporizador de 64 ms.
+        tarea_principal = xTaskGetCurrentTaskHandle();
+        esp_timer_create_args_t args = {};
+        args.callback = aviso_bloque;
+        args.dispatch_method = ESP_TIMER_TASK;
+        args.name = "bloque";
+        esp_timer_handle_t temporizador = nullptr;
+        ESP_ERROR_CHECK(esp_timer_create(&args, &temporizador));
+        ESP_ERROR_CHECK(esp_timer_start_periodic(temporizador, PERIODO_US));
+    } else {
+        printf("Fuente ADC: DAC local desactivado por uso compartido de I2S0; "
+               "GPIO32 sin función; escuchar en nodo 2. UART2 solo DIAG, sin INPUT_REF.\n");
+        entrada_adc_iniciar();
+    }
 
     uint64_t first_sample = 0;   // índice de la primera muestra del siguiente bloque
     uint32_t overruns = 0;       // bloques que se retrasaron (acumulado)
@@ -433,16 +449,18 @@ extern "C" void app_main(void)
     for (;;) {
         // Espera el aviso. Si n > 1, llegaron avisos mientras el bloque anterior
         // seguía en proceso: cada uno de más es un overrun.
-        const uint32_t n = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        if (n > 1) overruns += n - 1;
+        if (FUENTE_ENTRADA == Fuente::GENERADOR) {
+            const uint32_t n = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+            if (n > 1) overruns += n - 1;
 
-        const int boton_dac_actual = gpio_get_level(PIN_BOTON_DAC);
-        if (boton_dac_anterior == 1 && boton_dac_actual == 0) {
-            dac_senal_limpia = !dac_senal_limpia;
-            printf("DAC: señal %s (%c)\n", dac_senal_limpia ? "limpia" : "contaminada",
-                   dac_senal_limpia ? 's' : 'x');
+            const int boton_dac_actual = gpio_get_level(PIN_BOTON_DAC);
+            if (boton_dac_anterior == 1 && boton_dac_actual == 0) {
+                dac_senal_limpia = !dac_senal_limpia;
+                printf("DAC: señal %s (%c)\n", dac_senal_limpia ? "limpia" : "contaminada",
+                       dac_senal_limpia ? 's' : 'x');
+            }
+            boton_dac_anterior = boton_dac_actual;
         }
-        boton_dac_anterior = boton_dac_actual;
 
         const int64_t inicio = esp_timer_get_time();
         if (inicio_anterior >= 0) {
@@ -457,12 +475,19 @@ extern "C" void app_main(void)
         // Todos los paquetes del bloque llevan el índice de su primera muestra.
         const uint64_t muestra_inicial = first_sample;
 
-        // Generadores continuos: la fase pasa de un bloque al siguiente.
-        gen_s.generar(s_util, HOP);
-        gen_i.generar(i_interf, HOP);
-        for (int k = 0; k < HOP; ++k) x[k] = s_util[k] + i_interf[k];
+        uint32_t procesamiento_adc_us = 0;
+        if (FUENTE_ENTRADA == Fuente::GENERADOR) {
+            // Generadores continuos: la fase pasa de un bloque al siguiente.
+            gen_s.generar(s_util, HOP);
+            gen_i.generar(i_interf, HOP);
+            for (int k = 0; k < HOP; ++k) x[k] = s_util[k] + i_interf[k];
+        } else {
+            // Bloquea hasta adquirir 1536 muestras válidas y obtener 512 salidas.
+            procesamiento_adc_us = entrada_adc_leer_bloque(x);
+        }
         const int64_t fin_gen = esp_timer_get_time();
-        const uint32_t duracion = static_cast<uint32_t>(fin_gen - inicio);
+        const uint32_t duracion = FUENTE_ENTRADA == Fuente::GENERADOR
+            ? static_cast<uint32_t>(fin_gen - inicio) : procesamiento_adc_us;
         if (duracion > v_gen_max) v_gen_max = duracion;
 
         first_sample += HOP;
@@ -473,8 +498,10 @@ extern "C" void app_main(void)
         float energia = 0.0f;
         for (int k = 0; k < HOP; ++k) {
             energia += x[k] * x[k];
-            xs[2 * k] = x[k];
-            xs[2 * k + 1] = s_util[k];
+            if (FUENTE_ENTRADA == Fuente::GENERADOR) {
+                xs[2 * k] = x[k];
+                xs[2 * k + 1] = s_util[k];
+            }
         }
 
         Diag d;
@@ -485,6 +512,11 @@ extern "C" void app_main(void)
         d.energia = energia;
         d.tiempo_us = duracion;
         d.overruns = overruns;
+        if (FUENTE_ENTRADA == Fuente::ADC) {
+            const ContadoresAdc adc = entrada_adc_contadores();
+            d.perdidas = adc.desbordes_pool;
+            d.saturaciones = adc.saturaciones;
+        }
         d.inicio_ventana = muestra_inicial;
         armar_diag(d, diag64);
 
@@ -494,8 +526,10 @@ extern "C" void app_main(void)
         cable_diag = paquete_diag(NODO_2, seq_n2++, muestra_inicial, sal_diag2);
 
         // Enlace N1 -> N3: INPUT_REF y DIAG.
-        cable_ref = paquete_ref(seq_n3++, primer_n3 ? FLAG_REINICIO : 0, muestra_inicial);
-        primer_n3 = false;
+        if (FUENTE_ENTRADA == Fuente::GENERADOR) {
+            cable_ref = paquete_ref(seq_n3++, primer_n3 ? FLAG_REINICIO : 0, muestra_inicial);
+            primer_n3 = false;
+        }
         cable_diag3 = paquete_diag(NODO_3, seq_n3++, muestra_inicial, sal_diag3);
 
         const uint32_t empaquetado = static_cast<uint32_t>(esp_timer_get_time() - fin_gen);
@@ -503,10 +537,11 @@ extern "C" void app_main(void)
 
         // Envío por UART: datos y después DIAG, un bloque por enlace.
         enviar_bloque(enlace_n2, sal_input, cable_input, sal_diag2, cable_diag);
-        enviar_bloque(enlace_n3, sal_ref, cable_ref, sal_diag3, cable_diag3);
+        enviar_bloque(enlace_n3, FUENTE_ENTRADA == Fuente::GENERADOR ? sal_ref : nullptr,
+                     cable_ref, sal_diag3, cable_diag3);
 
         // El DAC va después de ambos envíos y no espera espacio en el DMA.
-        if (SALIDA_DAC) escribir_dac();
+        if (FUENTE_ENTRADA == Fuente::GENERADOR && SALIDA_DAC) escribir_dac();
 
         // Lazo de prueba: lee RX al final, así el envío (con plazo) va primero.
         if (PRUEBA_LAZO) {
@@ -530,6 +565,17 @@ extern "C" void app_main(void)
                    (unsigned long)enlace_n2.desbordes_tx,
                    (unsigned long long)enlace_n3.enviados, (unsigned long)enlace_n3.esc_max_us,
                    (unsigned long)enlace_n3.desbordes_tx);
+            if (FUENTE_ENTRADA == Fuente::ADC) {
+                const ResumenAdc adc = entrada_adc_resumen();
+                printf("ADC crudo min %u max %u | mV min %d max %d | frecuencia ADC %.1f Hz "
+                       "salida %.1f Hz | desbordes_pool %lu | saturaciones %lu | "
+                       "procesamiento max %lu us (sin espera)\n",
+                       static_cast<unsigned>(adc.crudo_min), static_cast<unsigned>(adc.crudo_max),
+                       adc.mv_min, adc.mv_max, adc.frecuencia_adc, adc.frecuencia_salida,
+                       (unsigned long)adc.acumulados.desbordes_pool,
+                       (unsigned long)adc.acumulados.saturaciones,
+                       (unsigned long)adc.procesamiento_max_us);
+            }
             if (PRUEBA_LAZO) {
                 printf("lazo N2: rx %llu dif %lu pend %lld | N3: rx %llu dif %lu pend %lld\n",
                        (unsigned long long)enlace_n2.recibidos, (unsigned long)enlace_n2.diferencias,
