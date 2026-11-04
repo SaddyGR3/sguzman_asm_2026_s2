@@ -52,6 +52,7 @@ su monitor serie, no es el del YP-05.
 | `--segundos` | duración de la captura en vivo (60 por defecto) |
 | `--baudios` | 921600 por defecto |
 | `--guardar` | ruta donde guardar los bytes crudos recibidos; solo en vivo |
+| `--solo-protocolo` | valida `n2` o `n3` sin las expectativas de señal y DIAG del generador |
 
 Desde la raíz del repositorio:
 
@@ -61,7 +62,25 @@ python proyecto1/herramientas_pc/receptor_nodo1.py --archivo proyecto1/herramien
 python proyecto1/herramientas_pc/receptor_nodo1.py --puerto /dev/ttyUSB1 --enlace n2out --segundos 60
 ```
 
-## Capturas
+## Solo protocolo (ADC)
+
+Para validar el nodo 1 en modo ADC con P1, usa `--solo-protocolo`: conserva las
+comprobaciones de protocolo, secuencia, índices y valores finitos; exige 0x0001
+en INPUT_REF y acepta las demás banderas, contándolas por tipo. Omite las
+expectativas del generador sobre DIAG, energía, tonos y SNR. Al finalizar muestra
+paquetes/s, banderas y mínimo, máximo y RMS de x y s. En vivo las tasas usan el
+tiempo real de captura; con `--archivo` se infiere la duración de `first_sample`
+a 8000 Hz. Sin la opción se conserva la validación original.
+
+```sh
+python3 proyecto1/herramientas_pc/receptor_nodo1.py --puerto /dev/ttyUSB1 --enlace n3 --segundos 60 --solo-protocolo
+```
+
+Con P1 sonando se esperan ~15.6 INPUT_REF/s y ~15.6 DIAG/s, cero errores y 0x0001
+en todos los INPUT_REF. Como comprobación orientativa, el RMS de s debería ser
+aproximadamente la mitad del de x; esa relación no condiciona el veredicto.
+
+## Capturas guardadas
 
 `capturas/captura_n2.bin` y `capturas/captura_n3.bin` son capturas reales de 60 s del 28 oct. La de N3 incluye un reinicio con EN a los 30 s. Las dos dieron `RESULTADO: OK` en vivo y reprocesadas con `--archivo`. Sirven como evidencia y para los diagramas de validación sin montar la placa.
 
