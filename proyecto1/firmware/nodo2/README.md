@@ -1,4 +1,4 @@
-# Nodo 2: receptor UART, grabación, filtros y salida DAC
+# Nodos 2 y 3: receptor UART, grabación, filtros y salida DAC
 
 Recibe continuamente INPUT y DIAG del micrófono del nodo 1 por UART1 a
 921600 baudios, 8N1, con 16 KiB de búfer y lecturas sin espera de hasta 1024 B.
@@ -17,7 +17,7 @@ siendo en tiempo real, bloque a bloque, durante la reproducción.
 | ESPERANDO | DAC en silencio (128). Mantiene un pre-disparo circular de 4096 muestras (0.512 s), calcula la RMS por INPUT y aprende el ruido de fondo. |
 | GRABANDO | Guarda audio hasta 16 bloques seguidos bajo el umbral (1.024 s), o hasta llenar la memoria. El DAC permanece en silencio. |
 | LISTA | Conserva la grabación y espera el botón o comando. Mantiene pre-disparo y detección; una actividad nueva reemplaza la grabación anterior. |
-| REPRODUCIENDO | Decodifica bloques de 512, actualiza FIR y notch y entrega el modo seleccionado al DAC. Sigue leyendo y validando INPUT y DIAG, sin grabar ni disparar. Al drenar el audio y establecer silencio vuelve a LISTA. |
+| REPRODUCIENDO | Decodifica bloques de 512, actualiza FIR, notch y la ruta espectral y entrega el modo seleccionado al DAC. Sigue leyendo y validando INPUT y DIAG, sin grabar ni disparar. Al drenar el audio y establecer silencio vuelve a LISTA. |
 
 El disparo requiere dos bloques consecutivos con RMS mayor que
 `umbral × max(ruido de fondo, 0.00001)`. El factor inicial es **3.0**
@@ -44,7 +44,7 @@ La grabación usa **G.711 μ-law de 8 bits**, 8000 bytes/s. Se recortan las
 muestras a [-1, 1] y las no finitas se guardan como cero. La reproducción
 decodifica a float antes de filtrar; la salida física ya es un DAC de 8 bits.
 El pre-disparo es estático y la grabación se reserva una sola vez al arrancar
-con `heap_caps_malloc`, después de iniciar los controladores y la tarea DAC.
+con `heap_caps_malloc`, después de iniciar ESP-DSP, los controladores y la tarea DAC.
 Se imprimen RAM interna libre, bloque libre más grande y duración obtenida.
 La reserva considera ambos límites, deja al menos **48 KiB** libres y se reduce
 en bloques completos si el asignador no puede satisfacerla.
@@ -78,7 +78,8 @@ una reproducción si el emisor se desconecta.
 ## Filtro
 
 Conectar un botón entre **GPIO32 y GND**, con pull-up interno. Arranca en
-`SIN FILTRO`; cada flanco de 1 a 0 avanza `SIN FILTRO → FIR → NOTCH → SIN FILTRO`.
+`SIN FILTRO`; cada flanco de 1 a 0 avanza
+`SIN FILTRO → FIR → NOTCH → ESPECTRAL → SIN FILTRO`.
 Este botón mantiene la lectura una vez por INPUT válido, sin antirrebote;
 sin INPUT no se atiende y conviene pulsarlo por más de 64 ms.
 
@@ -87,12 +88,88 @@ sin INPUT no se atiende y conviene pulsarlo por más de 64 ms.
 | SIN FILTRO | Audio grabado sin filtrar, después de decodificar μ-law. |
 | FIR | Kaiser de 37 coeficientes. Inicialmente pasa bajas con corte de 1500 Hz; retardo de 18 muestras (2.25 ms). |
 | NOTCH | Inicialmente rechaza 2150 Hz con Q = 8.5. |
+| ESPECTRAL | FFT → ganancia 1 → IFFT con solape y suma; reproduce la entrada con 512 muestras (64 ms) de retardo adicional. En esta base todavía no reduce ruido. |
 
 Los coeficientes se calculan en double y se guardan en float. Ambos filtros
 procesan todas las muestras reproducidas y mantienen estado entre bloques y
 cambios de modo. Al empezar cada reproducción se reinician sus estados,
 conservando los parámetros. Cambiar banda o notch reinicia solo ese filtro.
 El modo vigente elige la salida de cada bloque; no hay selección automática.
+
+## Ruta espectral (base)
+
+El paso **6b-1** implementa el nodo 3 en esta misma placa, en `src/espectral.*`.
+Reutiliza de `nodo1/src/espectro.cpp` la raíz de Hann periódica, la tabla y las
+llamadas FFT de ESP-DSP. Conserva la media y los valores complejos para poder
+reconstruir también la componente DC de la entrada. No necesita el cálculo de
+magnitudes ni el estimador de piso del nodo 1.
+
+Cada bloque decodificado alimenta **las dos rutas independientes**, aunque se
+escuche una sola: FIR y notch procesan todas las muestras, y el espectral recibe
+esas mismas muestras antes de que se seleccione la salida temporal. La ventana
+es **N = 1024**, el avance **H = 512** y la frecuencia de muestreo **8000 Hz**.
+El historial contiene el bloque anterior y el actual; después del análisis,
+la IFFT y la síntesis se suma la primera mitad con la cola anterior y se guarda
+la segunda mitad para el bloque siguiente.
+
+Se usa la misma ventana en análisis y síntesis:
+
+```text
+w[n] = sqrt(0.5 * (1 - cos(2*pi*n/N)))          (periódica: denominador N)
+w[n]^2 + w[n+H]^2 = Hann[n] + Hann[n+H] = 1   (0 <= n < H, H = N/2)
+```
+
+Por tanto, con ganancia 1 la suma con solape tiene **reconstrucción perfecta**
+en aritmética exacta; en float32 quedan errores de redondeo. ESP-DSP realiza
+una FFT directa sin normalizar. La inversa usa
+`IFFT(X) = conj(FFT(conj(X))) / N`, con reordenamiento de bits después de cada
+FFT y división por **1024 una sola vez**. No se aplica otra escala al solape.
+
+`modificar_espectro()` es el punto del futuro paso 6b-2: actualmente usa ganancia
+1 en todos los bins y repone `X[N-k] = conj(X[k])`. DC y Nyquist mantienen parte
+imaginaria cero. Aquí se incorporará después la ganancia adaptativa por bin;
+la resta espectral todavía está pendiente.
+
+El historial y la cola se limpian al iniciar **cada** reproducción. El primer
+bloque espectral corresponde a silencio; el segundo reconstruye el primer
+bloque grabado. El retardo algorítmico adicional es **H/fs = 64 ms**, aparte de
+las colas y DMA del DAC. Al agotar la grabación, el lazo de reproducción procesa
+un bloque extra de ceros por ambas rutas antes de marcar el último bloque del
+DAC. Así se recuperan las últimas 512 muestras del espectral. Este vaciado se
+hace en todos los modos: en SIN FILTRO añade silencio al final, y en FIR/NOTCH
+permite salir a su cola. No modifica el audio guardado ni el receptor.
+
+Se puede cambiar de modo entre bloques sin reiniciar filtros. Como las salidas
+tienen retardos distintos, el cambio puede producir un salto o clic; para
+comparar, elegir el modo antes de reproducir la misma grabación completa.
+
+**Memoria adicional de los búferes:**
+
+| Búfer | Bytes |
+| --- | ---: |
+| FFT compleja, 2 × 1024 float | 8192 |
+| Tabla FFT, 1024 float | 4096 |
+| Ventana, 1024 float | 4096 |
+| Historial, 1024 float | 4096 |
+| Cola de solape, 512 float | 2048 |
+| Salida espectral, 512 float | 2048 |
+| Total | **24 576 B (24 KiB)** |
+
+Además se agregan unos pocos contadores y la reserva interna de ESP-DSP para
+el reordenamiento de bits. Los búferes de audio son estáticos, sin arreglos
+grandes en la pila ni reservas por bloque. La biblioteca se inicia antes de
+reservar la grabación para conservar el margen existente de 48 KiB libres;
+la duración disponible puede reducirse. Revisar la capacidad impresa al arrancar.
+`src/idf_component.yml` declara ESP-DSP como en nodo 1, y `sdkconfig.esp32dev`
+habilita su implementación optimizada con longitud máxima 1024.
+
+**Costo y validación pendientes en placa:** cada bloque añade dos FFT de 1024
+puntos (10 240 mariposas en total), dos reordenamientos y recorridos lineales.
+No se ha medido su duración ni se ha compilado o ejecutado este paso. El monitor
+separa `proc temporal`, `proc espectral` y `proc total`; el **máximo total** debe
+quedar holgadamente por debajo de **64 000 us**, dejando tiempo para RX y consola.
+La medición incluye el bloque final de vaciado. La capacidad de grabación, los
+tiempos reales y la igualdad del audio deben comprobarse con el hardware.
 
 ## Comandos desde el monitor
 
@@ -102,8 +179,8 @@ se escribe, se pausa el resumen periódico.
 
 | Comando | Efecto |
 | --- | --- |
-| `estado` | Muestra modo, banda, notch y coeficientes vigentes. |
-| `modo sin`, `modo fir`, `modo notch` | Selecciona la salida. |
+| `estado` | Muestra modo, banda, notch, coeficientes y configuración espectral base. |
+| `modo sin`, `modo fir`, `modo notch`, `modo espectral` | Selecciona la salida. |
 | `banda <inf> <sup>` | Recalcula el FIR; admite 100 ≤ inf < sup ≤ 3000 Hz. |
 | `notch <f> <q>` | Recalcula el notch; admite 100–3000 Hz y Q de 0.5–20. |
 | `reproducir` | Igual que GPIO33; requiere LISTA. |
@@ -145,7 +222,13 @@ excepto los tiempos de procesamiento, calculados por intervalo.
 | sesiones | Primera sesión y cada cambio posterior; no es un error. |
 | DAC … B | Códigos de 8 bits aceptados por el controlador, incluido silencio continuo. |
 | desbordes_dac | Timeout de escritura de un segundo; se conserva y reintenta el resto. No cuenta la espera normal por espacio en la cola. |
-| proc prom / max … us | Decodificación, ambos filtros, conversión y encolado por bloque reproducido; excluye la espera DMA en la tarea DAC. 0/0 si no hubo bloques reproducidos. |
+| proc total prom / max … us | Decodificación, ambas rutas, selección, conversión y encolado por bloque reproducido; excluye la espera DMA en la tarea DAC. |
+| proc temporal prom / max … us | FIR y notch, con selección de la salida temporal, por bloque reproducido. |
+| proc espectral prom / max … us | Historial, ventanas, FFT, ganancia, IFFT y solape por bloque reproducido. |
+
+Los tres tiempos muestran 0/0 si no hubo bloques reproducidos en el intervalo.
+Se reinician también al comenzar otra reproducción y mientras se escribe en
+la consola; no representan el retardo algorítmico ni la espera del DAC.
 
 La primera secuencia establece la referencia sin inferir pérdidas anteriores.
 Se contempla el retorno de UINT32_MAX a cero; duplicados y secuencias anteriores
@@ -172,6 +255,25 @@ no suman pérdidas. `first_sample` no programa la reproducción.
    que la sesión nueva repite la calibración.
 8. Desconectar RX durante reproducción: el LED informa ausencia, pero la
    grabación sigue hasta terminar. Reconectar y comprobar recuperación de RX.
+
+### Prueba del paso 6b-1
+
+1. Tras compilar y cargar esta versión, revisar RAM y capacidad al arrancar,
+   calibrar en silencio y grabar P1 con el micrófono como en la prueba anterior.
+2. Elegir `modo sin`, ejecutar `reproducir` y esperar LISTA. Elegir
+   `modo espectral`, reproducir la misma grabación y esperar LISTA.
+   Deben sonar iguales, con el mismo volumen y sin zumbido periódico cada
+   64 ms; ESPECTRAL añade 64 ms de retardo al inicio y conserva el final.
+3. Repetir la reproducción espectral: no debe aparecer audio de la escucha
+   anterior al inicio. Verificar también el ciclo completo del botón GPIO32
+   y `estado`, que debe indicar ganancia 1, N = 1024 y H = 512.
+4. Durante una reproducción completa sin escribir comandos, comprobar
+   `proc temporal`, `proc espectral` y `proc total` en todos los modos.
+   Ambas rutas se calculan siempre y el máximo total debe ser mucho menor
+   que 64 000 us. Errores, `perdidos` y `desbordes_dac` deben mantenerse en 0.
+
+Esta prueba valida la reconstrucción. La atenuación del ruido corresponde al
+paso 6b-2, después de validar esta base en la placa.
 
 El ruido de sala y una señal presente durante la calibración inicial pueden
 alterar el disparo. En LISTA el fondo queda fijo; ajustar el umbral o ejecutar
