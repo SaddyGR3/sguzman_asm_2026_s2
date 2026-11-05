@@ -17,6 +17,8 @@ struct ConfiguracionFiltros {
 
 // Prepara los valores iniciales: banda 100-1200 Hz y notch 2150 Hz, Q 8.5.
 void filtros_iniciar();
+// Conserva los coeficientes y parámetros vigentes al iniciar otra escucha.
+void filtros_reiniciar_estados();
 const CoeficientesFiltros& filtros_coeficientes();
 const ConfiguracionFiltros& filtros_configuracion();
 // Recalcula solo el filtro indicado y reinicia únicamente su estado.

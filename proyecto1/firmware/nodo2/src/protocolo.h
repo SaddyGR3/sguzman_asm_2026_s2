@@ -6,12 +6,9 @@
 constexpr uint16_t PROTO_MAGIC = 0x5341;
 constexpr uint8_t PROTO_VERSION = 1;
 constexpr uint8_t TIPO_INPUT = 1;
-constexpr uint8_t TIPO_FIR_OUT = 3;
 constexpr uint8_t TIPO_DIAG = 4;
 constexpr uint8_t NODO_1 = 1;
 constexpr uint8_t NODO_2 = 2;
-constexpr uint8_t NODO_3 = 3;
-constexpr uint16_t FLAG_REINICIO = 0x0004;
 constexpr uint8_t FORMATO_META = 0;
 constexpr uint8_t FORMATO_FLOAT32 = 1;
 constexpr size_t TAM_CABECERA = 32;
@@ -25,7 +22,7 @@ constexpr size_t R_DIAG = TAM_CABECERA + TAM_DIAG + TAM_CRC;
 constexpr size_t CABLE_INPUT = cota_cable(R_INPUT);
 constexpr size_t CABLE_DIAG = cota_cable(R_DIAG);
 
-// first_sample permite al nodo 3 alinear FIR_OUT con el INPUT que lo originó.
+// Índice de la primera muestra del bloque en el emisor.
 struct Cabecera {
     uint16_t magic;
     uint8_t version;
@@ -51,7 +48,3 @@ uint32_t crc32(const uint8_t* datos, size_t n);
 size_t cobs_decodificar(const uint8_t* entrada, size_t n, uint8_t* salida, size_t capacidad);
 // Requiere al menos TAM_CABECERA bytes, comprobados por el receptor.
 Cabecera leer_cabecera(const uint8_t* datos);
-// Serializa la salida seleccionada en un FIR_OUT completo (COBS y 0x00 incluidos).
-size_t armar_fir_out(const float* muestras, uint16_t flags, uint32_t session_id,
-                    uint32_t sequence, uint64_t first_sample,
-                    uint8_t* trabajo, uint8_t* salida);

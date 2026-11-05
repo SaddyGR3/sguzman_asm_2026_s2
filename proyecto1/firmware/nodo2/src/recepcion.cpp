@@ -1,6 +1,5 @@
 #include "recepcion.h"
 #include "protocolo.h"
-#include "salida_dac.h"
 #include "driver/gpio.h"
 #include "driver/uart.h"
 #include "esp_err.h"
@@ -20,15 +19,16 @@ static bool tiene_sesion = false;
 static uint32_t sesion = 0;
 static uint32_t secuencia = 0;
 static bool tiene_input = false;
-static bool silencio_enviado = false;
 static int64_t ultimo_input_us = 0;  // al iniciar sirve de referencia para el watchdog
 static int64_t ultimo_error_us = -1;
 static ContadoresRecepcion contadores;
 static void (*al_recibir_input)(const uint8_t*, uint64_t) = nullptr;
+static void (*al_cambiar_sesion)() = nullptr;
 
-void recepcion_iniciar(void (*procesar_input)(const uint8_t*, uint64_t))
+void recepcion_iniciar(void (*procesar_input)(const uint8_t*, uint64_t), void (*nueva_sesion)())
 {
     al_recibir_input = procesar_input;
+    al_cambiar_sesion = nueva_sesion;
     crc32_iniciar();
     uart_config_t cfg = {};
     cfg.baud_rate = 921600;
@@ -75,6 +75,7 @@ static void seguir_secuencia(const Cabecera& c)
         sesion = c.session_id;
         secuencia = c.sequence;
         ++contadores.sesiones;
+        al_cambiar_sesion();
         return;
     }
 
@@ -120,7 +121,6 @@ static void procesar_trama()
         ++contadores.input;
         tiene_input = true;
         ultimo_input_us = esp_timer_get_time();
-        silencio_enviado = false;
         al_recibir_input(decodificado + TAM_CABECERA, c.first_sample);
     } else {
         ++contadores.diag;
@@ -163,11 +163,6 @@ bool recepcion_leer()
 bool recepcion_actualizar(int64_t ahora_us)
 {
     const bool vencido = ahora_us - ultimo_input_us >= AUSENCIA_INPUT_US;
-    if (vencido && !silencio_enviado) {
-        // Un único intento por ausencia, incluso si no cabe todo el bloque.
-        silencio_enviado = true;
-        salida_dac_silencio();
-    }
     return !tiene_input || vencido ||
            (ultimo_error_us >= 0 && ahora_us - ultimo_error_us < ERROR_RECIENTE_US);
 }

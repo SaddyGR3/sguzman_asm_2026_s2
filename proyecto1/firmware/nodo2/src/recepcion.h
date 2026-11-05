@@ -13,7 +13,9 @@ struct ContadoresRecepcion {
 };
 
 // La función se llama por cada INPUT válido, antes de reutilizar sus bytes.
-void recepcion_iniciar(void (*procesar_input)(const uint8_t*, uint64_t first_sample));
+// Avisa cada sesión nueva, incluida la primera, antes de entregar su primer INPUT.
+void recepcion_iniciar(void (*procesar_input)(const uint8_t*, uint64_t first_sample),
+                      void (*nueva_sesion)());
 // Drena RX por bloques sin esperar; devuelve si hubo bytes.
 bool recepcion_leer();
 // Atiende el watchdog y devuelve el estado del LED de error.
