@@ -1,0 +1,41 @@
+{
+  "prueba": "P1",
+  "semilla": 202613,
+  "fs_Hz": 8000,
+  "muestras": 80000,
+  "snr_objetivo_dB": 0,
+  "snr_obtenida_dB": 1.2536257065192713e-14,
+  "factor_escala": 1.0074735114756528,
+  "pico_x": 0.8000000000000002,
+  "pico_s": 0.4029790115713603,
+  "configuracion": {
+    "descripcion": "Tono con interferencia sinusoidal separada",
+    "semillas": [
+      202611,
+      202612,
+      202613
+    ],
+    "senal": {
+      "tipo": "tono",
+      "frecuencia_Hz": 700,
+      "amplitud": 0.4,
+      "fase": "aleatoria"
+    },
+    "ruido": {
+      "tipo": "tonal",
+      "frecuencia_Hz": 2150,
+      "fase": "aleatoria"
+    },
+    "snr_dB": 0,
+    "banda_protegida_Hz": [
+      100,
+      1200
+    ],
+    "filtro_n2": "notch",
+    "metodo_n3": "picos",
+    "banda_atenuacion_Hz": [
+      2130,
+      2170
+    ]
+  }
+}

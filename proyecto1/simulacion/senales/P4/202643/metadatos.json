@@ -1,0 +1,45 @@
+{
+  "prueba": "P4",
+  "semilla": 202643,
+  "fs_Hz": 8000,
+  "muestras": 80000,
+  "snr_objetivo_dB": 15,
+  "snr_obtenida_dB": 15.000000000000206,
+  "factor_escala": 1.0250120260398325,
+  "pico_x": 0.8000000000000002,
+  "pico_s": 0.41000481041593306,
+  "configuracion": {
+    "descripcion": "Senal transitoria con ruido impulsivo",
+    "semillas": [
+      202641,
+      202642,
+      202643
+    ],
+    "senal": {
+      "tipo": "rafagas",
+      "frecuencia_Hz": 700,
+      "amplitud": 0.4,
+      "duracion_ms": 200,
+      "periodo_s": 1.0,
+      "primer_arranque_s": 0.5,
+      "cantidad": 10,
+      "rampa_ms": 5
+    },
+    "ruido": {
+      "tipo": "impulsivo",
+      "tasa_por_s": 20,
+      "banda_Hz": [
+        100,
+        3000
+      ]
+    },
+    "snr_dB": 15,
+    "banda_protegida_Hz": [
+      100,
+      1200
+    ],
+    "filtro_n2": "fir_banda_protegida",
+    "metodo_n3": "resta",
+    "banda_atenuacion_Hz": null
+  }
+}

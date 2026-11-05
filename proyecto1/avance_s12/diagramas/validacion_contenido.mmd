@@ -1,0 +1,18 @@
+flowchart TD
+    A[Tramo continuo mas largo de una sesion] --> B[Recortar a segundos enteros]
+    B --> C[Convertir muestras a float64]
+    C --> D[Aplicar ventana de Hann periodica]
+    D --> E[Calcular FFT real]
+    E --> F[Buscar 4 maximos locales separados al menos 20 Hz]
+    F --> G[Comparar frecuencias con tolerancia de +/- 1 Hz]
+    G --> H[300, 700, 1100 y 2150 Hz]
+    H --> I[Comparar niveles relativos]
+    I --> J[-1.44, -6.63, -11.90 y 0.00 dB]
+    J --> K{Enlace N3?}
+    K -- Si --> L[Calcular SNR de x y s]
+    L --> M[Esperar 0.000 +/- 0.2 dB]
+    K -- No --> N[No calcular SNR]
+    M --> O{Todas las validaciones pasan?}
+    N --> O
+    O -- Si --> P[Analisis PASS]
+    O -- No --> Q[Agregar falla al resultado]

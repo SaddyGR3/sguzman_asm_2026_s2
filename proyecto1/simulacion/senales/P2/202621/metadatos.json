@@ -1,0 +1,55 @@
+{
+  "prueba": "P2",
+  "semilla": 202621,
+  "fs_Hz": 8000,
+  "muestras": 80000,
+  "snr_objetivo_dB": 0,
+  "snr_obtenida_dB": 1.92865493310657e-14,
+  "factor_escala": 0.1840361540931949,
+  "pico_x": 0.8000000000000002,
+  "pico_s": 0.3024394774863226,
+  "configuracion": {
+    "descripcion": "Tres tonos con ruido de alta frecuencia",
+    "semillas": [
+      202621,
+      202622,
+      202623
+    ],
+    "senal": {
+      "tipo": "multitono",
+      "frecuencias_Hz": [
+        300,
+        700,
+        1100
+      ],
+      "amplitudes": [
+        1,
+        0.55,
+        0.3
+      ],
+      "fases_grados": [
+        0,
+        35,
+        -50
+      ]
+    },
+    "ruido": {
+      "tipo": "banda",
+      "banda_Hz": [
+        2000,
+        2800
+      ]
+    },
+    "snr_dB": 0,
+    "banda_protegida_Hz": [
+      100,
+      1200
+    ],
+    "filtro_n2": "fir_banda_protegida",
+    "metodo_n3": "resta_con_proteccion",
+    "banda_atenuacion_Hz": [
+      2000,
+      2800
+    ]
+  }
+}

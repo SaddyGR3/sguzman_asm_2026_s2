@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "fir_banda_protegida": {
+    "coeficientes": 37,
+    "transicion_Hz": 600,
+    "atenuacion_diseno_dB": 45,
+    "borde_inferior_min_pasa_banda_Hz": 600
+  },
+  "notch": {
+    "q_automatico": 8.5
+  }
+}

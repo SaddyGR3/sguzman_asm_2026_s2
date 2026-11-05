@@ -1,0 +1,47 @@
+
+SESIONES
+  sesión 1 (0x931a2ca7, observada a medias): DIAG 938, INPUT 937; sequence 5801..7675; perdidos 0; banderas/0x0004 OK
+
+CONTADORES (cuentan para el veredicto)
+  err_tamano                 0
+  err_cobs                   0
+  err_corto                  0
+  err_crc                    0
+  err_trama                  0
+  err_magic                  0
+  err_version                0
+  err_tipo                   0
+  err_longitud               0
+  err_formato                0
+  err_no_finito              0
+  err_destino                0
+  err_src                    0
+  err_tipo_paridad           0
+  err_cable                  0
+  err_banderas               0
+  err_secuencia_retroceso    0
+  err_primer_bloque          0
+  err_first_sample           0
+  err_diag                   0
+  err_diag_first_sample      0
+  err_energia                0
+  paquetes_perdidos          0
+  inicio_sesion_perdido      0
+
+INFORMATIVOS (no cuentan para el veredicto)
+  fragmento_inicial (B)      1527
+  tramas_vacias              0
+  errores_transicion_sesion  0
+  reinicios_sesion           0
+  diag_sin_datos             1
+  tiempo_us (min, max)       536, 544
+  paquetes válidos           1875
+
+ANÁLISIS
+  tramo analizado: 59 s (472000 muestras, de un tramo continuo de 59.97 s)
+     300 Hz: pico en   300.00 Hz, nivel  -1.44 dB (esperado  -1.44 ± 0.5)  PASS
+     700 Hz: pico en   700.00 Hz, nivel  -6.63 dB (esperado  -6.63 ± 0.5)  PASS
+    1100 Hz: pico en  1100.00 Hz, nivel -11.90 dB (esperado -11.90 ± 0.5)  PASS
+    2150 Hz: pico en  2150.00 Hz, nivel  +0.00 dB (esperado  +0.00 ± 0.5)  PASS
+
+RESULTADO: OK

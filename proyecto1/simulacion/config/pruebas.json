@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "global": {
+    "fs_Hz": 8000,
+    "N": 1024,
+    "H": 512,
+    "duracion_s": 10.0,
+    "rampa_ms": 20,
+    "pico_x": 0.8,
+    "repeticiones": 3,
+    "carpeta_salida": "senales"
+  },
+  "pruebas": {
+    "P1": {
+      "descripcion": "Tono con interferencia sinusoidal separada",
+      "semillas": [202611, 202612, 202613],
+      "senal": {"tipo": "tono", "frecuencia_Hz": 700, "amplitud": 0.4, "fase": "aleatoria"},
+      "ruido": {"tipo": "tonal", "frecuencia_Hz": 2150, "fase": "aleatoria"},
+      "snr_dB": 0,
+      "banda_protegida_Hz": [100, 1200],
+      "filtro_n2": "notch",
+      "metodo_n3": "picos",
+      "banda_atenuacion_Hz": [2130, 2170]
+    },
+    "P2": {
+      "descripcion": "Tres tonos con ruido de alta frecuencia",
+      "semillas": [202621, 202622, 202623],
+      "senal": {"tipo": "multitono", "frecuencias_Hz": [300, 700, 1100], "amplitudes": [1, 0.55, 0.30], "fases_grados": [0, 35, -50]},
+      "ruido": {"tipo": "banda", "banda_Hz": [2000, 2800]},
+      "snr_dB": 0,
+      "banda_protegida_Hz": [100, 1200],
+      "filtro_n2": "fir_banda_protegida",
+      "metodo_n3": "resta_con_proteccion",
+      "banda_atenuacion_Hz": [2000, 2800]
+    },
+    "P3": {
+      "descripcion": "Audio sintetico con ruido de banda ancha",
+      "semillas": [202631, 202632, 202633],
+      "senal": {
+        "tipo": "melodia",
+        "notas_Hz": [440, 392, 329.63, 293.66, 329.63, 392, 440, 523.25, 587.33, 523.25, 440, 392, 329.63, 261.63, 220, 261.63, 293.66, 329.63, 392, 440],
+        "duracion_nota_s": 0.5,
+        "armonicos": [1, 0.5, 0.3333333333333333, 0.25],
+        "envolvente": {"ataque_ms": 10, "decaimiento_ms": 50, "sostenido": 0.7, "liberacion_ms": 50},
+        "banda_Hz": [100, 3000]
+      },
+      "ruido": {"tipo": "banda", "banda_Hz": [100, 3000]},
+      "snr_dB": 5,
+      "banda_protegida_Hz": [100, 3000],
+      "filtro_n2": "fir_banda_protegida",
+      "metodo_n3": "resta",
+      "parametros_n3": {"alfa": 3, "ganancia_minima": 0.05},
+      "banda_atenuacion_Hz": null
+    },
+    "P4": {
+      "descripcion": "Senal transitoria con ruido impulsivo",
+      "semillas": [202641, 202642, 202643],
+      "senal": {"tipo": "rafagas", "frecuencia_Hz": 700, "amplitud": 0.4, "duracion_ms": 200, "periodo_s": 1.0, "primer_arranque_s": 0.5, "cantidad": 10, "rampa_ms": 5},
+      "ruido": {"tipo": "impulsivo", "tasa_por_s": 20, "banda_Hz": [100, 3000]},
+      "snr_dB": 15,
+      "banda_protegida_Hz": [100, 1200],
+      "filtro_n2": "fir_banda_protegida",
+      "metodo_n3": "resta",
+      "banda_atenuacion_Hz": null
+    },
+    "P5": {
+      "descripcion": "Superposicion parcial senal-ruido",
+      "semillas": [202651, 202652, 202653],
+      "senal": {"tipo": "multitono", "frecuencias_Hz": [300, 700, 1100], "amplitudes": [1, 0.55, 0.30], "fases_grados": [0, 35, -50]},
+      "ruido": {"tipo": "banda", "banda_Hz": [900, 1300]},
+      "snr_dB": 3,
+      "banda_protegida_Hz": [100, 1200],
+      "filtro_n2": "notch",
+      "frecuencia_notch_Hz": 1100,
+      "metodo_n3": "resta",
+      "banda_atenuacion_Hz": [900, 1300],
+      "tono_vigilado_Hz": 1100,
+      "barrido": [
+        {"nivel": "suave", "q_notch": 10, "alfa": 2, "proteccion_tonos": false},
+        {"nivel": "medio", "q_notch": 2.75, "alfa": 3, "proteccion_tonos": false},
+        {"nivel": "agresivo", "q_notch": 1, "alfa": 8, "proteccion_tonos": false},
+        {"nivel": "referencia", "q_notch": 2.75, "alfa": 3, "proteccion_tonos": true}
+      ]
+    }
+  },
+  "limites_p6": {
+    "banda_senal_Hz": [100, 3000],
+    "fs_archivo_Hz": 8000,
+    "pico_max": 0.8,
+    "tipos_ruido": ["tonal", "red_50_60", "banda_ancha", "banda_limitada", "impulsivo"],
+    "banda_ruido_Hz": [100, 3000],
+    "base_peine_Hz": [50, 60],
+    "snr_dB": [-5, 20],
+    "N": [256, 512, 1024],
+    "duracion_min_s": 2.0,
+    "referencia": "opcional"
+  }
+}

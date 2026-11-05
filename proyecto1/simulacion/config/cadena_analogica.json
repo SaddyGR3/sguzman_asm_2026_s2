@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "tasas": {
+    "fs_Hz": 8000,
+    "fs_adc_Hz": 24000,
+    "fa_Hz": 96000
+  },
+  "sallen_key": {
+    "R1_ohm": 6800,
+    "R2_ohm": 6800,
+    "C1_F": 10e-9,
+    "C2_F": 4.7e-9
+  },
+  "acople_entrada": {
+    "C_F": 10e-6,
+    "R_superior_ohm": 1500,
+    "R_inferior_ohm": 1000,
+    "V_alimentacion_V": 3.3
+  },
+  "adc": {
+    "v_centro_V": 1.32,
+    "escala_V": 1.25,
+    "v_min_V": 0.15,
+    "v_max_V": 2.45,
+    "bits": 12,
+    "v_ref_V": 3.3
+  },
+  "decimacion": {
+    "coeficientes": 37,
+    "corte_Hz": 4000,
+    "atenuacion_beta_dB": 50,
+    "factor": 3
+  },
+  "dac": {
+    "bits": 8,
+    "v_ref_V": 3.3
+  }
+}

@@ -12,3 +12,14 @@ __pycache__/
 
 # Archivos temporales de Jupyter
 .ipynb_checkpoints/
+
+# Configuración local del editor
+/.vscode/
+
+# Archivos auxiliares de LaTeX
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.toc
