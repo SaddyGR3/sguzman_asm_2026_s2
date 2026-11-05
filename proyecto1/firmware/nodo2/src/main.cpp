@@ -97,7 +97,9 @@ static void imprimir_estado()
     printf("Estado: %s | banda %.6g-%.6g Hz | notch %.6g Hz Q %.6g\n",
            nombre_modo(), cfg.banda_inferior_hz, cfg.banda_superior_hz,
            cfg.notch_hz, cfg.q_notch);
-    printf("Espectral: base, ganancia 1 | N %d H %d | retardo 64 ms\n", ESPECTRAL_N, ESPECTRAL_H);
+    const auto& espectral = espectral_configuracion();
+    printf("Espectral: resta | alfa %.6g | ganancia minima %.6g | N %d H %d | retardo 64 ms\n",
+           espectral.alfa, espectral.ganancia_minima, ESPECTRAL_N, ESPECTRAL_H);
     imprimir_fir();
     imprimir_notch();
 }
@@ -152,6 +154,11 @@ static void ejecutar_comando(char* linea)
     double uno, dos;
     if (comando && primero && segundo && !extra &&
         leer_numero(primero, uno) && leer_numero(segundo, dos)) {
+        if (std::strcmp(comando, "espectral") == 0 && espectral_configurar(uno, dos)) {
+            const auto& cfg = espectral_configuracion();
+            printf("Espectral: alfa %.6g | ganancia minima %.6g\n", cfg.alfa, cfg.ganancia_minima);
+            return;
+        }
         if (std::strcmp(comando, "banda") == 0 &&
             uno >= 100.0 && dos <= 3000.0 && uno < dos) {
             filtros_cambiar_banda(uno, dos);
@@ -291,12 +298,14 @@ extern "C" void app_main(void)
                     fcntl(STDIN_FILENO, F_SETFL, banderas_consola | O_NONBLOCK) == 0
                     ? ESP_OK : ESP_FAIL);
     const auto& c = filtros_coeficientes();
+    const auto& cfg_espectral = espectral_configuracion();
     printf("Nodos 2+3: UART1 RX GPIO19 TX GPIO18 sin uso, 921600 8N1, RX 16384 B | "
            "DAC GPIO25 8000 Hz APLL DMA 6x512 B, tarea dedicada | LED GPIO4 | "
            "watchdog INPUT 200 ms | monitor UART0 115200 | Filtro: %s | botones GPIO32 filtro, GPIO33 reproducir | "
-           "espectral base N 1024 H 512, ganancia 1, retardo 64 ms | FIR primeros 3 [%.12f, %.12f, %.12f] | "
+           "espectral resta N 1024 H 512, alfa %.6g, ganancia minima %.6g, retardo 64 ms | FIR primeros 3 [%.12f, %.12f, %.12f] | "
            "notch b [%.12f, %.12f, %.12f] a [%.12f, %.12f, %.12f]\n",
-           nombre_modo(), c.fir[0], c.fir[1], c.fir[2],
+           nombre_modo(), cfg_espectral.alfa, cfg_espectral.ganancia_minima,
+           c.fir[0], c.fir[1], c.fir[2],
            c.b[0], c.b[1], c.b[2], c.a[0], c.a[1], c.a[2]);
 
     uint32_t numero_resumen = 0;
