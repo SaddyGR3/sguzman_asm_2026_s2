@@ -70,6 +70,7 @@ Comandos por UART0 a 115200 baudios:
   muestra crudos, mV, frecuencias, desbordes del pool, saturaciones y tiempos.
 
 Los resúmenes se imprimen cada 16 bloques, aproximadamente cada 1.024 s.
+El prefijo `#nnnn t=…s` indica el número de resumen desde 1 (compartido entre vistas, con al menos 4 dígitos) y los segundos desde el arranque con 1 decimal; en `vista todo` aparece solo en la primera línea.
 `procesamiento max` excluye la espera de adquisición ADC. El tiempo de
 calibración incluye la extracción, consulta de tabla y estadísticas; el tiempo
 de filtrado incluye FIR, pasa altos y normalización. El análisis se mide aparte.

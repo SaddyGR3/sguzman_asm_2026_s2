@@ -325,6 +325,8 @@ extern "C" void app_main(void)
     uint32_t seq_n2 = 0;
     bool primer_n2 = true;
 
+    uint32_t numero_resumen = 0;
+
     // Valores de la ventana de resumen; se reinician al imprimir.
     uint32_t v_bloques = 0;
     uint32_t v_periodos = 0;
@@ -442,6 +444,8 @@ extern "C" void app_main(void)
         if (v_bloques == BLOQUES_VENTANA) {
             const uint32_t overruns = atrasos_temporizador + enlace_n2.desbordes_tx;
             ContadoresAdc contadores_resumen;
+            printf("#%04lu t=%.1fs | ", (unsigned long)++numero_resumen,
+                   esp_timer_get_time() / 1000000.0);
             if (vista == Vista::DIAG) {
                 ResumenAdc adc;
                 if (FUENTE_ENTRADA == Fuente::ADC) {
