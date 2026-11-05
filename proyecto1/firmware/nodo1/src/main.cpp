@@ -47,13 +47,31 @@ static float x[HOP];                    // micrófono o mezcla del generador
 static float s_util[HOP];               // solo generador: señal útil
 static float i_interf[HOP];             // solo generador: interferencia
 
+static const char* nombre_ruido(uint8_t tipo)
+{
+    switch (tipo) {
+    case 0: return "ninguno confirmado";
+    case 1: return "tonal";
+    case 2: return "familia 50/60 Hz";
+    case 3: return "banda ancha";
+    case 4: return "banda limitada";
+    case 5: return "impulsivo";
+    default: return "desconocido";
+    }
+}
+
 static void imprimir_diagnostico(const ResultadoDiagnostico& r)
 {
-    printf("banda protegida %.1f %.1f Hz | parcial %u calentamiento %u | tipo %u "
-           "pico_Hz %.4f | candidato M %.6g piso local %.6g contraste contra piso %.2f dB | "
+    printf("banda protegida %.1f %.1f Hz | parcial %u calentamiento %u | tipo %u %s "
+           "filtro %u método %u | pico_Hz %.4f contraste publicado %.2f dB | "
+           "región %.1f %.1f Hz | cresta %.3f | "
+           "candidato tonal M %.6g piso local %.6g contraste contra piso %.2f dB | "
            "piso_resumen %.6g | análisis %lu us\n",
            banda_lo, banda_hi, r.parcial ? 1u : 0u, static_cast<unsigned>(r.calentamiento),
-           static_cast<unsigned>(r.tipo_ruido), r.pico_hz, r.magnitud_candidato,
+           static_cast<unsigned>(r.tipo_ruido), nombre_ruido(r.tipo_ruido),
+           static_cast<unsigned>(r.filtro_n2), static_cast<unsigned>(r.metodo),
+           r.pico_hz, r.contraste_publicado_db, r.banda_detectada_lo, r.banda_detectada_hi,
+           r.factor_cresta, r.magnitud_candidato,
            r.piso_local, r.contraste_db, r.piso_resumen, (unsigned long)r.tiempo_us);
 }
 
@@ -61,14 +79,18 @@ static void imprimir_linea_diag(const ResultadoDiagnostico& r, const ResumenAdc*
                                 uint32_t desbordes, uint32_t overruns, uint32_t saturaciones)
 {
     printf("DIAG | banda %g-%g Hz | tipo %u %s", banda_lo, banda_hi,
-           static_cast<unsigned>(r.tipo_ruido), r.tipo_ruido == 1 ? "tonal" : "ninguno");
-    if (r.tipo_ruido == 1) {
+           static_cast<unsigned>(r.tipo_ruido), nombre_ruido(r.tipo_ruido));
+    if (r.tipo_ruido == 1 || r.tipo_ruido == 2) {
         printf(" | pico %.1f Hz", r.pico_hz);
-        if (r.contraste_db >= 0.0f) printf(" | contraste %.1f dB", r.contraste_db);
+        if (r.contraste_publicado_db >= 0.0f) printf(" | contraste %.1f dB", r.contraste_publicado_db);
         else printf(" | contraste --");
     } else {
         printf(" | pico -- | contraste --");
     }
+    if (r.tipo_ruido == 3 || r.tipo_ruido == 4)
+        printf(" | región %.1f-%.1f Hz", r.banda_detectada_lo, r.banda_detectada_hi);
+    else printf(" | región --");
+    printf(" | cresta %.2f", r.factor_cresta);
     if (r.parcial || r.calentamiento) printf(" | calentando");
     if (adc != nullptr) printf(" | ADC x %d-%d mV", adc->x.mv_min, adc->x.mv_max);
     if (desbordes || overruns || saturaciones) {
@@ -80,7 +102,17 @@ static void imprimir_linea_diag(const ResultadoDiagnostico& r, const ResumenAdc*
 
 static void ayuda_consola()
 {
-    printf(">> comando no reconocido. Comandos: banda <lo> <hi>, estado, vista diag|todo\n");
+    printf(">> comando no reconocido. Comandos: banda <lo> <hi>, estado, vista diag|todo, "
+           "umbral_diag tonal|red|impulsivo|banda <valor>\n");
+}
+
+static void imprimir_umbrales()
+{
+    const auto& u = diagnostico_umbrales();
+    printf(">> umbrales lineales: tonal %g red %g impulsivo %g banda %g | RMS mínimo %g\n"
+           ">> banda ancha: ocupación mínima %.0f %% con piso > %g de mediana global | planitud mínima %g\n",
+           u.tonal, u.red, u.impulsivo, u.banda, DIAG_RMS_MINIMO,
+           100.0f * DIAG_OCUPACION_MINIMA, DIAG_FRACCION_PISO, DIAG_PLANITUD_MINIMA);
 }
 
 static void comando_consola(const char* linea)
@@ -88,7 +120,16 @@ static void comando_consola(const char* linea)
     char comando[16], modo[16], extra;
     float lo, hi;
     if (sscanf(linea, " %15s", comando) != 1) return;
-    if (strcmp(comando, "banda") == 0 &&
+    if (strcmp(comando, "umbral_diag") == 0) {
+        float valor;
+        if (sscanf(linea, " %15s %15s %f %c", comando, modo, &valor, &extra) != 3 ||
+            !diagnostico_ajustar_umbral(modo, valor)) {
+            printf(">> error: umbral_diag tonal|red|impulsivo|banda <valor>, finito en (1, 100]. "
+                   "Se conservan los umbrales.\n");
+        } else {
+            printf(">> umbral_diag %s %g | clasificación reiniciada\n", modo, valor);
+        }
+    } else if (strcmp(comando, "banda") == 0 &&
         sscanf(linea, " %15s %f %f %c", comando, &lo, &hi, &extra) == 3) {
         if (std::isfinite(lo) && std::isfinite(hi) && lo >= 100.0f && lo < hi && hi <= 3000.0f) {
             if (lo != banda_lo || hi != banda_hi) {
@@ -109,8 +150,10 @@ static void comando_consola(const char* linea)
         printf(">> vista: %s\n", vista == Vista::DIAG ? "diag" : "todo");
     } else if (strcmp(comando, "estado") == 0 &&
                sscanf(linea, " %15s %c", comando, &extra) == 1) {
-        printf(">> banda protegida: %g-%g Hz | config %lu\n>> vista: %s\n>> ",
+        printf(">> banda protegida: %g-%g Hz | config %lu\n>> vista: %s\n",
                banda_lo, banda_hi, (unsigned long)config_id, vista == Vista::DIAG ? "diag" : "todo");
+        imprimir_umbrales();
+        printf(">> ");
         imprimir_linea_diag(diagnostico_resultado(), nullptr, 0, 0, 0);
     } else {
         ayuda_consola();
@@ -321,7 +364,8 @@ extern "C" void app_main(void)
     ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 1024, 4096, 0, nullptr, 0));
     // Los resúmenes se copian a TX; su transmisión a 115200 no frena el bloque.
     uart_vfs_dev_use_driver(UART_NUM_0);
-    printf("Consola: banda <lo> <hi>, estado, vista diag|todo | banda protegida inicial 100 1200 Hz\n");
+    printf("Consola: banda <lo> <hi>, estado, vista diag|todo, "
+           "umbral_diag tonal|red|impulsivo|banda <valor> | banda protegida inicial 100 1200 Hz\n");
 
     // Un único 0x00 en UART1. Si el emisor se reinicia a mitad de un paquete, ese paquete
     // queda cortado sin su 0x00; el receptor juntaría esos restos con el primer paquete de la
@@ -442,8 +486,9 @@ extern "C" void app_main(void)
         d.N = N_FFT;
         d.H = HOP;
         d.pico_Hz = diagnostico.pico_hz;
-        d.banda_lo = banda_lo;
-        d.banda_hi = banda_hi;
+        // DIAG describe ruido; CONTROL CONFIG conserva la banda protegida.
+        d.banda_lo = diagnostico.banda_detectada_lo;
+        d.banda_hi = diagnostico.banda_detectada_hi;
         d.config_id = config_id;
         d.piso_resumen = diagnostico.piso_resumen;
         d.DC = diagnostico.dc;
