@@ -7,7 +7,8 @@ struct ContadoresDac {
 };
 
 void salida_dac_iniciar();
-// Recibe las 512 muestras de la salida seleccionada, antes de cuantizar.
-void salida_dac_input(const float* muestras);
-void salida_dac_silencio();
-const ContadoresDac& salida_dac_contadores();
+bool salida_dac_disponible();
+// Encola 512 muestras; llamar solo cuando haya espacio. El último bloque drena a silencio.
+void salida_dac_input(const float* muestras, bool ultimo);
+bool salida_dac_terminada();
+ContadoresDac salida_dac_contadores();

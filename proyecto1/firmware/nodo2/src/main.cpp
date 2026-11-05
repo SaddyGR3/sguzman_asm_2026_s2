@@ -13,14 +13,16 @@
 #include "protocolo.h"
 #include "recepcion.h"
 #include "salida_dac.h"
-#include "transmision.h"
+#include "grabacion.h"
 
 enum class ModoFiltro { SIN_FILTRO, FIR, NOTCH };
 constexpr ModoFiltro MODO_INICIAL = ModoFiltro::SIN_FILTRO;
 constexpr gpio_num_t PIN_BOTON = GPIO_NUM_32;
+constexpr gpio_num_t PIN_REPRODUCIR = GPIO_NUM_33;
 
 static ModoFiltro modo = MODO_INICIAL;
 static int boton_anterior = 1;
+static int reproducir_anterior = 1;
 static float salida[MUESTRAS_BLOQUE];
 static char linea_comando[96];
 static size_t longitud_comando = 0;
@@ -33,6 +35,12 @@ static const char* nombre_modo()
 {
     static const char* const nombres[] = {"SIN FILTRO", "FIR", "NOTCH"};
     return nombres[static_cast<int>(modo)];
+}
+
+static void reproducir()
+{
+    if (grabacion_reproducir(nombre_modo())) filtros_reiniciar_estados();
+    else printf("Grabación: reproducir requiere estado LISTA\n");
 }
 
 static void seleccionar_modo(ModoFiltro nuevo)
@@ -84,6 +92,25 @@ static void ejecutar_comando(char* linea)
     const char* segundo = strtok_r(nullptr, " \t", &resto);
     const char* extra = strtok_r(nullptr, " \t", &resto);
 
+    if (comando && std::strcmp(comando, "calibrar") == 0 && !primero) {
+        grabacion_calibrar();
+        return;
+    }
+    if (comando && std::strcmp(comando, "reproducir") == 0 && !primero) {
+        reproducir();
+        return;
+    }
+    if (comando && std::strcmp(comando, "grabacion") == 0 && !primero) {
+        grabacion_imprimir();
+        return;
+    }
+    double factor;
+    if (comando && std::strcmp(comando, "umbral") == 0 && primero && !segundo &&
+        leer_numero(primero, factor) && factor >= 1.5 && factor <= 20.0) {
+        grabacion_cambiar_umbral(static_cast<float>(factor));
+        grabacion_imprimir();
+        return;
+    }
     if (comando && std::strcmp(comando, "estado") == 0 && !primero) {
         imprimir_estado();
         return;
@@ -150,7 +177,7 @@ static void leer_consola()
     }
 }
 
-static void procesar_input(const uint8_t* datos, uint64_t first_sample)
+static void procesar_input(const uint8_t* datos, uint64_t)
 {
     // Una lectura del botón por INPUT, incluso si RX trae varios paquetes juntos.
     const int boton_actual = gpio_get_level(PIN_BOTON);
@@ -163,9 +190,18 @@ static void procesar_input(const uint8_t* datos, uint64_t first_sample)
     }
     boton_anterior = boton_actual;
 
+    grabacion_input(datos);
+}
+
+static void atender_reproduccion()
+{
+    if (salida_dac_terminada()) grabacion_finalizar_reproduccion();
+    if (grabacion_estado() != EstadoGrabacion::REPRODUCIENDO || !salida_dac_disponible()) return;
     const int64_t inicio_proc_us = esp_timer_get_time();
+    bool ultimo = false;
+    if (!grabacion_leer_bloque(salida, ultimo)) return;
     for (size_t k = 0; k < MUESTRAS_BLOQUE; ++k) {
-        const float x = get_f32(datos + 4 * k);
+        const float x = salida[k];
         float fir, notch;
         filtros_procesar(x, fir, notch);
         switch (modo) {
@@ -174,12 +210,11 @@ static void procesar_input(const uint8_t* datos, uint64_t first_sample)
             case ModoFiltro::NOTCH: salida[k] = notch; break;
         }
     }
-    salida_dac_input(salida);
+    salida_dac_input(salida, ultimo);
     const uint64_t duracion_us = static_cast<uint64_t>(esp_timer_get_time() - inicio_proc_us);
     suma_proc_us += duracion_us;
     if (duracion_us > max_proc_us) max_proc_us = duracion_us;
     ++bloques_proc;
-    transmision_enviar(salida, first_sample);
 }
 
 extern "C" void app_main(void)
@@ -192,31 +227,33 @@ extern "C" void app_main(void)
     ESP_ERROR_CHECK(gpio_set_level(GPIO_NUM_4, 1));
 
     gpio_config_t boton = {};
-    boton.pin_bit_mask = 1ULL << PIN_BOTON;
+    boton.pin_bit_mask = (1ULL << PIN_BOTON) | (1ULL << PIN_REPRODUCIR);
     boton.mode = GPIO_MODE_INPUT;
     boton.pull_up_en = GPIO_PULLUP_ENABLE;
     boton.pull_down_en = GPIO_PULLDOWN_DISABLE;
     boton.intr_type = GPIO_INTR_DISABLE;
     ESP_ERROR_CHECK(gpio_config(&boton));
     boton_anterior = gpio_get_level(PIN_BOTON);
+    reproducir_anterior = gpio_get_level(PIN_REPRODUCIR);
 
     filtros_iniciar();
     salida_dac_iniciar();
-    recepcion_iniciar(procesar_input);
-    transmision_iniciar();
+    recepcion_iniciar(procesar_input, grabacion_nueva_sesion);
+    grabacion_iniciar();
     const int banderas_consola = fcntl(STDIN_FILENO, F_GETFL, 0);
     ESP_ERROR_CHECK(banderas_consola >= 0 &&
                     fcntl(STDIN_FILENO, F_SETFL, banderas_consola | O_NONBLOCK) == 0
                     ? ESP_OK : ESP_FAIL);
     const auto& c = filtros_coeficientes();
     printf("Nodo 2: UART1 RX GPIO19 TX GPIO18 sin uso, 921600 8N1, RX 16384 B | "
-           "DAC GPIO25 8000 Hz APLL DMA 6x512 B, timeout 0 ms | UART2 TX GPIO17 921600 | LED GPIO4 | "
-           "watchdog INPUT 200 ms | monitor UART0 115200 | Filtro: %s | botón GPIO32 | "
+           "DAC GPIO25 8000 Hz APLL DMA 6x512 B, tarea dedicada | LED GPIO4 | "
+           "watchdog INPUT 200 ms | monitor UART0 115200 | Filtro: %s | botones GPIO32 filtro, GPIO33 reproducir | "
            "FIR primeros 3 [%.12f, %.12f, %.12f] | "
            "notch b [%.12f, %.12f, %.12f] a [%.12f, %.12f, %.12f]\n",
            nombre_modo(), c.fir[0], c.fir[1], c.fir[2],
            c.b[0], c.b[1], c.b[2], c.a[0], c.a[1], c.a[2]);
 
+    uint32_t numero_resumen = 0;
     int64_t ultimo_resumen_us = esp_timer_get_time();
     int64_t ultimo_error_dac_us = -1;
     uint32_t desbordes_anteriores = 0;
@@ -224,9 +261,14 @@ extern "C" void app_main(void)
         const bool hubo_bytes = recepcion_leer();
         // Los comandos se aplican después de terminar todos los INPUT de la lectura.
         leer_consola();
+        const int reproducir_actual = gpio_get_level(PIN_REPRODUCIR);
+        if (reproducir_anterior == 1 && reproducir_actual == 0 &&
+            grabacion_estado() == EstadoGrabacion::LISTA) reproducir();
+        reproducir_anterior = reproducir_actual;
+        atender_reproduccion();
         const int64_t ahora_us = esp_timer_get_time();
         const bool error_rx = recepcion_actualizar(ahora_us);
-        const auto& d = salida_dac_contadores();
+        const auto d = salida_dac_contadores();
         if (d.desbordes != desbordes_anteriores) {
             ultimo_error_dac_us = ahora_us;
             desbordes_anteriores = d.desbordes;
@@ -243,19 +285,18 @@ extern "C" void app_main(void)
         } else if (ahora_us - ultimo_resumen_us >= 1000000) {
             const auto& r = recepcion_contadores();
             const uint64_t prom_proc_us = bloques_proc ? suma_proc_us / bloques_proc : 0;
-            printf("Filtro: %s | INPUT %llu | DIAG %llu | err_trama %llu | err_cobs %llu | "
+            printf("#%04lu | Filtro: %s | INPUT %llu | DIAG %llu | err_trama %llu | err_cobs %llu | "
                    "err_crc %llu | err_cabecera %llu | perdidos %llu | sesiones %llu | "
                    "DAC %llu B | desbordes_dac %lu | proc prom %llu us max %llu us | "
-                   "FIR_OUT %llu | descartes_tx %llu\n",
-                   nombre_modo(),
+                   "grabación %s | RMS %.6g | fondo %.6g\n",
+                   (unsigned long)++numero_resumen, nombre_modo(),
                    (unsigned long long)r.input, (unsigned long long)r.diag,
                    (unsigned long long)r.err_trama, (unsigned long long)r.err_cobs,
                    (unsigned long long)r.err_crc, (unsigned long long)r.err_cabecera,
                    (unsigned long long)r.perdidos, (unsigned long long)r.sesiones,
                    (unsigned long long)d.bytes, (unsigned long)d.desbordes,
                    (unsigned long long)prom_proc_us, (unsigned long long)max_proc_us,
-                   (unsigned long long)transmision_enviados(),
-                   (unsigned long long)transmision_descartados());
+                   grabacion_nombre_estado(), grabacion_rms(), grabacion_fondo());
             suma_proc_us = 0;
             max_proc_us = 0;
             bloques_proc = 0;

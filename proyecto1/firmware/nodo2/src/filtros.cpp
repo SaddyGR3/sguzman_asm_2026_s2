@@ -78,6 +78,13 @@ void filtros_cambiar_notch(double frecuencia_hz, double q)
     z1 = z2 = 0.0f;
 }
 
+void filtros_reiniciar_estados()
+{
+    for (float& muestra : historial) muestra = 0.0f;
+    siguiente = 0;
+    z1 = z2 = 0.0f;
+}
+
 void filtros_iniciar()
 {
     filtros_cambiar_banda(100.0, 1200.0);

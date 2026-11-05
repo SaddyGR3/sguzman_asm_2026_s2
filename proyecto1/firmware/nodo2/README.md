@@ -1,216 +1,184 @@
-# Nodo 2: receptor UART, filtros y salida DAC
+# Nodo 2: receptor UART, grabación, filtros y salida DAC
 
-Recibe la señal contaminada `x` del nodo 1 y permite escucharla sin filtro,
-con un FIR de la banda protegida o con un notch, mediante un botón o comandos
-en el monitor USB.
-El nodo 1 genera la señal continuamente en bloques de 512 muestras cada 64 ms;
-la computadora solo alimenta las placas por USB, carga el firmware y muestra
-diagnósticos. El audio se produce en el DAC del nodo 2 y sale por el parlante.
-Valida COBS, CRC-32/ISO-HDLC y cabecera de INPUT y DIAG. UART1 recibe a 921600
-baudios, 8N1, con 16 KB de búfer y lecturas de hasta 1024 bytes sin espera.
-Al arrancar descarta hasta el primer `0x00`; ignora las tramas vacías.
-Por UART2 envía a GPIO17 un FIR_OUT por cada INPUT procesado, con la salida
-seleccionada antes de cuantizarla para el DAC y el mismo `first_sample` del INPUT.
-La sesión del nodo 2 cambia en cada arranque y la secuencia avanza por paquete.
+Recibe continuamente INPUT y DIAG del micrófono del nodo 1 por UART1 a
+921600 baudios, 8N1, con 16 KiB de búfer y lecturas sin espera de hasta 1024 B.
+Valida COBS, CRC-32/ISO-HDLC y cabecera; al arrancar descarta hasta el primer
+`0x00` e ignora las tramas vacías. Cada INPUT contiene 512 muestras float32
+a 8 kHz (64 ms). El monitor USB usa UART0 a 115200 baudios.
 
-Cada INPUT válido se procesa y su salida se escribe al DAC continuo de GPIO25: 8 kHz,
-APLL y seis búferes DMA de 512 bytes físicos. No hay cola de audio, reintentos ni
-temporización por bloques. La conversión es `round(127.5 + 127.5*v)`, limitada a
-0–255; una muestra no finita a la entrada del DAC produce 128 sin rechazar el INPUT.
-Se requiere `CONFIG_DAC_DMA_AUTO_16BIT_ALIGN=y`, ya presente en la configuración.
+## Grabar y reproducir
 
-Cuando se agota el audio, el DAC mantiene el último valor; el capacitor bloquea
-ese nivel constante. Tras 200 ms sin INPUT válido se intenta escribir una sola vez
-un bloque de 512 códigos 128, también al arrancar sin emisor. Otro INPUT rearma
-el watchdog. Las escrituras usan timeout cero; si quedan incompletas se descarta
-el resto, incluido el bloque de silencio. Puede haber clics en las transiciones.
-La diferencia entre relojes se acepta en esta versión y se observa en los desbordes.
+Se graba por actividad y se escucha únicamente al pedir reproducción, para
+**evitar realimentación acústica entre micrófono y parlante**. El filtrado sigue
+siendo en tiempo real, bloque a bloque, durante la reproducción.
+
+| Estado | Comportamiento |
+| --- | --- |
+| ESPERANDO | DAC en silencio (128). Mantiene un pre-disparo circular de 4096 muestras (0.512 s), calcula la RMS por INPUT y aprende el ruido de fondo. |
+| GRABANDO | Guarda audio hasta 16 bloques seguidos bajo el umbral (1.024 s), o hasta llenar la memoria. El DAC permanece en silencio. |
+| LISTA | Conserva la grabación y espera el botón o comando. Mantiene pre-disparo y detección; una actividad nueva reemplaza la grabación anterior. |
+| REPRODUCIENDO | Decodifica bloques de 512, actualiza FIR y notch y entrega el modo seleccionado al DAC. Sigue leyendo y validando INPUT y DIAG, sin grabar ni disparar. Al drenar el audio y establecer silencio vuelve a LISTA. |
+
+El disparo requiere dos bloques consecutivos con RMS mayor que
+`umbral × max(ruido de fondo, 0.00001)`. El factor inicial es **3.0**
+(aproximadamente 9.5 dB). Al empezar a recibir o detectar una sesión nueva,
+se ignoran los primeros 16 INPUT y se toma la mediana de la RMS de los 16
+siguientes: el promedio de los dos valores centrales ordenados. Durante esos
+32 bloques (2.048 s) no hay disparos. Al completar se imprime
+`Grabación: fondo calibrado <valor>`.
+
+**La calibración se hace en silencio**, tanto al arrancar como al usar
+`calibrar`. Este comando cancela la grabación en curso, descarta el audio
+anterior y limpia pre-disparo y confirmaciones antes de repetir la medición.
+Durante REPRODUCIENDO imprime `Grabación: calibrar no disponible mientras reproduce`
+y no cambia nada. Si llega una sesión nueva mientras se reproduce, la
+calibración automática se difiere hasta terminar el audio para no medir el parlante.
+
+Después de calibrar, el fondo se actualiza con un promedio exponencial de
+factor 0.01, solo en ESPERANDO y con bloques cuya RMS sea **menor que 1.5 veces
+el fondo**. Los demás no lo modifican, aunque aún no alcancen el umbral de
+disparo. En LISTA se conserva el fondo aprendido. Los dos bloques de
+confirmación quedan incluidos una sola vez en el pre-disparo copiado.
+
+La grabación usa **G.711 μ-law de 8 bits**, 8000 bytes/s. Se recortan las
+muestras a [-1, 1] y las no finitas se guardan como cero. La reproducción
+decodifica a float antes de filtrar; la salida física ya es un DAC de 8 bits.
+El pre-disparo es estático y la grabación se reserva una sola vez al arrancar
+con `heap_caps_malloc`, después de iniciar los controladores y la tarea DAC.
+Se imprimen RAM interna libre, bloque libre más grande y duración obtenida.
+La reserva considera ambos límites, deja al menos **48 KiB** libres y se reduce
+en bloques completos si el asignador no puede satisfacerla.
+
+El máximo es **188 bloques = 96 256 B = 12.032 s**, incluido el pre-disparo
+copiado; este además ocupa 4096 B separados. La capacidad real puede ser menor
+según la RAM disponible. Si no caben al menos ocho bloques conservando el
+margen, se informa que la grabación está deshabilitada y el DAC queda en silencio.
+La grabación se pierde al reiniciar. Para P1–P5 de 10 s se esperan unos
+10–11 s más el pre-disparo, dependiendo del silencio inicial y final.
+
+Conectar un botón entre **GPIO33 (P33) y GND**, con pull-up interno. El flanco
+de 1 a 0 solo inicia reproducción en LISTA. Se lee en cada vuelta del lazo,
+sin temporizador de antirrebote. Se puede cambiar el filtro y volver a escuchar
+la misma grabación sin modificarla.
+
+Una tarea dedicada escribe al DAC continuo de GPIO25 a 8 kHz, APLL, con seis
+búferes DMA de 512 B físicos (tres bloques de audio) y una cola de dos bloques.
+El lazo principal procesa audio solo si hay lugar en la cola; las esperas del
+DAC ocurren en su tarea. Las escrituras parciales conservan el desplazamiento
+y se reintentan sin perder muestras. Mientras no hay audio se repone silencio
+128. Al final se escriben cuatro bloques silenciosos para desplazar el audio
+de DMA antes de confirmar LISTA. Puede haber una breve latencia al empezar y
+terminar, y clics en las transiciones.
+
+Se requiere `CONFIG_DAC_DMA_AUTO_16BIT_ALIGN=y`, presente en la configuración.
+La conversión al DAC es `round(127.5 + 127.5*v)`, limitada a 0–255; una muestra
+no finita produce 128. El watchdog RX solo informa errores y no interrumpe
+una reproducción si el emisor se desconecta.
 
 ## Filtro
 
-Conectar un botón entre **GPIO32 y GND**; usa el pull-up interno. Arranca en
-`SIN FILTRO` (constante `MODO_INICIAL` en `src/main.cpp`). Cada pulsación avanza
-`SIN FILTRO → FIR → NOTCH → SIN FILTRO` e imprime `Filtro: <modo>`.
-El botón se lee una vez por INPUT válido y detecta el flanco de 1 a 0, sin
-temporizador de antirrebote. Sin INPUT no se atiende el botón; evitar pulsaciones
-más cortas que el periodo de un bloque (64 ms).
+Conectar un botón entre **GPIO32 y GND**, con pull-up interno. Arranca en
+`SIN FILTRO`; cada flanco de 1 a 0 avanza `SIN FILTRO → FIR → NOTCH → SIN FILTRO`.
+Este botón mantiene la lectura una vez por INPUT válido, sin antirrebote;
+sin INPUT no se atiende y conviene pulsarlo por más de 64 ms.
 
-| Modo | Salida y qué debe oírse |
+| Modo | Salida |
 | --- | --- |
-| SIN FILTRO | La señal `x`, con los tres tonos y el pitido de 2150 Hz. |
-| FIR | Kaiser de 37 coeficientes. Al arrancar es pasa bajas con corte de 1500 Hz; reduce el pitido y conserva los tonos. Retardo de 18 muestras (2.25 ms). |
-| NOTCH | Al arrancar rechaza 2150 Hz con Q = 8.5; reduce el pitido y conserva los tonos. |
+| SIN FILTRO | Audio grabado sin filtrar, después de decodificar μ-law. |
+| FIR | Kaiser de 37 coeficientes. Inicialmente pasa bajas con corte de 1500 Hz; retardo de 18 muestras (2.25 ms). |
+| NOTCH | Inicialmente rechaza 2150 Hz con Q = 8.5. |
 
-Los coeficientes se calculan en `double` al arrancar o al cambiarlos y se guardan
-en `float`. Ambos filtros procesan siempre las 512 muestras y conservan sus estados
-entre bloques y cambios de modo. Al cambiar los parámetros de un filtro se reinicia
-solo su propio estado. Las entradas no finitas se sustituyen por cero solo para los
-filtros; en `SIN FILTRO` se conserva la conversión del DAC.
-El recorte se hace únicamente al convertir al DAC. Al cambiar puede oírse un clic.
+Los coeficientes se calculan en double y se guardan en float. Ambos filtros
+procesan todas las muestras reproducidas y mantienen estado entre bloques y
+cambios de modo. Al empezar cada reproducción se reinician sus estados,
+conservando los parámetros. Cambiar banda o notch reinicia solo ese filtro.
+El modo vigente elige la salida de cada bloque; no hay selección automática.
 
 ## Comandos desde el monitor
 
-El monitor de **nodo 2** usa el mismo cable USB con el que se programa la placa:
-no hace falta ningún cable adicional ni programa aparte. PlatformIO envía cada
-tecla y el firmware muestra lo que escribís. Mientras haya un comando a medio
-escribir, el resumen periódico se pausa; **Enter** lo ejecuta y el resumen vuelve
-aproximadamente un segundo después. Podés corregir con **Backspace**. Tras Enter
-aparece el resultado del comando. Los comandos se leen sin espera y se aplican
-entre paquetes INPUT completos.
+El firmware muestra el eco de las teclas; Enter ejecuta y Backspace corrige.
+Los comandos no esperan audio y se aplican entre bloques completos. Mientras
+se escribe, se pausa el resumen periódico.
 
 | Comando | Efecto |
 | --- | --- |
-| `estado` | Muestra modo, banda, notch y todos los coeficientes vigentes. |
-| `modo sin`, `modo fir`, `modo notch` | Elige qué se oye por el parlante, igual que el botón. |
-| `banda <inf> <sup>` | Recalcula el FIR para la banda protegida en Hz. |
-| `notch <f> <q>` | Centra el notch en `f` Hz con factor de calidad `q`. |
+| `estado` | Muestra modo, banda, notch y coeficientes vigentes. |
+| `modo sin`, `modo fir`, `modo notch` | Selecciona la salida. |
+| `banda <inf> <sup>` | Recalcula el FIR; admite 100 ≤ inf < sup ≤ 3000 Hz. |
+| `notch <f> <q>` | Recalcula el notch; admite 100–3000 Hz y Q de 0.5–20. |
+| `reproducir` | Igual que GPIO33; requiere LISTA. |
+| `umbral <factor>` | Ajusta el disparo, de 1.5 a 20; inicialmente 3.0. |
+| `calibrar` | Repite la calibración en silencio (16 bloques ignorados + mediana de 16); no disponible durante reproducción. |
+| `grabacion` | Muestra estado, duración guardada, capacidad, ruido de fondo y umbral. |
 
-`banda` indica qué zona de frecuencias debe conservar el FIR. Por ejemplo,
-`banda 100 1200` conserva los tonos útiles y reduce el pitido de 2150 Hz;
-`banda 100 3000` deja pasar también ese pitido. `notch` indica una frecuencia
-puntual que se quiere atenuar: `notch 2150 8.5` reduce el pitido de 2150 Hz.
-Un Q mayor hace el rechazo más estrecho; uno menor afecta una zona más amplia.
-Estos comandos ajustan los filtros, pero para escucharlos hay que seleccionar
-`modo fir` o `modo notch`, respectivamente.
-
-Se admite `100 ≤ inf < sup ≤ 3000`, `100 ≤ f ≤ 3000` y `0.5 ≤ q ≤ 20`.
-Con banda inferior menor que 600 Hz, el FIR es pasa bajas con corte `sup + 300` Hz.
-Desde 600 Hz, es pasa banda con cortes `inf - 300` y `sup + 300` Hz.
-Un valor fuera de rango o un comando desconocido imprime una línea `Error:` y
-no cambia la configuración. Los valores iniciales son banda **100–1200 Hz** y
-notch **2150 Hz, Q = 8.5**. Solo se guardan en RAM: al reiniciar vuelven los
-valores iniciales.
+La banda inicial es 100–1200 Hz y el notch 2150 Hz, Q 8.5. Con banda inferior
+menor que 600 Hz, el FIR es pasa bajas con corte `sup + 300` Hz; desde 600 Hz
+es pasa banda con cortes `inf - 300` y `sup + 300` Hz. Un valor inválido imprime
+`Error:` sin cambiar parámetros. Toda la configuración se guarda solo en RAM.
 
 ## Conexiones
 
-- GPIO19 (RX del nodo 2) ← GPIO18 (TX del nodo 1), con GND común.
-- GPIO18 del nodo 2 queda configurado como TX, sin conectar.
-- GPIO25 → capacitor de 10 µF → entrada del PAM8403, con GND común.
+- GPIO19 (RX UART1) ← GPIO18 (TX nodo 1), con GND común.
+- GPIO18 del nodo 2 queda como TX sin conectar.
+- GPIO25 → Sallen-Key → PAM8403 → parlante, con el acoplamiento del montaje.
 - GPIO4 → resistencia de 220–330 Ω → ánodo del LED; cátodo a GND.
-- GPIO32 → botón → GND.
-- GPIO17 (TX UART2 del nodo 2) → RXD del YP-05 o RX del nodo 3; GND común.
+- GPIO32 → botón de filtro → GND.
+- GPIO33 → botón de reproducción → GND.
 
-Para probar con el YP-05: conectarlo a la PC por USB, poner su jumper en 3.3 V
-y dejar VCC y TXD sin conectar. GPIO16 (RX UART2) queda sin conectar.
-
-El LED se enciende si hubo errores o pérdidas en los últimos 500 ms, o si no hay
-INPUT válido en los últimos 200 ms. Arranca encendido hasta recibir INPUT.
-
-## Compilar, subir y abrir monitor
-
-En PlatformIO, seleccionar el proyecto **nodo2**, entorno **esp32dev**, y usar
-Build, Upload y Monitor en el puerto de esta placa. El monitor usa UART0 a 115200.
-Desde una terminal ubicada en `proyecto1/firmware/nodo2/`:
-
-```sh
-pio run -e esp32dev
-pio run -e esp32dev -t upload --upload-port /dev/ttyUSB_NODO2
-pio device monitor --port /dev/ttyUSB_NODO2 --baud 115200
-```
-
-Reemplazar `/dev/ttyUSB_NODO2` por el puerto real. En VS Code, abrir el monitor
-de la placa **nodo2** y escribir los comandos en su terminal.
+El LED indica errores o pérdidas recientes (500 ms), o ausencia de INPUT
+válido por 200 ms. Arranca encendido hasta recibir INPUT.
 
 ## Contadores del monitor
 
-Cada resumen empieza con `Filtro: <modo>`. Los contadores se imprimen acumulados
-cada aproximadamente un segundo; solo se reinician al reiniciar el nodo 2.
+El resumen de aproximadamente un segundo agrega estado de grabación, RMS del
+último INPUT y ruido de fondo. Los contadores son acumulados desde el arranque,
+excepto los tiempos de procesamiento, calculados por intervalo.
 
 | Campo | Significado |
 | --- | --- |
-| INPUT / DIAG | Paquetes válidos de cada tipo. |
-| err_trama | Más de 2094 bytes sin delimitador después de sincronizar; se descarta hasta el siguiente cero. |
-| err_cobs | COBS inválido o datos decodificados que exceden el espacio disponible. |
-| err_crc | CRC recibido distinto del calculado. |
-| err_cabecera | Paquete demasiado corto para sus campos o cabecera, tipo, formato, canales o tamaños inválidos. |
-| perdidos | Paquetes faltantes por salto modular de `sequence`, incluidos INPUT y DIAG, dentro de una sesión. |
-| sesiones | Primera sesión recibida y cada cambio posterior de `session_id`; no es un error. |
-| DAC … B | Bytes de códigos de 8 bits aceptados por el driver, incluido el silencio del watchdog. |
-| desbordes_dac | Escrituras que no aceptaron las 512 muestras completas, incluido el silencio. |
-| proc prom / max … us | Tiempo promedio y máximo por INPUT en el último intervalo: convertir las 512 muestras, calcular ambos filtros y entregar el bloque al DAC; 0/0 si no hubo INPUT. Debe quedar por debajo de los 64 000 µs disponibles por bloque. |
-| FIR_OUT | Paquetes completos encolados para transmitir por GPIO17 desde el arranque. |
-| descartes_tx | Paquetes descartados porque no hubo espacio suficiente en el búfer UART2. |
+| INPUT / DIAG | Paquetes válidos de cada tipo, también durante reproducción. |
+| err_trama | Más de 2094 bytes sin delimitador; descarta hasta el siguiente cero. |
+| err_cobs | COBS inválido o salida mayor que el búfer. |
+| err_crc | CRC distinto del calculado. |
+| err_cabecera | Cabecera, origen, destino, tipo o tamaños inválidos. |
+| perdidos | Saltos hacia delante de sequence dentro de la sesión, incluidos ambos tipos. |
+| sesiones | Primera sesión y cada cambio posterior; no es un error. |
+| DAC … B | Códigos de 8 bits aceptados por el controlador, incluido silencio continuo. |
+| desbordes_dac | Timeout de escritura de un segundo; se conserva y reintenta el resto. No cuenta la espera normal por espacio en la cola. |
+| proc prom / max … us | Decodificación, ambos filtros, conversión y encolado por bloque reproducido; excluye la espera DMA en la tarea DAC. 0/0 si no hubo bloques reproducidos. |
 
-La primera secuencia recibida de cada sesión establece la referencia, sin inferir
-pérdidas anteriores. El seguimiento contempla el retorno de `UINT32_MAX` a cero;
-duplicados y secuencias anteriores no suman pérdidas ni retroceden la referencia
-(se distinguen saltos hacia delante menores que media vuelta del contador).
-`first_sample` no se usa para detectar huecos ni programar audio.
+La primera secuencia establece la referencia sin inferir pérdidas anteriores.
+Se contempla el retorno de UINT32_MAX a cero; duplicados y secuencias anteriores
+no suman pérdidas. `first_sample` no programa la reproducción.
 
 ## Prueba entre placas
 
-1. Subir **nodo2** desde la barra de PlatformIO y abrir su monitor en su puerto.
-2. En el monitor del nodo 2, escribir `estado` y pulsar Enter. Debe decir
-   `SIN FILTRO`, banda 100–1200 Hz, notch 2150 Hz Q 8.5. La línea de arranque
-   también muestra el botón GPIO32 y los primeros
-   coeficientes FIR aproximadamente `[0.001128111831, 0.002301285580, 0]`,
-   notch `b ≈ [0.909373858311, 0.213770873244, 0.909373858311]` y
-   `a ≈ [1, 0.213770873244, 0.818747716622]`. Se imprimen los valores almacenados
-   en `float`: comparar con tolerancia de `1e-6`, no exigir los doce decimales.
-3. Con el nodo 1 encendido y conectado, escuchar la mezcla y el pitido de 2150 Hz.
-4. Enviar `modo fir`: el pitido debe bajar. Enviar `banda 100 3000`: el pitido
-   vuelve a oírse porque 2150 Hz queda dentro de la banda. Enviar
-   `banda 100 1200`: el pitido vuelve a bajar. El monitor imprime los 37
-   coeficientes nuevos después de cada cambio.
-5. Enviar `modo notch` y luego `notch 1100 1`: el pitido de 2150 Hz vuelve
-   y se pierde el tono útil de 1100 Hz. Enviar `notch 2150 8.5`: el pitido baja.
-   `estado` debe mostrar los valores restaurados y los coeficientes actuales.
-6. Probar `modo sin`, `modo fir`, `modo notch` y el botón GPIO32: cada cambio
-   debe reflejarse en `Filtro: <modo>`. Al cambiar puede oírse un clic.
-7. Enviar `banda 100 3500` y `notch 2150 0`: cada uno debe imprimir un error;
-   `estado` debe conservar los valores válidos anteriores.
-8. Comprobar los contadores en los tres modos:
-   INPUT y DIAG deben aumentar unos 15–16 por segundo (~15.6 INPUT/s), con todos
-   los errores, `perdidos` y `desbordes_dac` en cero y LED apagado.
-9. Desconectar el cable de GPIO19: el LED se enciende al cumplirse 200 ms sin INPUT
-   y el watchdog escribe silencio una vez. El audio deja de sonar; comprobar si
-   hay clics de transición. Al reconectar debe recuperarse automáticamente.
-   Pueden aumentar pérdidas y errores si se corta o recupera una trama a medias.
-10. Presionar EN en el nodo 1: debe aumentar `sesiones` y continuar la recepción
-   sin pérdidas atribuidas al reinicio de secuencia. Con el enlace en reposo no
-   deberían aparecer errores; un reinicio en plena trama puede dejar un error
-   de trama truncada antes de recuperar la sincronización.
-11. Con el nodo 1 enviando, observar `proc prom` y `max` durante unos segundos en
-    `modo sin`, `modo fir` y `modo notch`. Anotar los valores para el informe;
-    deben quedar por debajo de 64 000 us por bloque. Sin INPUT se muestra 0/0.
+1. Conectar GPIO33 a GND mediante un botón y arrancar el nodo 1 con micrófono.
+2. En silencio, comprobar ESPERANDO y capacidad impresa suficiente; esperar
+   unos 2 s hasta `Grabación: fondo calibrado <valor>` antes de iniciar P1.
+3. Reproducir P1 desde la laptop: debe pasar a GRABANDO y, aproximadamente un
+   segundo después de terminar la señal, a LISTA. Con capacidad máxima debe
+   poder guardar la prueba de 10 s, el pre-disparo y la cola de silencio.
+4. Pulsar GPIO33: escuchar el pitido en SIN FILTRO. Esperar LISTA, elegir NOTCH
+   con GPIO32 o `modo notch` y repetir: el pitido debe atenuarse.
+5. Hablar o aplaudir: comprobar que una actividad nueva reemplaza la grabación.
+6. Revisar INPUT y DIAG durante reproducción: aproximadamente 15–16 por segundo,
+   errores, perdidos y desbordes_dac en cero. Medir proc prom/max en cada modo;
+   cada bloque debe procesarse en menos de 64 000 us.
+7. Probar `grabacion`, `umbral 3`, `banda 100 1200` y `notch 2150 8.5`;
+   comprobar rechazo de valores fuera de rango. Ejecutar `calibrar` en silencio
+   y esperar el fondo calibrado. Durante reproducción, verificar que `calibrar`
+   imprime el rechazo y el audio continúa. Reiniciar el nodo 1 y comprobar
+   que la sesión nueva repite la calibración.
+8. Desconectar RX durante reproducción: el LED informa ausencia, pero la
+   grabación sigue hasta terminar. Reconectar y comprobar recuperación de RX.
 
-Medición recibida del monitor, con el nodo 1 enviando (paso 3c):
+El ruido de sala y una señal presente durante la calibración inicial pueden
+alterar el disparo. En LISTA el fondo queda fijo; ajustar el umbral o ejecutar
+`calibrar` en silencio si cambia mucho el ambiente. Una actividad continua llena la memoria
+y puede disparar otra grabación después; no se conserva la anterior al reemplazarla.
 
-| Modo | `proc prom` observado | Mayor `max` observado |
-| --- | --- | --- |
-| SIN FILTRO | 4824 us | 4844 us |
-| FIR | 4830–4831 us | 4851 us |
-| NOTCH | 4815–4817 us | 4842 us |
+## Compilar, subir y abrir monitor
 
-El peor bloque observado tardó 4851 us, alrededor del 7.6 % de los 64 000 us
-disponibles. INPUT avanzó unas 15–16 veces por segundo; `err_trama`, `err_cobs`,
-`err_crc`, `err_cabecera`, `perdidos` y `desbordes_dac` permanecieron en cero.
-Los tiempos de los tres modos son parecidos porque ambos filtros se calculan
-para cada INPUT y el modo solo elige cuál salida se entrega al DAC.
-
-## Prueba de FIR_OUT con YP-05
-
-Con nodo 1, nodo 2 y YP-05 conectados por sus respectivos USB, identificar el
-puerto real del YP-05 conectándolo de último y comparando la salida de
-`python3 -m serial.tools.list_ports -v` antes y después. Linux suele asignarle
-un nombre como `/dev/ttyUSB0` o `/dev/ttyUSB1`.
-Subir este firmware **solo al nodo 2**. El YP-05 recibe por RXD desde GPIO17;
-su VCC y TXD quedan libres. Desde la raíz del repositorio, con las dependencias
-de `herramientas_pc/` instaladas, ejecutar:
-
-```sh
-python3 proyecto1/herramientas_pc/receptor_nodo1.py --puerto /dev/ttyUSB1 --enlace n2out --segundos 60
-```
-
-Cambiar `/dev/ttyUSB1` por el puerto real del YP-05. No usar el puerto USB del
-nodo 2, que se reserva para su monitor serie. La captura debe terminar
-con `RESULTADO: OK`, alrededor de 15–16 FIR_OUT por segundo, sin errores ni
-paquetes perdidos. En el monitor USB propio del nodo 2, `FIR_OUT` debe aumentar
-y `descartes_tx` permanecer en cero. Durante otra captura, pulsar EN del nodo 2:
-el validador debe registrar una sesión nueva sin pérdidas. `FIR_OUT` es el nombre
-del tipo de paquete incluso en `SIN FILTRO` o `NOTCH`: sus muestras son las de
-la salida seleccionada en ese momento.
-
-Captura reportada el 3 nov 2026: 937 FIR_OUT válidos en 60 s (15.62/s), una
-sesión, cero errores, cero paquetes perdidos y `RESULTADO: OK`. Queda por probar
-el reinicio con EN durante una captura para confirmar el cambio de sesión.
+En PlatformIO, seleccionar proyecto nodo2 y entorno esp32dev. Usar Build,
+Upload y Monitor en el puerto USB de esta placa; UART0 funciona a 115200.
