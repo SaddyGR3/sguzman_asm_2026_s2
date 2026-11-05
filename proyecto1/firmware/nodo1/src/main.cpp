@@ -21,6 +21,9 @@ constexpr Fuente FUENTE_ENTRADA = Fuente::ADC;
 
 constexpr int N_FFT = 1024;      // dos bloques de 512
 static float banda_lo = 100.0f, banda_hi = 1200.0f;
+static uint32_t config_id = 1;
+static bool config_pendiente = true;
+constexpr int64_t REPETICION_CONFIG_US = 1000000;
 enum class Vista { DIAG, TODO };
 static Vista vista = Vista::DIAG;
 
@@ -87,11 +90,15 @@ static void comando_consola(const char* linea)
     if (sscanf(linea, " %15s", comando) != 1) return;
     if (strcmp(comando, "banda") == 0 &&
         sscanf(linea, " %15s %f %f %c", comando, &lo, &hi, &extra) == 3) {
-        if (std::isfinite(lo) && std::isfinite(hi) && lo >= 0.0f && lo < hi && hi <= 4000.0f) {
+        if (std::isfinite(lo) && std::isfinite(hi) && lo >= 100.0f && lo < hi && hi <= 3000.0f) {
+            if (lo != banda_lo || hi != banda_hi) {
+                if (++config_id == 0) config_id = 1;  // cero está reservado
+                config_pendiente = true;
+            }
             banda_lo = lo;
             banda_hi = hi;
             diagnostico_banda(lo, hi);
-            printf(">> banda protegida: %g-%g Hz\n", lo, hi);
+            printf(">> banda protegida: %g-%g Hz | config %lu\n", lo, hi, (unsigned long)config_id);
         } else {
             ayuda_consola();
         }
@@ -102,8 +109,8 @@ static void comando_consola(const char* linea)
         printf(">> vista: %s\n", vista == Vista::DIAG ? "diag" : "todo");
     } else if (strcmp(comando, "estado") == 0 &&
                sscanf(linea, " %15s %c", comando, &extra) == 1) {
-        printf(">> banda protegida: %g-%g Hz\n>> vista: %s\n>> ",
-               banda_lo, banda_hi, vista == Vista::DIAG ? "diag" : "todo");
+        printf(">> banda protegida: %g-%g Hz | config %lu\n>> vista: %s\n>> ",
+               banda_lo, banda_hi, (unsigned long)config_id, vista == Vista::DIAG ? "diag" : "todo");
         imprimir_linea_diag(diagnostico_resultado(), nullptr, 0, 0, 0);
     } else {
         ayuda_consola();
@@ -153,6 +160,8 @@ static uint8_t trabajo[TAM_TRABAJO];          // cabecera + datos + CRC, antes d
 static uint8_t sal_input[CABLE_INPUT];
 static uint8_t sal_diag2[CABLE_DIAG];         // DIAG hacia el nodo 2
 static uint8_t diag64[TAM_DIAG];
+static uint8_t control32[TAM_CONTROL];
+static uint8_t sal_control[CABLE_CONTROL];
 static uint32_t session_id = 0;
 
 // Enlace UART hacia la placa N2+N3, con sus contadores de transmisión.
@@ -186,7 +195,7 @@ static void iniciar_uart(uart_port_t puerto, int tx, int rx, int buf_tx, int buf
 // Envía un bloque (datos + DIAG) sin bloquear: si no hay espacio en el búfer de TX
 // se descarta completo. uart_write_bytes copia al búfer del driver y vuelve, así que
 // los búferes de salida se pueden reutilizar en el bloque siguiente.
-static void enviar_bloque(Enlace& e, const uint8_t* datos, size_t l1,
+static bool enviar_bloque(Enlace& e, const uint8_t* datos, size_t l1,
                           const uint8_t* diag, size_t l2)
 {
     const int64_t t0 = esp_timer_get_time();
@@ -202,13 +211,35 @@ static void enviar_bloque(Enlace& e, const uint8_t* datos, size_t l1,
         const uint32_t escritura = static_cast<uint32_t>(t1 - t0);
         if (escritura > e.esc_max_us) e.esc_max_us = escritura;
         e.enviados += l1 + l2;
+        return true;
     } else {
         // Sin reintento: el audio vencido se descarta. Los sequence ya asignados dejan un
         // salto que el receptor cuenta como pérdida.
         ++e.desbordes_tx;
         const uint32_t escritura = static_cast<uint32_t>(esp_timer_get_time() - t0);
         if (escritura > e.esc_max_us) e.esc_max_us = escritura;
+        return false;
     }
+}
+
+// Solo se intenta después de encolar INPUT + DIAG. Sin espacio, queda pendiente;
+// no consume sequence ni cuenta como descarte de audio. Un único productor TX.
+static bool enviar_config(uint32_t& secuencia, uint64_t indice_efectivo)
+{
+    size_t libre = 0;
+    ESP_ERROR_CHECK(uart_get_tx_buffer_free_size(enlace_n2.puerto, &libre));
+    // Una escritura adicional: reservar de nuevo el margen para su metadato y relleno.
+    if (libre < CABLE_CONTROL + MARGEN_TX) return false;
+    const int64_t inicio = esp_timer_get_time();
+    armar_control_config(config_id, indice_efectivo, banda_lo, banda_hi, control32);
+    const size_t largo = armar_paquete(TIPO_CONTROL, NODO_1, NODO_2, 0,
+        session_id, secuencia++, indice_efectivo, 0, FORMATO_META, 0,
+        control32, TAM_CONTROL, trabajo, sal_control);
+    uart_write_bytes(enlace_n2.puerto, sal_control, largo);
+    enlace_n2.enviados += largo;
+    const uint32_t duracion = static_cast<uint32_t>(esp_timer_get_time() - inicio);
+    if (duracion > enlace_n2.esc_max_us) enlace_n2.esc_max_us = duracion;
+    return true;
 }
 
 // INPUT hacia el nodo 2. Un arreglo de float no tiene relleno y el ESP32 es
@@ -300,7 +331,7 @@ extern "C" void app_main(void)
     uart_write_bytes(enlace_n2.puerto, &cero, 1);
 
     if (FUENTE_ENTRADA == Fuente::GENERADOR) {
-        printf("Fuente GENERADOR: salida solo INPUT + DIAG por UART1 (GPIO18).\n");
+        printf("Fuente GENERADOR: salida INPUT + DIAG y CONTROL CONFIG por UART1 (GPIO18).\n");
 
         // Solo el generador usa el temporizador de 64 ms.
         tarea_principal = xTaskGetCurrentTaskHandle();
@@ -313,7 +344,7 @@ extern "C" void app_main(void)
         ESP_ERROR_CHECK(esp_timer_start_periodic(temporizador, PERIODO_US));
     } else {
         printf("Fuente ADC: micrófono en GPIO36=x, 24000 Hz; "
-               "salida solo INPUT + DIAG por UART1 (GPIO18).\n");
+               "salida INPUT + DIAG y CONTROL CONFIG por UART1 (GPIO18).\n");
         entrada_adc_iniciar();
     }
 
@@ -341,6 +372,7 @@ extern "C" void app_main(void)
     size_t cable_input = 0, cable_diag = 0;
 
     int64_t inicio_anterior = -1;   // la primera iteración no tiene periodo
+    int64_t ultimo_config_us = 0;
 
     for (;;) {
         // Espera el aviso. Si n > 1, llegaron avisos mientras el bloque anterior
@@ -410,7 +442,9 @@ extern "C" void app_main(void)
         d.N = N_FFT;
         d.H = HOP;
         d.pico_Hz = diagnostico.pico_hz;
-        d.banda_lo = d.banda_hi = -1.0f;
+        d.banda_lo = banda_lo;
+        d.banda_hi = banda_hi;
+        d.config_id = config_id;
         d.piso_resumen = diagnostico.piso_resumen;
         d.DC = diagnostico.dc;
         d.metodo = diagnostico.metodo;
@@ -438,7 +472,13 @@ extern "C" void app_main(void)
         if (empaquetado > v_emp_max) v_emp_max = empaquetado;
 
         // Envío por UART1: INPUT y después DIAG.
-        enviar_bloque(enlace_n2, sal_input, cable_input, sal_diag2, cable_diag);
+        const bool audio_enviado = enviar_bloque(enlace_n2, sal_input, cable_input, sal_diag2, cable_diag);
+        const int64_t ahora_config_us = esp_timer_get_time();
+        if (ahora_config_us - ultimo_config_us >= REPETICION_CONFIG_US) config_pendiente = true;
+        if (audio_enviado && config_pendiente && enviar_config(seq_n2, first_sample)) {
+            config_pendiente = false;
+            ultimo_config_us = esp_timer_get_time();
+        }
 
         // El resumen va al final: el printf cae en el tiempo libre del periodo.
         if (v_bloques == BLOQUES_VENTANA) {

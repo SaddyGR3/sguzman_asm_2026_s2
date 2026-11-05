@@ -44,16 +44,23 @@ static void finalizar_diagnostico()
     unsigned mejor = 0;
     uint8_t mejor_tipo = 0;
     uint8_t mejor_filtro = 0;
-    for (uint8_t tipo = 0; tipo < 6; ++tipo) {
-        for (uint8_t filtro = 1; filtro <= 3; ++filtro) {
-            if (sugerencias[tipo][filtro] > mejor) {
-                mejor = sugerencias[tipo][filtro];
-                mejor_tipo = tipo;
-                mejor_filtro = filtro;
-            }
+    // Votar por filtro sumando todos los tipos. En empate gana el menor ID.
+    for (uint8_t filtro = 1; filtro <= 3; ++filtro) {
+        unsigned total = 0;
+        for (uint8_t tipo = 0; tipo < 6; ++tipo) total += sugerencias[tipo][filtro];
+        if (total > mejor) {
+            mejor = total;
+            mejor_filtro = filtro;
         }
     }
     if (mejor == 0) return;
+    unsigned mejor_cantidad_tipo = 0;
+    for (uint8_t tipo = 0; tipo < 6; ++tipo) {
+        if (sugerencias[tipo][mejor_filtro] > mejor_cantidad_tipo) {
+            mejor_cantidad_tipo = sugerencias[tipo][mejor_filtro];
+            mejor_tipo = tipo;
+        }
+    }
     diagnostico.tipo_ruido = mejor_tipo;
     diagnostico.filtro_n2 = mejor_filtro;
     if (mejor_filtro == 2 || mejor_filtro == 3) {
@@ -107,6 +114,7 @@ static void iniciar_calibracion()
     bloques_calibracion = 0;
     calibracion_pendiente = false;
     limpiar_pre();
+    limpiar_diagnostico();
     printf("Grabación: esperando, calibrando en silencio\n");
 }
 

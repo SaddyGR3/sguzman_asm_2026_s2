@@ -13,7 +13,8 @@ placa que integra los nodos 2 y 3. UART0 (USB) se usa para la consola.
 - **Diagnóstico:** FFT de 1024 muestras, salto de 512, detección tonal fuera
   de la banda protegida y persistencia.
 - **Salida única:** INPUT + DIAG por UART1 a 921600 baudios, 8N1, con destino
-  lógico nodo 2. La cabecera tiene 32 B; se usan CRC-32, COBS y delimitador 0x00.
+  lógico nodo 2, más CONTROL CONFIG cuando corresponde. La cabecera tiene 32 B;
+  se usan CRC-32, COBS y delimitador 0x00.
 - **Arranque:** comprueba CRC y COBS, imprime la cabecera INPUT y escribe un
   0x00 inicial en UART1 para resincronizar el receptor tras reiniciar.
 
@@ -56,14 +57,15 @@ y volver a compilar. El valor predeterminado es `Fuente::ADC`.
 Genera x = s + i: s contiene tonos de 300, 700 y 1100 Hz; i contiene un tono
 de 2150 Hz. Los arreglos s e i solo se usan para formar x. En este modo,
 un temporizador de 64 ms marca el ritmo. La salida sigue siendo únicamente
-INPUT + DIAG por UART1.
+INPUT + DIAG y CONTROL CONFIG por UART1.
 
 ## Consola y contadores
 
 Comandos por UART0 a 115200 baudios:
 
-- `banda <lo> <hi>`: cambia la banda protegida; inicialmente 100–1200 Hz.
-- `estado`: muestra la banda, la vista y el diagnóstico actual.
+- `banda <lo> <hi>`: cambia la banda protegida; admite `100 ≤ lo < hi ≤ 3000` Hz;
+  inicialmente 100–1200 Hz.
+- `estado`: muestra la banda, `config_id`, la vista y el diagnóstico actual.
 - `vista diag`: resumen compacto, con `ADC x <min>-<max> mV` solo en modo ADC.
 - `vista todo`: diagnóstico detallado, periodos, procesamiento, empaquetado,
   tamaños de paquetes, pila libre y estadísticas TX de UART1. En ADC también
@@ -86,6 +88,30 @@ La bandera de discontinuidad (0x0010) se activa solo cuando aumenta el contador
 de desbordes del pool; este cuenta eventos, no la cantidad exacta de muestras
 perdidas. `first_sample` avanza 512 por bloque. Se conservan las banderas de
 calentamiento (0x0002), reinicio (0x0004) y ventana parcial (0x0020).
+
+## Banda protegida
+
+Nodo 1 es la fuente de la banda protegida. Envía CONTROL CONFIG (tipo 5,
+32 bytes de datos little-endian) al nodo 2 después del DIAG del primer bloque,
+tras cada cambio de banda y aproximadamente cada segundo. `config_id` empieza
+en 1 y aumenta solo si cambian los valores; repetir el mismo comando no lo
+incrementa. Las repeticiones conservan el ID. `estado` lo muestra y DIAG incluye
+la banda vigente y su ID.
+
+CONFIG comparte la secuencia de INPUT y DIAG; `indice_efectivo` indica la primera
+muestra del próximo INPUT. Usa fs=8000, N=1024, H=512, método=0, opcode=1 y
+status=0. Ocupa como máximo 70 bytes en el cable. No hay confirmación de vuelta:
+la repetición permite recuperar la configuración si se pierde o reinicia nodo 2.
+
+Se prioriza encolar INPUT + DIAG en el búfer TX. Solo después se intenta CONFIG,
+reservando margen adicional para su escritura. Si no cabe, queda pendiente para
+otro bloque, sin consumir secuencia ni sumar un descarte de audio. No añade
+esperas ni cambia el ritmo de adquisición de 512 muestras cada 64 ms; los tiempos
+y la ausencia de pérdidas deben verificarse en placa.
+
+En nodo 2 la banda local es para pruebas: las repeticiones del mismo ID no la
+reemplazan; un CONFIG con un ID nuevo vuelve a aplicar la banda del nodo 1.
+Si llega durante reproducción, nodo 2 lo difiere hasta terminar.
 
 ## Requisitos
 
@@ -115,6 +141,9 @@ En ADC, comprobar en reposo x alrededor de 1340 mV, frecuencias próximas a
 banda protegida (por ejemplo, 2150 Hz) o P1 desde el parlante de la laptop hacia
 el micrófono y verificar detección tras calentamiento y persistencia. Revisar
 los tiempos y contadores con `vista todo`.
+
+Para validar CONFIG con las dos placas, seguir la prueba de banda y automático
+del README de [nodo 2](../nodo2/README.md#prueba-de-banda-y-automático-con-dos-placas).
 
 ## Problemas conocidos
 

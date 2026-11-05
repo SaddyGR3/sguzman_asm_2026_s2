@@ -11,7 +11,7 @@ constexpr uint8_t TIPO_INPUT = 1;       // x, 512 float32
 constexpr uint8_t TIPO_INPUT_REF = 2;   // x y s intercalados
 constexpr uint8_t TIPO_FIR_OUT = 3;     // solo la constante
 constexpr uint8_t TIPO_DIAG = 4;
-constexpr uint8_t TIPO_CONTROL = 5;     // solo la constante
+constexpr uint8_t TIPO_CONTROL = 5;
 
 // Banderas.
 constexpr uint16_t FLAG_REFERENCIA = 0x0001;
@@ -44,6 +44,8 @@ constexpr size_t cota_cable(size_t r) { return r + r / 254 + 2; }
 constexpr size_t R_INPUT = TAM_CABECERA + TAM_DATOS_INPUT + TAM_CRC;           // 2084
 constexpr size_t R_INPUT_REF = TAM_CABECERA + TAM_DATOS_INPUT_REF + TAM_CRC;   // 4132
 constexpr size_t R_DIAG = TAM_CABECERA + TAM_DIAG + TAM_CRC;                   // 100
+constexpr size_t R_CONTROL = TAM_CABECERA + TAM_CONTROL + TAM_CRC;
+constexpr size_t CABLE_CONTROL = cota_cable(R_CONTROL);    // 70
 constexpr size_t CABLE_INPUT = cota_cable(R_INPUT);          // 2094
 constexpr size_t CABLE_INPUT_REF = cota_cable(R_INPUT_REF);  // 4150
 constexpr size_t CABLE_DIAG = cota_cable(R_DIAG);            // 102
@@ -98,3 +100,6 @@ struct Diag {
 
 // Escribe los 64 B del DIAG en 'salida'.
 void armar_diag(const Diag& d, uint8_t* salida);
+// Escribe CONFIG (32 B), sin relleno ni dependencia de alineación.
+void armar_control_config(uint32_t config_id, uint64_t indice_efectivo,
+                          float banda_lo, float banda_hi, uint8_t* salida);

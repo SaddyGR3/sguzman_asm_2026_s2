@@ -104,7 +104,8 @@ Los coeficientes se calculan en double y se guardan en float. Ambos filtros
 procesan todas las muestras reproducidas y mantienen estado entre bloques y
 cambios de modo. Al empezar cada reproducción se reinician sus estados,
 conservando los parámetros. Cambiar banda o notch reinicia solo ese filtro.
-El modo vigente elige la salida de cada bloque; no hay selección automática.
+El modo vigente elige la salida de cada bloque; con `auto on` se selecciona
+al comenzar la reproducción según el diagnóstico guardado (ver más abajo).
 
 ## Ruta espectral
 
@@ -405,8 +406,8 @@ Banda del nodo 1: 100-1200 Hz (config 1)
 
 Si llega una configuración nueva durante `REPRODUCIENDO`, se guarda y se aplica
 al terminar la reproducción. El comando local `banda <inf> <sup>` sigue
-disponible para pruebas, pero una configuración posterior del nodo 1 vuelve a
-ser la vigente.
+disponible para pruebas, pero una configuración con un ID nuevo del nodo 1
+vuelve a ser la vigente. Repetir el mismo ID conserva el ajuste local.
 
 El modo automático se controla con:
 
@@ -418,7 +419,19 @@ auto off
 El valor inicial es `off`. El diagnóstico se guarda junto con cada grabación,
 usando los DIAG válidos recibidos mientras el estado es `GRABANDO`; no se usa
 el diagnóstico en vivo durante una reproducción posterior. Se conserva la
-sugerencia más frecuente y, para notch o peine, la mediana de los picos válidos.
+sugerencia más frecuente contando por `filtro_n2`, sumando todos los tipos de
+ruido y excluyendo el filtro 0. Para el filtro ganador se informa su tipo de
+ruido más frecuente. En empates de filtro o tipo gana el identificador menor.
+Para notch o peine se usa la mediana de los picos válidos del filtro ganador.
+Sin sugerencias se guarda tipo 0, filtro 0 y pico −1. Calibrar borra también el
+diagnóstico, sus votos y sus picos; la misma limpieza ocurre al invalidar el audio
+por una nueva sesión y al comenzar otra grabación.
+
+**Limitación de asociación temporal:** no se conserva el diagnóstico del audio
+del pre-disparo. Además, INPUT llega antes de su DIAG; si ese INPUT termina la
+grabación, el estado ya es LISTA cuando llega el DIAG y este no se incluye en la
+votación. Se mantiene esta aproximación sin asociar diagnósticos por índices de
+muestras.
 
 Al iniciar una reproducción con `auto on`:
 
@@ -438,3 +451,33 @@ automático y muestran `Auto: desactivado`.
 Como el nodo 1 todavía puede informar diagnóstico 0 para señales de banda
 ancha, P3 puede reproducirse automáticamente como `SIN FILTRO`; esto queda
 como limitación del diagnóstico actual del nodo 1.
+
+### Prueba de banda y automático con dos placas
+
+Pendiente de ejecutar en hardware con ambos firmwares actualizados:
+
+1. Conectar TX GPIO18 de nodo 1 a RX GPIO19 de nodo 2 y GND común. Arrancar
+   ambas placas: nodo 2 debe informar `100-1200 Hz (config 1)` y `estado` debe
+   mostrar origen `nodo1`. En `vista todo`, CONTROL debe aumentar aproximadamente
+   una vez por segundo, sin repetir el mensaje de aplicación del mismo ID.
+2. En nodo 1, ejecutar `banda 100 3000`: nodo 2 debe aplicar config 2 tras el
+   DIAG del bloque. Repetir el comando conserva config 2. `banda 0 3000` y
+   `banda 100 4000` deben rechazarse sin cambiar banda ni ID.
+3. Reiniciar solo nodo 2: debe recuperar la banda vigente en aproximadamente
+   un segundo. Probar `banda 100 1500` localmente: las repeticiones de config 2
+   deben conservar ese ajuste. Cambiar a `banda 100 1200` en nodo 1 debe aplicar
+   config 3 con origen `nodo1`.
+4. En nodo 2, ejecutar `auto on`, grabar un tono fuera de banda (P1, cercano a
+   2148.4 Hz) y reproducir con la sala en silencio: debe usar el diagnóstico
+   guardado y seleccionar NOTCH. Cambiar la banda en nodo 1 durante la
+   reproducción: debe aplicarse al terminar, sin cortar el audio.
+5. Con una grabación terminada, ejecutar `calibrar` y consultar `estado` y
+   `grabacion`: deben mostrar diagnóstico tipo 0, filtro 0 y pico −1, sin conservar
+   el anterior. Esperar la calibración en silencio antes de grabar otra vez.
+6. Comprobar P3 sin detección tonal → SIN FILTRO; botón o `modo` → auto off;
+   `modo espectral`, `auto on` y reproducir → conserva ESPECTRAL.
+7. Revisar totales con `vista todo`: sin errores, pérdidas ni desbordes DAC en
+   nodo 2; sin nuevos overruns ni desbordes ADC en nodo 1, con periodos próximos
+   a 64 ms. La votación entre distintos tipos requiere DIAG de prueba: el nodo 1
+   actual solo sugiere tonal/notch; un caso de 4 votos FIR de un tipo más 4 de
+   otro debe ganar frente a 5 votos notch, y un empate debe elegir el menor ID.
