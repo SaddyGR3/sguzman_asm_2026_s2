@@ -32,6 +32,13 @@ struct TiempoProceso {
 // Solo la tarea principal lee/cambia el modo y procesa los filtros.
 // La tarea DAC recibe códigos ya convertidos y no accede a esta variable.
 static ModoFiltro modo = MODO_INICIAL;
+static bool automatico = false;
+static float banda_nodo1_lo = 100.0f, banda_nodo1_hi = 1200.0f;
+static uint32_t config_nodo1 = 0;
+static bool banda_pendiente = false;
+static float banda_pendiente_lo = 0.0f, banda_pendiente_hi = 0.0f;
+static uint32_t config_pendiente = 0;
+static bool banda_es_nodo1 = false;
 static int boton_leido = 1, boton_estable = 1;
 static int64_t boton_cambio_us = 0, boton_bloqueado_hasta_us = 0;
 static int reproducir_anterior = 1;
@@ -64,18 +71,84 @@ static const char* nombre_modo()
     return nombres[static_cast<int>(modo)];
 }
 
+static void aplicar_banda_nodo1(float inferior, float superior, uint32_t config_id)
+{
+    filtros_cambiar_banda(inferior, superior);
+    banda_nodo1_lo = inferior;
+    banda_nodo1_hi = superior;
+    config_nodo1 = config_id;
+    banda_es_nodo1 = true;
+    printf("Banda del nodo 1: %.6g-%.6g Hz (config %lu)\n",
+           inferior, superior, (unsigned long)config_id);
+}
+
+static void procesar_control(const uint8_t* datos)
+{
+    const uint32_t config_id = get_u32(datos + 12);
+    const float inferior = get_f32(datos + 24);
+    const float superior = get_f32(datos + 28);
+    if (config_id == config_nodo1 || config_id == config_pendiente) return;
+    if (grabacion_estado() == EstadoGrabacion::REPRODUCIENDO) {
+        banda_pendiente = true;
+        banda_pendiente_lo = inferior;
+        banda_pendiente_hi = superior;
+        config_pendiente = config_id;
+        return;
+    }
+    aplicar_banda_nodo1(inferior, superior, config_id);
+}
+
+static void aplicar_banda_pendiente()
+{
+    if (!banda_pendiente || grabacion_estado() == EstadoGrabacion::REPRODUCIENDO) return;
+    aplicar_banda_nodo1(banda_pendiente_lo, banda_pendiente_hi, config_pendiente);
+    banda_pendiente = false;
+}
+
 static void reproducir()
 {
+    if (grabacion_estado() != EstadoGrabacion::LISTA) {
+        printf("Grabación: reproducir requiere estado LISTA\n");
+        return;
+    }
+    if (automatico) {
+        const DiagnosticoGrabacion& diagnostico = grabacion_diagnostico();
+        const ModoFiltro modo_anterior = modo;
+        ModoFiltro modo_auto = ModoFiltro::SIN_FILTRO;
+        bool diagnostico_valido = true;
+        if (diagnostico.filtro_n2 == 1) {
+            modo_auto = ModoFiltro::FIR;
+        } else if (diagnostico.filtro_n2 == 2 || diagnostico.filtro_n2 == 3) {
+            if (std::isfinite(diagnostico.pico_hz) && diagnostico.pico_hz >= 100.0f &&
+                diagnostico.pico_hz <= 3000.0f) {
+                filtros_cambiar_notch(diagnostico.pico_hz, 8.5);
+                modo_auto = ModoFiltro::NOTCH;
+            } else {
+                diagnostico_valido = false;
+            }
+        }
+        if (!diagnostico_valido || diagnostico.filtro_n2 == 0) {
+            modo_auto = ModoFiltro::SIN_FILTRO;
+        }
+        if (modo_anterior != ModoFiltro::ESPECTRAL) modo = modo_auto;
+        printf("Auto: grabación tipo %u, filtro %u, pico %.6g -> %s\n",
+               diagnostico.tipo_ruido, diagnostico.filtro_n2, diagnostico.pico_hz,
+               nombre_modo());
+    }
     if (grabacion_reproducir(nombre_modo())) {
         filtros_reiniciar_estados();
         espectral_reiniciar();
         cola_espectral_pendiente = false;
         reiniciar_tiempos();
-    } else printf("Grabación: reproducir requiere estado LISTA\n");
+    }
 }
 
-static void seleccionar_modo(ModoFiltro nuevo)
+static void seleccionar_modo(ModoFiltro nuevo, bool manual = true)
 {
+    if (manual && automatico) {
+        automatico = false;
+        printf("Auto: desactivado\n");
+    }
     modo = nuevo;
     printf("Filtro: %s\n", nombre_modo());
 }
@@ -100,9 +173,13 @@ static void imprimir_notch()
 static void imprimir_estado()
 {
     const auto& cfg = filtros_configuracion();
-    printf("Estado: %s | banda %.6g-%.6g Hz | notch %.6g Hz Q %.6g\n",
-           nombre_modo(), cfg.banda_inferior_hz, cfg.banda_superior_hz,
-           cfg.notch_hz, cfg.q_notch);
+    const DiagnosticoGrabacion& diagnostico = grabacion_diagnostico();
+        printf("Estado: %s | auto %s | banda %.6g-%.6g Hz (%s, config %lu) | notch %.6g Hz Q %.6g\n",
+            nombre_modo(), automatico ? "on" : "off", cfg.banda_inferior_hz,
+            cfg.banda_superior_hz, banda_es_nodo1 ? "nodo1" : "local",
+            (unsigned long)config_nodo1, cfg.notch_hz, cfg.q_notch);
+    printf("Diagnóstico grabación: tipo %u | filtro %u | pico %.6g Hz\n",
+        diagnostico.tipo_ruido, diagnostico.filtro_n2, diagnostico.pico_hz);
     const auto& espectral = espectral_configuracion();
     printf("Espectral: resta | alfa %.6g | ganancia minima %.6g | N %d H %d | retardo 64 ms\n",
            espectral.alfa, espectral.ganancia_minima, ESPECTRAL_N, ESPECTRAL_H);
@@ -147,6 +224,19 @@ static void ejecutar_comando(char* linea)
     }
     if (comando && std::strcmp(comando, "grabacion") == 0 && !primero) {
         grabacion_imprimir();
+        printf("Auto: %s\n", automatico ? "on" : "off");
+        return;
+    }
+    if (comando && std::strcmp(comando, "auto") == 0 && primero && !segundo) {
+        if (std::strcmp(primero, "on") == 0) {
+            automatico = true;
+            printf("Auto: activado\n");
+        } else if (std::strcmp(primero, "off") == 0) {
+            automatico = false;
+            printf("Auto: desactivado\n");
+        } else {
+            printf("Error: comando o valores invalidos\n");
+        }
         return;
     }
     double factor;
@@ -179,6 +269,7 @@ static void ejecutar_comando(char* linea)
         if (std::strcmp(comando, "banda") == 0 &&
             uno >= 100.0 && dos <= 3000.0 && uno < dos) {
             filtros_cambiar_banda(uno, dos);
+            banda_es_nodo1 = false;
             printf("Banda: %.6g-%.6g Hz\n", uno, dos);
             imprimir_fir();
             return;
@@ -254,9 +345,17 @@ static void procesar_input(const uint8_t* datos, uint64_t)
     grabacion_input(datos);
 }
 
+static void procesar_diag(const uint8_t* datos)
+{
+    grabacion_diag(datos);
+}
+
 static void atender_reproduccion()
 {
-    if (salida_dac_terminada()) grabacion_finalizar_reproduccion();
+    if (salida_dac_terminada()) {
+        grabacion_finalizar_reproduccion();
+        aplicar_banda_pendiente();
+    }
     if (grabacion_estado() != EstadoGrabacion::REPRODUCIENDO || !salida_dac_disponible()) return;
     const ModoFiltro modo_bloque = modo;
     const int64_t inicio_proc_us = esp_timer_get_time();
@@ -319,7 +418,7 @@ extern "C" void app_main(void)
     // Inicializar ESP-DSP antes de reservar la grabación: también usa RAM interna.
     ESP_ERROR_CHECK(espectral_iniciar());
     salida_dac_iniciar();
-    recepcion_iniciar(procesar_input, grabacion_nueva_sesion);
+    recepcion_iniciar(procesar_input, procesar_diag, procesar_control, grabacion_nueva_sesion);
     grabacion_iniciar();
     const int banderas_consola = fcntl(STDIN_FILENO, F_GETFL, 0);
     ESP_ERROR_CHECK(banderas_consola >= 0 &&
@@ -401,13 +500,14 @@ extern "C" void app_main(void)
                 imprimir_aumento("desbordes_dac", d.desbordes, desbordes_resumen_anterior);
                 putchar('\n');
             } else {
-                printf("#%04lu | Filtro: %s | INPUT %llu | DIAG %llu | err_trama %llu | err_cobs %llu | "
+                printf("#%04lu | Filtro: %s | INPUT %llu | DIAG %llu | CONTROL %llu | err_trama %llu | err_cobs %llu | "
                        "err_crc %llu | err_cabecera %llu | perdidos %llu | sesiones %llu | "
                        "DAC %llu B | desbordes_dac %lu | proc total prom %llu us max %llu us | "
                        "proc temporal prom %llu us max %llu us | proc espectral prom %llu us max %llu us | "
                        "grabación %s | RMS %.6g | fondo %.6g\n",
                        (unsigned long)numero_resumen, nombre_modo(),
                        (unsigned long long)r.input, (unsigned long long)r.diag,
+                       (unsigned long long)r.control,
                        (unsigned long long)r.err_trama, (unsigned long long)r.err_cobs,
                        (unsigned long long)r.err_crc, (unsigned long long)r.err_cabecera,
                        (unsigned long long)r.perdidos, (unsigned long long)r.sesiones,

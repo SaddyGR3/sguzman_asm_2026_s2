@@ -14,6 +14,7 @@ constexpr unsigned BLOQUES_IGNORADOS = 16;
 constexpr unsigned BLOQUES_MEDIANA = 16;
 constexpr unsigned BLOQUES_CALIBRACION = BLOQUES_IGNORADOS + BLOQUES_MEDIANA;
 constexpr float FONDO_MINIMO = 0.00001f;
+constexpr size_t MAX_PICOS_DIAGNOSTICO = 256;
 
 static uint8_t pre_disparo[TAM_PRE_DISPARO];
 static uint8_t* audio = nullptr;
@@ -24,6 +25,48 @@ static float ultima_rms = 0.0f, fondo = 0.0f, umbral = 3.0f;
 static float rms_calibracion[BLOQUES_MEDIANA];
 static unsigned bloques_calibracion = 0, activos = 0, silenciosos = 0;
 static bool calibracion_pendiente = false;
+static DiagnosticoGrabacion diagnostico;
+static unsigned sugerencias[6][4] = {};
+static float picos[4][MAX_PICOS_DIAGNOSTICO];
+static size_t cantidad_picos[4] = {};
+
+static void limpiar_diagnostico()
+{
+    diagnostico = {};
+    for (auto& tipos : sugerencias) {
+        for (unsigned& cantidad : tipos) cantidad = 0;
+    }
+    for (size_t& cantidad : cantidad_picos) cantidad = 0;
+}
+
+static void finalizar_diagnostico()
+{
+    unsigned mejor = 0;
+    uint8_t mejor_tipo = 0;
+    uint8_t mejor_filtro = 0;
+    for (uint8_t tipo = 0; tipo < 6; ++tipo) {
+        for (uint8_t filtro = 1; filtro <= 3; ++filtro) {
+            if (sugerencias[tipo][filtro] > mejor) {
+                mejor = sugerencias[tipo][filtro];
+                mejor_tipo = tipo;
+                mejor_filtro = filtro;
+            }
+        }
+    }
+    if (mejor == 0) return;
+    diagnostico.tipo_ruido = mejor_tipo;
+    diagnostico.filtro_n2 = mejor_filtro;
+    if (mejor_filtro == 2 || mejor_filtro == 3) {
+        const size_t cantidad = cantidad_picos[mejor_filtro];
+        if (cantidad == 0) return;
+        std::sort(picos[mejor_filtro], picos[mejor_filtro] + cantidad);
+        diagnostico.pico_hz = picos[mejor_filtro][cantidad / 2];
+        if (cantidad % 2 == 0) {
+            diagnostico.pico_hz = (picos[mejor_filtro][cantidad / 2 - 1] +
+                                   picos[mejor_filtro][cantidad / 2]) / 2.0f;
+        }
+    }
+}
 
 // G.711 mu-law: PCM con signo de 16 bits, sesgo 132 y ocho segmentos.
 static uint8_t codificar(float muestra)
@@ -115,9 +158,12 @@ void grabacion_iniciar()
 
 static void terminar_grabacion()
 {
+    finalizar_diagnostico();
     estado = EstadoGrabacion::LISTA;
     limpiar_pre();
-    printf("Grabación: lista %.3f s\n", grabados / 8000.0);
+    printf("Grabación: lista %.3f s | diagnóstico tipo %u filtro %u pico %.6g Hz\n",
+           grabados / 8000.0, diagnostico.tipo_ruido, diagnostico.filtro_n2,
+           diagnostico.pico_hz);
 }
 
 void grabacion_input(const uint8_t* datos)
@@ -168,9 +214,25 @@ void grabacion_input(const uint8_t* datos)
     memcpy(audio, pre_disparo + principio, primera);
     memcpy(audio + primera, pre_disparo, cantidad_pre - primera);
     silenciosos = 0;
+    limpiar_diagnostico();
     estado = EstadoGrabacion::GRABANDO;
     printf("Grabación: grabando\n");
     if (grabados == capacidad) terminar_grabacion();
+}
+
+void grabacion_diag(const uint8_t* datos)
+{
+    if (estado != EstadoGrabacion::GRABANDO) return;
+    const uint8_t tipo = datos[10];
+    const uint8_t filtro = datos[11];
+    if (tipo > 5 || filtro < 1 || filtro > 3) return;
+    ++sugerencias[tipo][filtro];
+    const float pico = get_f32(datos + 12);
+    if ((filtro == 2 || filtro == 3) && std::isfinite(pico) &&
+        pico >= 100.0f && pico <= 3000.0f &&
+        cantidad_picos[filtro] < MAX_PICOS_DIAGNOSTICO) {
+        picos[filtro][cantidad_picos[filtro]++] = pico;
+    }
 }
 
 bool grabacion_reproducir(const char* modo)
@@ -216,6 +278,13 @@ const char* grabacion_nombre_estado()
 
 void grabacion_imprimir()
 {
-    printf("Grabación: %s | duración %.3f s | capacidad %.3f s | ruido de fondo %.6g | umbral %.3g\n",
-           grabacion_nombre_estado(), grabados / 8000.0, capacidad / 8000.0, fondo, umbral);
+    printf("Grabación: %s | duración %.3f s | capacidad %.3f s | ruido de fondo %.6g | "
+           "umbral %.3g | diagnóstico tipo %u filtro %u pico %.6g Hz\n",
+           grabacion_nombre_estado(), grabados / 8000.0, capacidad / 8000.0, fondo, umbral,
+           diagnostico.tipo_ruido, diagnostico.filtro_n2, diagnostico.pico_hz);
+}
+
+const DiagnosticoGrabacion& grabacion_diagnostico()
+{
+    return diagnostico;
 }

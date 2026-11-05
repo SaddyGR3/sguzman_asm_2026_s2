@@ -3,6 +3,7 @@
 
 static_assert(CABLE_INPUT == 2094 && CABLE_DIAG == 102,
               "tamaños en el cable distintos de la especificación");
+static_assert(CABLE_CONTROL == 70, "tamaño CONTROL en el cable distinto de la especificación");
 static_assert(sizeof(float) == 4, "el protocolo requiere float32");
 
 static uint32_t tabla_crc[256];

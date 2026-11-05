@@ -390,3 +390,51 @@ y puede disparar otra grabación después; no se conserva la anterior al reempla
 
 En PlatformIO, seleccionar proyecto nodo2 y entorno esp32dev. Usar Build,
 Upload y Monitor en el puerto USB de esta placa; UART0 funciona a 115200.
+
+## Banda protegida y modo automático
+
+El nodo 1 es la fuente de la banda protegida. La placa recibe mensajes
+`CONTROL CONFIG` por UART1 al arrancar, cuando cambia la banda y repetidos
+aproximadamente cada segundo. Cada configuración tiene un `config_id`; una
+configuración con el mismo identificador no se aplica dos veces. La banda se
+valida en el receptor y se muestra como:
+
+```text
+Banda del nodo 1: 100-1200 Hz (config 1)
+```
+
+Si llega una configuración nueva durante `REPRODUCIENDO`, se guarda y se aplica
+al terminar la reproducción. El comando local `banda <inf> <sup>` sigue
+disponible para pruebas, pero una configuración posterior del nodo 1 vuelve a
+ser la vigente.
+
+El modo automático se controla con:
+
+```text
+auto on
+auto off
+```
+
+El valor inicial es `off`. El diagnóstico se guarda junto con cada grabación,
+usando los DIAG válidos recibidos mientras el estado es `GRABANDO`; no se usa
+el diagnóstico en vivo durante una reproducción posterior. Se conserva la
+sugerencia más frecuente y, para notch o peine, la mediana de los picos válidos.
+
+Al iniciar una reproducción con `auto on`:
+
+| Sugerencia | Acción |
+| --- | --- |
+| Filtro 0 | `SIN FILTRO` |
+| Filtro 1 | FIR con la banda protegida vigente |
+| Filtro 2 | Notch en el pico guardado, Q 8.5 |
+| Filtro 3 | Notch en el pico dominante, Q 8.5 |
+
+La ruta `ESPECTRAL` no se reemplaza por el automático. Si ya estaba
+seleccionada, se mantiene como salida y solo se actualizan los parámetros de la
+ruta temporal. El botón GPIO32 y cualquier comando `modo` desactivan el
+automático y muestran `Auto: desactivado`.
+
+`estado` y `grabacion` muestran el estado de `auto` y el diagnóstico guardado.
+Como el nodo 1 todavía puede informar diagnóstico 0 para señales de banda
+ancha, P3 puede reproducirse automáticamente como `SIN FILTRO`; esto queda
+como limitación del diagnóstico actual del nodo 1.
