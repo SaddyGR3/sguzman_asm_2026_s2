@@ -78,10 +78,20 @@ una reproducción si el emisor se desconecta.
 ## Filtro
 
 Conectar un botón entre **GPIO32 y GND**, con pull-up interno. Arranca en
-`SIN FILTRO`; cada flanco de 1 a 0 avanza
+`SIN FILTRO`; cada pulsación aceptada avanza
 `SIN FILTRO → FIR → NOTCH → ESPECTRAL → SIN FILTRO`.
-Este botón mantiene la lectura una vez por INPUT válido, sin antirrebote;
-sin INPUT no se atiende y conviene pulsarlo por más de 64 ms.
+El lazo principal atiende el botón aunque no lleguen INPUT o se desconecte
+nodo 1. El antirrebote exige unos 30 ms de nivel estable tanto al pulsar como
+al soltar, y bloquea nuevas pulsaciones durante 200 ms después de cada cambio
+por botón. Mantenerlo pulsado no repite el cambio; una pulsación detectada
+durante el bloqueo se descarta y requiere soltar y volver a pulsar.
+
+Los cambios se aplican entre bloques completos de reproducción: cada bloque
+toma una copia del modo al comenzar y la usa hasta encolarse en el DAC. El
+audio ya encolado conserva su modo anterior. El botón, los comandos y los
+filtros se ejecutan en la misma tarea principal; la tarea DAC solo consume
+códigos ya convertidos y no comparte la variable del modo, por lo que no
+se requiere `std::atomic` en esta implementación.
 
 | Modo | Salida |
 | --- | --- |

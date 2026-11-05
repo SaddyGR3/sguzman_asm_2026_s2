@@ -20,6 +20,8 @@ enum class ModoFiltro { SIN_FILTRO, FIR, NOTCH, ESPECTRAL };
 constexpr ModoFiltro MODO_INICIAL = ModoFiltro::SIN_FILTRO;
 constexpr gpio_num_t PIN_BOTON = GPIO_NUM_32;
 constexpr gpio_num_t PIN_REPRODUCIR = GPIO_NUM_33;
+constexpr int64_t BOTON_ESTABLE_US = 30000;
+constexpr int64_t BOTON_BLOQUEO_US = 200000;
 static_assert(ESPECTRAL_H == MUESTRAS_BLOQUE, "El avance espectral debe coincidir con el bloque reproducido");
 
 struct TiempoProceso {
@@ -27,8 +29,11 @@ struct TiempoProceso {
     uint64_t max_us = 0;
 };
 
+// Solo la tarea principal lee/cambia el modo y procesa los filtros.
+// La tarea DAC recibe códigos ya convertidos y no accede a esta variable.
 static ModoFiltro modo = MODO_INICIAL;
-static int boton_anterior = 1;
+static int boton_leido = 1, boton_estable = 1;
+static int64_t boton_cambio_us = 0, boton_bloqueado_hasta_us = 0;
 static int reproducir_anterior = 1;
 static float salida[MUESTRAS_BLOQUE];
 static float salida_espectral[MUESTRAS_BLOQUE];
@@ -223,20 +228,29 @@ static void leer_consola()
     }
 }
 
-static void procesar_input(const uint8_t* datos, uint64_t)
+static void atender_boton_modo(int64_t ahora_us)
 {
-    // Una lectura del botón por INPUT, incluso si RX trae varios paquetes juntos.
     const int boton_actual = gpio_get_level(PIN_BOTON);
-    if (boton_anterior == 1 && boton_actual == 0) {
+    if (boton_actual != boton_leido) {
+        boton_leido = boton_actual;
+        boton_cambio_us = ahora_us;
+    }
+    if (boton_leido == boton_estable || ahora_us - boton_cambio_us < BOTON_ESTABLE_US) return;
+    boton_estable = boton_leido;
+    // Consumir también los flancos durante el bloqueo: mantener pulsado no repite.
+    if (boton_estable == 0 && ahora_us >= boton_bloqueado_hasta_us) {
         switch (modo) {
             case ModoFiltro::SIN_FILTRO: seleccionar_modo(ModoFiltro::FIR); break;
             case ModoFiltro::FIR: seleccionar_modo(ModoFiltro::NOTCH); break;
             case ModoFiltro::NOTCH: seleccionar_modo(ModoFiltro::ESPECTRAL); break;
             case ModoFiltro::ESPECTRAL: seleccionar_modo(ModoFiltro::SIN_FILTRO); break;
         }
+        boton_bloqueado_hasta_us = ahora_us + BOTON_BLOQUEO_US;
     }
-    boton_anterior = boton_actual;
+}
 
+static void procesar_input(const uint8_t* datos, uint64_t)
+{
     grabacion_input(datos);
 }
 
@@ -244,6 +258,7 @@ static void atender_reproduccion()
 {
     if (salida_dac_terminada()) grabacion_finalizar_reproduccion();
     if (grabacion_estado() != EstadoGrabacion::REPRODUCIENDO || !salida_dac_disponible()) return;
+    const ModoFiltro modo_bloque = modo;
     const int64_t inicio_proc_us = esp_timer_get_time();
     bool ultimo = false;
     if (cola_espectral_pendiente) {
@@ -267,7 +282,7 @@ static void atender_reproduccion()
         const float x = salida[k];
         float fir, notch;
         filtros_procesar(x, fir, notch);
-        switch (modo) {
+        switch (modo_bloque) {
             case ModoFiltro::SIN_FILTRO:
             case ModoFiltro::ESPECTRAL: salida[k] = x; break;
             case ModoFiltro::FIR: salida[k] = fir; break;
@@ -275,7 +290,7 @@ static void atender_reproduccion()
         }
     }
     registrar_tiempo(proc_temporal, inicio_temporal_us);
-    salida_dac_input(modo == ModoFiltro::ESPECTRAL ? salida_espectral : salida, ultimo);
+    salida_dac_input(modo_bloque == ModoFiltro::ESPECTRAL ? salida_espectral : salida, ultimo);
     registrar_tiempo(proc_total, inicio_proc_us);
     ++bloques_proc;
 }
@@ -296,7 +311,8 @@ extern "C" void app_main(void)
     boton.pull_down_en = GPIO_PULLDOWN_DISABLE;
     boton.intr_type = GPIO_INTR_DISABLE;
     ESP_ERROR_CHECK(gpio_config(&boton));
-    boton_anterior = gpio_get_level(PIN_BOTON);
+    boton_leido = boton_estable = gpio_get_level(PIN_BOTON);
+    boton_cambio_us = esp_timer_get_time();
     reproducir_anterior = gpio_get_level(PIN_REPRODUCIR);
 
     filtros_iniciar();
@@ -331,6 +347,7 @@ extern "C" void app_main(void)
         const bool hubo_bytes = recepcion_leer();
         // Los comandos se aplican después de terminar todos los INPUT de la lectura.
         leer_consola();
+        atender_boton_modo(esp_timer_get_time());
         const int reproducir_actual = gpio_get_level(PIN_REPRODUCIR);
         if (reproducir_anterior == 1 && reproducir_actual == 0 &&
             grabacion_estado() == EstadoGrabacion::LISTA) reproducir();
