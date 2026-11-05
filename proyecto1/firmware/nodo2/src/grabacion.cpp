@@ -205,6 +205,8 @@ void grabacion_cambiar_umbral(float factor) { umbral = factor; }
 EstadoGrabacion grabacion_estado() { return estado; }
 float grabacion_rms() { return ultima_rms; }
 float grabacion_fondo() { return fondo; }
+double grabacion_duracion_s() { return grabados / 8000.0; }
+double grabacion_posicion_s() { return posicion / 8000.0; }
 
 const char* grabacion_nombre_estado()
 {

@@ -88,7 +88,7 @@ sin INPUT no se atiende y conviene pulsarlo por más de 64 ms.
 | SIN FILTRO | Audio grabado sin filtrar, después de decodificar μ-law. |
 | FIR | Kaiser de 37 coeficientes. Inicialmente pasa bajas con corte de 1500 Hz; retardo de 18 muestras (2.25 ms). |
 | NOTCH | Inicialmente rechaza 2150 Hz con Q = 8.5. |
-| ESPECTRAL | FFT → ganancia 1 → IFFT con solape y suma; reproduce la entrada con 512 muestras (64 ms) de retardo adicional. En esta base todavía no reduce ruido. |
+| ESPECTRAL | FFT → resta espectral con piso de ruido adaptativo → IFFT con solape y suma; retardo algorítmico adicional de 512 muestras (64 ms). |
 
 Los coeficientes se calculan en double y se guardan en float. Ambos filtros
 procesan todas las muestras reproducidas y mantienen estado entre bloques y
@@ -96,13 +96,13 @@ cambios de modo. Al empezar cada reproducción se reinician sus estados,
 conservando los parámetros. Cambiar banda o notch reinicia solo ese filtro.
 El modo vigente elige la salida de cada bloque; no hay selección automática.
 
-## Ruta espectral (base)
+## Ruta espectral
 
-El paso **6b-1** implementa el nodo 3 en esta misma placa, en `src/espectral.*`.
+Los pasos **6b-1 y 6b-2** implementan el nodo 3 en esta misma placa, en `src/espectral.*`.
 Reutiliza de `nodo1/src/espectro.cpp` la raíz de Hann periódica, la tabla y las
-llamadas FFT de ESP-DSP. Conserva la media y los valores complejos para poder
-reconstruir también la componente DC de la entrada. No necesita el cálculo de
-magnitudes ni el estimador de piso del nodo 1.
+llamadas FFT de ESP-DSP. No quita la media antes de la FFT y conserva los valores
+complejos. Calcula sus propias magnitudes y piso de ruido; no usa la referencia
+limpia ni el diagnóstico del nodo 1 para decidir la ganancia espectral.
 
 Cada bloque decodificado alimenta **las dos rutas independientes**, aunque se
 escuche una sola: FIR y notch procesan todas las muestras, y el espectral recibe
@@ -125,14 +125,14 @@ una FFT directa sin normalizar. La inversa usa
 `IFFT(X) = conj(FFT(conj(X))) / N`, con reordenamiento de bits después de cada
 FFT y división por **1024 una sola vez**. No se aplica otra escala al solape.
 
-`modificar_espectro()` es el punto del futuro paso 6b-2: actualmente usa ganancia
-1 en todos los bins y repone `X[N-k] = conj(X[k])`. DC y Nyquist mantienen parte
-imaginaria cero. Aquí se incorporará después la ganancia adaptativa por bin;
-la resta espectral todavía está pendiente.
+`modificar_espectro()` aplica una ganancia real a las partes real e imaginaria
+de cada bin positivo y repone `X[N-k] = conj(X[k])`. DC y Nyquist mantienen parte
+imaginaria cero. La ganancia conserva la fase de cada bin y la simetría necesaria
+para obtener una salida real; su cálculo se describe en "Resta espectral".
 
 El historial y la cola se limpian al iniciar **cada** reproducción. El primer
-bloque espectral corresponde a silencio; el segundo reconstruye el primer
-bloque grabado. El retardo algorítmico adicional es **H/fs = 64 ms**, aparte de
+bloque espectral corresponde a silencio; el segundo entrega el primer
+bloque grabado con las ganancias correspondientes. El retardo algorítmico adicional es **H/fs = 64 ms**, aparte de
 las colas y DMA del DAC. Al agotar la grabación, el lazo de reproducción procesa
 un bloque extra de ceros por ambas rutas antes de marcar el último bloque del
 DAC. Así se recuperan las últimas 512 muestras del espectral. Este vaciado se
@@ -163,13 +163,76 @@ la duración disponible puede reducirse. Revisar la capacidad impresa al arranca
 `src/idf_component.yml` declara ESP-DSP como en nodo 1, y `sdkconfig.esp32dev`
 habilita su implementación optimizada con longitud máxima 1024.
 
-**Costo y validación pendientes en placa:** cada bloque añade dos FFT de 1024
+**Costo y validación pendientes en placa para esta versión:** cada bloque añade dos FFT de 1024
 puntos (10 240 mariposas en total), dos reordenamientos y recorridos lineales.
-No se ha medido su duración ni se ha compilado o ejecutado este paso. El monitor
+También se calculan magnitudes y, después del calentamiento, 513 medianas de
+8 valores y 513 medianas de 31 valores, más la ganancia por bin. No se ha medido
+la duración ni se ha compilado o ejecutado la versión con resta. El monitor
 separa `proc temporal`, `proc espectral` y `proc total`; el **máximo total** debe
 quedar holgadamente por debajo de **64 000 us**, dejando tiempo para RX y consola.
 La medición incluye el bloque final de vaciado. La capacidad de grabación, los
-tiempos reales y la igualdad del audio deben comprobarse con el hardware.
+tiempos reales y la reducción de ruido deben comprobarse con el hardware.
+
+## Resta espectral
+
+El estimador conserva en un anillo las magnitudes originales de las últimas
+**8 tramas**, incluida la actual. Calcula la mediana temporal en cada uno de
+los **513 bins** (DC a Nyquist) y suaviza ese perfil con una mediana de **31 bins**.
+Los extremos se reflejan sin repetir el valor del borde. Solo se usan muestras
+actuales y pasadas, aunque el audio provenga de una grabación.
+
+La primera FFT contiene medio bloque de ceros y no entra al historial de ruido.
+Durante las primeras ocho llamadas a `espectral_procesar` la ganancia es 1;
+en la novena ya hay ocho tramas reales y empieza la resta. Al iniciar otra
+reproducción se limpian el historial de ruido, el audio y el solape, conservando
+alfa y ganancia mínima. El calentamiento se repite en todos los modos porque
+ambas rutas se calculan siempre.
+
+Para magnitud `M[k]` y piso suavizado `P[k]`, se aplica:
+
+```text
+G[k] = max(gmin, min(1 - alfa * P[k] / max(M[k], 1e-12), 1))
+Y[k] = G[k] * X[k]
+```
+
+Los parámetros iniciales son **alfa = 3** y **gmin = 0.05**. Alfa mayor resta
+más ruido; gmin limita cuánto se atenúa cada bin. Un filtrado más agresivo puede
+reducir también señal útil y producir ruido musical. El estimador no distingue
+perfectamente señal y ruido superpuestos, ni garantiza eliminar un pitido estrecho:
+la mediana frecuencial puede excluirlo del piso estimado. P1 se debe comprobar
+en placa y registrar si no alcanza la atenuación esperada. Esta versión básica
+no incluye protección de tonos ni un método adicional de detección de picos.
+
+El comando configura la intensidad, pero no cambia el modo seleccionado:
+
+```text
+espectral 3 0.05
+modo espectral
+estado
+reproducir
+```
+
+Se admite **0.5 ≤ alfa ≤ 10** y **0 ≤ gmin ≤ 0.5**, incluidos los extremos.
+Se requieren exactamente dos números finitos; argumentos faltantes o adicionales,
+`nan`, `inf` y valores fuera de rango imprimen `Error:` sin modificar parámetros.
+Los cambios se aplican entre bloques, sin borrar el historial del estimador.
+Se guardan solo en RAM: reiniciar la placa restaura 3 y 0.05.
+
+**Memoria adicional del estimador**, aparte de los 24 KiB de la tubería:
+
+| Búfer | Bytes |
+| --- | ---: |
+| Magnitudes, 513 float | 2052 |
+| Historial de ruido, 8 × 513 float | 16 416 |
+| Perfil temporal, 513 float | 2052 |
+| Piso suavizado, 513 float | 2052 |
+| Trabajo compartido de medianas, 31 float | 124 |
+| Total de arreglos | **22 696 B (22.16 KiB)** |
+
+Se suman los índices, la bandera de arranque y dos parámetros float. No se
+reservan arreglos por bloque ni se colocan estos búferes en la pila. La reserva
+disponible para grabar puede bajar; comprobar al arrancar que alcanza para la
+prueba antes de interpretar una grabación truncada como un fallo del filtro.
 
 ## Comandos desde el monitor
 
@@ -179,14 +242,16 @@ se escribe, se pausa el resumen periódico.
 
 | Comando | Efecto |
 | --- | --- |
-| `estado` | Muestra modo, banda, notch, coeficientes y configuración espectral base. |
+| `estado` | Muestra modo, banda, notch, coeficientes, alfa, ganancia mínima y N/H espectrales. |
 | `modo sin`, `modo fir`, `modo notch`, `modo espectral` | Selecciona la salida. |
 | `banda <inf> <sup>` | Recalcula el FIR; admite 100 ≤ inf < sup ≤ 3000 Hz. |
 | `notch <f> <q>` | Recalcula el notch; admite 100–3000 Hz y Q de 0.5–20. |
+| `espectral <alfa> <gmin>` | Ajusta la resta; alfa 0.5–10, gmin 0–0.5. No selecciona el modo ni reinicia el estimador. |
 | `reproducir` | Igual que GPIO33; requiere LISTA. |
 | `umbral <factor>` | Ajusta el disparo, de 1.5 a 20; inicialmente 3.0. |
 | `calibrar` | Repite la calibración en silencio (16 bloques ignorados + mediana de 16); no disponible durante reproducción. |
 | `grabacion` | Muestra estado, duración guardada, capacidad, ruido de fondo y umbral. |
+| `vista breve`, `vista todo` | Selecciona el resumen compacto (predeterminado al arrancar) o la línea completa con todos los totales. |
 
 La banda inicial es 100–1200 Hz y el notch 2150 Hz, Q 8.5. Con banda inferior
 menor que 600 Hz, el FIR es pasa bajas con corte `sup + 300` Hz; desde 600 Hz
@@ -207,9 +272,30 @@ válido por 200 ms. Arranca encendido hasta recibir INPUT.
 
 ## Contadores del monitor
 
-El resumen de aproximadamente un segundo agrega estado de grabación, RMS del
-último INPUT y ruido de fondo. Los contadores son acumulados desde el arranque,
-excepto los tiempos de procesamiento, calculados por intervalo.
+El resumen de aproximadamente un segundo usa `vista breve` por defecto:
+
+```text
+#0001 | FIR | GRABANDO 2.048 s | RX 15.6/s | RMS 0.025 fondo 0.003 | proc T 0.000 ms E 0.000 ms
+```
+
+Muestra el modo, estado y segundos guardados; durante REPRODUCIENDO muestra
+`actual/total s`, según la posición decodificada (el audio puede seguir en las
+colas del DAC). RX es la tasa de paquetes INPUT válidos por segundo, calculada
+con el tiempo real entre resúmenes. RMS y fondo tienen tres decimales; `proc T`
+y `E` son los promedios temporal y espectral por bloque, en milisegundos.
+
+Solo si aumentó algún contador de error, pérdida o desborde desde el resumen
+anterior se añade `ALERTA`, con el aumento y el total de cada contador afectado;
+por ejemplo, ` | ALERTA err_crc +1 (total 3), perdidos +2 (total 2)`.
+Si no hay nuevos incidentes, la alerta desaparece en el siguiente resumen aunque
+los totales sigan siendo distintos de cero. INPUT, DIAG y sesiones no disparan
+alertas. Mientras se escribe se pospone la impresión: el siguiente resumen
+incluye los aumentos desde el anterior y RX usa todo ese tiempo transcurrido.
+
+`vista todo` conserva la línea completa anterior. Sus contadores son acumulados
+desde el arranque, excepto los tiempos de procesamiento, calculados por
+intervalo. Ambas vistas actualizan la referencia de las alertas y de la tasa RX;
+cambiar de vista no reinicia los totales. Los campos de la línea completa son:
 
 | Campo | Significado |
 | --- | --- |
@@ -224,7 +310,7 @@ excepto los tiempos de procesamiento, calculados por intervalo.
 | desbordes_dac | Timeout de escritura de un segundo; se conserva y reintenta el resto. No cuenta la espera normal por espacio en la cola. |
 | proc total prom / max … us | Decodificación, ambas rutas, selección, conversión y encolado por bloque reproducido; excluye la espera DMA en la tarea DAC. |
 | proc temporal prom / max … us | FIR y notch, con selección de la salida temporal, por bloque reproducido. |
-| proc espectral prom / max … us | Historial, ventanas, FFT, ganancia, IFFT y solape por bloque reproducido. |
+| proc espectral prom / max … us | Historial, ventanas, FFT, estimación del ruido, ganancia, IFFT y solape por bloque reproducido. |
 
 Los tres tiempos muestran 0/0 si no hubo bloques reproducidos en el intervalo.
 Se reinician también al comenzar otra reproducción y mientras se escribe en
@@ -256,24 +342,34 @@ no suman pérdidas. `first_sample` no programa la reproducción.
 8. Desconectar RX durante reproducción: el LED informa ausencia, pero la
    grabación sigue hasta terminar. Reconectar y comprobar recuperación de RX.
 
-### Prueba del paso 6b-1
+### Prueba del paso 6b-2 (pendiente en placa)
 
 1. Tras compilar y cargar esta versión, revisar RAM y capacidad al arrancar,
-   calibrar en silencio y grabar P1 con el micrófono como en la prueba anterior.
-2. Elegir `modo sin`, ejecutar `reproducir` y esperar LISTA. Elegir
-   `modo espectral`, reproducir la misma grabación y esperar LISTA.
-   Deben sonar iguales, con el mismo volumen y sin zumbido periódico cada
-   64 ms; ESPECTRAL añade 64 ms de retardo al inicio y conserva el final.
-3. Repetir la reproducción espectral: no debe aparecer audio de la escucha
-   anterior al inicio. Verificar también el ciclo completo del botón GPIO32
-   y `estado`, que debe indicar ganancia 1, N = 1024 y H = 512.
-4. Durante una reproducción completa sin escribir comandos, comprobar
+   comprobar que cabe la señal, calibrar en silencio y grabar P1 con el micrófono.
+   `estado` debe indicar alfa 3, ganancia mínima 0.05, N = 1024 y H = 512.
+2. Elegir `modo sin`, ejecutar `reproducir` y esperar LISTA. Elegir `modo espectral`
+   y reproducir la misma grabación: comprobar si baja claramente el pitido de
+   2150 Hz. Registrar el resultado; si no baja, queda pendiente ese criterio de P1.
+3. Grabar P3, comparar SIN FILTRO y ESPECTRAL y comprobar que baja el ruido blanco.
+   Repetir la misma grabación completa con `espectral 1 0.1` y `espectral 8 0.02`.
+   Elegir los parámetros antes de cada reproducción y esperar LISTA entre pruebas;
+   anotar reducción del ruido, pérdida de audio útil y ruido musical.
+4. Repetir una reproducción con idénticos parámetros: no debe aparecer audio
+   residual de la anterior. Se reinicia el calentamiento, se conservan alfa/gmin
+   y se recupera la cola final. Verificar el ciclo del botón GPIO32.
+5. Probar `espectral 0.5 0` y `espectral 10 0.5`; ambos extremos son válidos.
+   Probar `espectral 0.4 0.05`, `espectral 3 0.6`, `espectral nan 0.05`,
+   `espectral 3 inf`, `espectral 3` y `espectral 3 0.05 extra`: todos deben
+   imprimir error y conservar los últimos valores válidos en `estado`.
+   Restaurar `espectral 3 0.05` antes de seguir.
+6. Durante una reproducción completa sin escribir comandos, comprobar
    `proc temporal`, `proc espectral` y `proc total` en todos los modos.
    Ambas rutas se calculan siempre y el máximo total debe ser mucho menor
    que 64 000 us. Errores, `perdidos` y `desbordes_dac` deben mantenerse en 0.
 
-Esta prueba valida la reconstrucción. La atenuación del ruido corresponde al
-paso 6b-2, después de validar esta base en la placa.
+La reconstrucción con ganancia 1 corresponde a la base 6b-1; esta versión ya
+modifica el espectro y no se espera que suene igual a SIN FILTRO. Estos pasos
+son instrucciones de validación, no resultados medidos de la resta espectral.
 
 El ruido de sala y una señal presente durante la calibración inicial pueden
 alterar el disparo. En LISTA el fondo queda fijo; ajustar el umbral o ejecutar
