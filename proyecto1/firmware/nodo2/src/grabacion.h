@@ -16,3 +16,5 @@ EstadoGrabacion grabacion_estado();
 const char* grabacion_nombre_estado();
 float grabacion_rms();
 float grabacion_fondo();
+double grabacion_duracion_s();
+double grabacion_posicion_s();

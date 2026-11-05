@@ -251,6 +251,7 @@ se escribe, se pausa el resumen periódico.
 | `umbral <factor>` | Ajusta el disparo, de 1.5 a 20; inicialmente 3.0. |
 | `calibrar` | Repite la calibración en silencio (16 bloques ignorados + mediana de 16); no disponible durante reproducción. |
 | `grabacion` | Muestra estado, duración guardada, capacidad, ruido de fondo y umbral. |
+| `vista breve`, `vista todo` | Selecciona el resumen compacto (predeterminado al arrancar) o la línea completa con todos los totales. |
 
 La banda inicial es 100–1200 Hz y el notch 2150 Hz, Q 8.5. Con banda inferior
 menor que 600 Hz, el FIR es pasa bajas con corte `sup + 300` Hz; desde 600 Hz
@@ -271,9 +272,30 @@ válido por 200 ms. Arranca encendido hasta recibir INPUT.
 
 ## Contadores del monitor
 
-El resumen de aproximadamente un segundo agrega estado de grabación, RMS del
-último INPUT y ruido de fondo. Los contadores son acumulados desde el arranque,
-excepto los tiempos de procesamiento, calculados por intervalo.
+El resumen de aproximadamente un segundo usa `vista breve` por defecto:
+
+```text
+#0001 | FIR | GRABANDO 2.048 s | RX 15.6/s | RMS 0.025 fondo 0.003 | proc T 0.000 ms E 0.000 ms
+```
+
+Muestra el modo, estado y segundos guardados; durante REPRODUCIENDO muestra
+`actual/total s`, según la posición decodificada (el audio puede seguir en las
+colas del DAC). RX es la tasa de paquetes INPUT válidos por segundo, calculada
+con el tiempo real entre resúmenes. RMS y fondo tienen tres decimales; `proc T`
+y `E` son los promedios temporal y espectral por bloque, en milisegundos.
+
+Solo si aumentó algún contador de error, pérdida o desborde desde el resumen
+anterior se añade `ALERTA`, con el aumento y el total de cada contador afectado;
+por ejemplo, ` | ALERTA err_crc +1 (total 3), perdidos +2 (total 2)`.
+Si no hay nuevos incidentes, la alerta desaparece en el siguiente resumen aunque
+los totales sigan siendo distintos de cero. INPUT, DIAG y sesiones no disparan
+alertas. Mientras se escribe se pospone la impresión: el siguiente resumen
+incluye los aumentos desde el anterior y RX usa todo ese tiempo transcurrido.
+
+`vista todo` conserva la línea completa anterior. Sus contadores son acumulados
+desde el arranque, excepto los tiempos de procesamiento, calculados por
+intervalo. Ambas vistas actualizan la referencia de las alertas y de la tasa RX;
+cambiar de vista no reinicia los totales. Los campos de la línea completa son:
 
 | Campo | Significado |
 | --- | --- |

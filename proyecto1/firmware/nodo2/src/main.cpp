@@ -36,6 +36,7 @@ static bool cola_espectral_pendiente = false;
 static char linea_comando[96];
 static size_t longitud_comando = 0;
 static bool descartando_comando = false;
+static bool vista_breve = true;
 static TiempoProceso proc_total, proc_temporal, proc_espectral;
 static uint32_t bloques_proc = 0;
 
@@ -119,6 +120,17 @@ static void ejecutar_comando(char* linea)
     const char* primero = strtok_r(nullptr, " \t", &resto);
     const char* segundo = strtok_r(nullptr, " \t", &resto);
     const char* extra = strtok_r(nullptr, " \t", &resto);
+
+    if (comando && std::strcmp(comando, "vista") == 0 && primero && !segundo) {
+        if (std::strcmp(primero, "breve") == 0) vista_breve = true;
+        else if (std::strcmp(primero, "todo") == 0) vista_breve = false;
+        else {
+            printf("Error: comando o valores invalidos\n");
+            return;
+        }
+        printf("Vista: %s\n", vista_breve ? "breve" : "todo");
+        return;
+    }
 
     if (comando && std::strcmp(comando, "calibrar") == 0 && !primero) {
         grabacion_calibrar();
@@ -310,6 +322,9 @@ extern "C" void app_main(void)
 
     uint32_t numero_resumen = 0;
     int64_t ultimo_resumen_us = esp_timer_get_time();
+    int64_t ultima_medicion_rx_us = ultimo_resumen_us;
+    ContadoresRecepcion rx_anterior = recepcion_contadores();
+    uint32_t desbordes_resumen_anterior = salida_dac_contadores().desbordes;
     int64_t ultimo_error_dac_us = -1;
     uint32_t desbordes_anteriores = 0;
     for (;;) {
@@ -338,21 +353,57 @@ extern "C" void app_main(void)
         } else if (ahora_us - ultimo_resumen_us >= 1000000) {
             const auto& r = recepcion_contadores();
             const uint32_t divisor = bloques_proc ? bloques_proc : 1;
-            printf("#%04lu | Filtro: %s | INPUT %llu | DIAG %llu | err_trama %llu | err_cobs %llu | "
-                   "err_crc %llu | err_cabecera %llu | perdidos %llu | sesiones %llu | "
-                   "DAC %llu B | desbordes_dac %lu | proc total prom %llu us max %llu us | "
-                   "proc temporal prom %llu us max %llu us | proc espectral prom %llu us max %llu us | "
-                   "grabación %s | RMS %.6g | fondo %.6g\n",
-                   (unsigned long)++numero_resumen, nombre_modo(),
-                   (unsigned long long)r.input, (unsigned long long)r.diag,
-                   (unsigned long long)r.err_trama, (unsigned long long)r.err_cobs,
-                   (unsigned long long)r.err_crc, (unsigned long long)r.err_cabecera,
-                   (unsigned long long)r.perdidos, (unsigned long long)r.sesiones,
-                   (unsigned long long)d.bytes, (unsigned long)d.desbordes,
-                   (unsigned long long)(proc_total.suma_us / divisor), (unsigned long long)proc_total.max_us,
-                   (unsigned long long)(proc_temporal.suma_us / divisor), (unsigned long long)proc_temporal.max_us,
-                   (unsigned long long)(proc_espectral.suma_us / divisor), (unsigned long long)proc_espectral.max_us,
-                   grabacion_nombre_estado(), grabacion_rms(), grabacion_fondo());
+            ++numero_resumen;
+            if (vista_breve) {
+                const double input_por_s = (r.input - rx_anterior.input) * 1000000.0 /
+                                           (ahora_us - ultima_medicion_rx_us);
+                printf("#%04lu | %s | %s ", (unsigned long)numero_resumen,
+                       nombre_modo(), grabacion_nombre_estado());
+                if (grabacion_estado() == EstadoGrabacion::REPRODUCIENDO) {
+                    printf("%.3f/%.3f s", grabacion_posicion_s(), grabacion_duracion_s());
+                } else {
+                    printf("%.3f s", grabacion_duracion_s());
+                }
+                printf(" | RX %.1f/s | RMS %.3f fondo %.3f | proc T %.3f ms E %.3f ms",
+                       input_por_s, grabacion_rms(), grabacion_fondo(),
+                       proc_temporal.suma_us / (divisor * 1000.0),
+                       proc_espectral.suma_us / (divisor * 1000.0));
+                bool alerta = false;
+                const auto imprimir_aumento = [&alerta](const char* nombre, uint64_t total,
+                                                       uint64_t anterior) {
+                    if (total <= anterior) return;
+                    printf("%s%s +%llu (total %llu)", alerta ? ", " : " | ALERTA ", nombre,
+                           (unsigned long long)(total - anterior), (unsigned long long)total);
+                    alerta = true;
+                };
+                imprimir_aumento("err_trama", r.err_trama, rx_anterior.err_trama);
+                imprimir_aumento("err_cobs", r.err_cobs, rx_anterior.err_cobs);
+                imprimir_aumento("err_crc", r.err_crc, rx_anterior.err_crc);
+                imprimir_aumento("err_cabecera", r.err_cabecera, rx_anterior.err_cabecera);
+                imprimir_aumento("perdidos", r.perdidos, rx_anterior.perdidos);
+                imprimir_aumento("desbordes_dac", d.desbordes, desbordes_resumen_anterior);
+                putchar('\n');
+            } else {
+                printf("#%04lu | Filtro: %s | INPUT %llu | DIAG %llu | err_trama %llu | err_cobs %llu | "
+                       "err_crc %llu | err_cabecera %llu | perdidos %llu | sesiones %llu | "
+                       "DAC %llu B | desbordes_dac %lu | proc total prom %llu us max %llu us | "
+                       "proc temporal prom %llu us max %llu us | proc espectral prom %llu us max %llu us | "
+                       "grabación %s | RMS %.6g | fondo %.6g\n",
+                       (unsigned long)numero_resumen, nombre_modo(),
+                       (unsigned long long)r.input, (unsigned long long)r.diag,
+                       (unsigned long long)r.err_trama, (unsigned long long)r.err_cobs,
+                       (unsigned long long)r.err_crc, (unsigned long long)r.err_cabecera,
+                       (unsigned long long)r.perdidos, (unsigned long long)r.sesiones,
+                       (unsigned long long)d.bytes, (unsigned long)d.desbordes,
+                       (unsigned long long)(proc_total.suma_us / divisor), (unsigned long long)proc_total.max_us,
+                       (unsigned long long)(proc_temporal.suma_us / divisor), (unsigned long long)proc_temporal.max_us,
+                       (unsigned long long)(proc_espectral.suma_us / divisor), (unsigned long long)proc_espectral.max_us,
+                       grabacion_nombre_estado(), grabacion_rms(), grabacion_fondo());
+            }
+            // Ambas vistas avanzan la referencia; escribir en consola solo pospone la impresión.
+            rx_anterior = r;
+            desbordes_resumen_anterior = d.desbordes;
+            ultima_medicion_rx_us = ahora_us;
             reiniciar_tiempos();
             ultimo_resumen_us = ahora_us;
         }
