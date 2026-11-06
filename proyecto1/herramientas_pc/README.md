@@ -87,3 +87,118 @@ aproximadamente la mitad del de x; esa relación no condiciona el veredicto.
 ## Diagnóstico
 
 Si hay errores de CRC solo en la PC, el sospechoso es el adaptador a 921 600 baudios, no el emisor. Se distingue reprocesando la captura con `--archivo`.
+
+## Captura y gráficos de métricas
+
+En la rama de métricas la placa de nodos 2+3 calcula SIN FILTRO, FIR, NOTCH y
+RESTA en **una sola reproducción** de la misma grabación. Solo se escucha el
+modo elegido. Emite cuatro registros `METRICAS,2,` al terminar, o al ejecutar
+`metricas`. La PC no abre otro puerto, no modifica muestras ni procesa filtros.
+
+### 1. Mantener el monitor y guardar solo métricas
+
+`firmware/nodo2/platformio.ini` activa `monitor_filters = default, metricas_csv`.
+El filtro propio `monitor/filter_metricas.py` usa la
+[API de filtros de PlatformIO](https://docs.platformio.org/en/latest/core/userguide/device/cmd_monitor.html#custom-filters).
+El monitor sigue mostrando todos los mensajes y aceptando comandos como antes.
+Si ya estaba abierto antes del cambio, cerrarlo y abrirlo de nuevo para cargar
+el filtro. El analizador de archivos puede ejecutarse con ese monitor abierto;
+no abrir un segundo monitor serial sobre el mismo puerto.
+El filtro guarda solo registros completos y válidos, incluso si llegaron partidos
+en varias lecturas seriales. No necesita pyserial adicional ni un YP-05.
+
+1. Cargar el firmware actualizado de nodo 2 y abrir su monitor normal de PlatformIO.
+2. Si ya hay grabación LISTA, usar `reproducir` o el botón de play. Si no, reproducir
+   el audio de prueba hacia el micrófono y esperar a que la grabación automática
+   llegue a LISTA antes de usar play. `grabacion` consulta el estado, no inicia
+   manualmente una grabación.
+3. Esperar que termine la reproducción. El monitor anuncia una ruta como:
+   `proyecto1/herramientas_pc/resultados/metricas/metricas_FECHA.csv`.
+4. Ese CSV contiene únicamente líneas `METRICAS,`; no hay encabezado añadido.
+   Puede analizarse mientras el monitor permanece abierto, una vez impresas las
+   cuatro filas. Un informe incompleto se marca y se puede analizar de nuevo al
+   terminar, usando otra carpeta de salida.
+
+Se usa un archivo nuevo por apertura del monitor y, al reconocer el arranque de
+la placa, se separan sesiones para evitar mezclar IDs que vuelven a 1. La fecha
+del nombre es UTC con microsegundos; los archivos se crean al llegar la primera
+fila válida. Si se pierde el mensaje de reinicio, no concatenar manualmente sus
+capturas: abrir otra sesión de monitor. Un archivo de sesión puede contener varias
+reproducciones; se distinguen por ID. Los CSV/figuras generados están ignorados por
+Git, no los respaldos ni el código.
+
+### 2. Generar la tabla y los gráficos
+
+Con el entorno Python de PC activo, desde la raíz del repositorio:
+
+```sh
+python3 -m pip install -r proyecto1/herramientas_pc/requirements_metricas.txt
+python3 proyecto1/herramientas_pc/analizar_metricas.py RUTA_DEL_CSV --etiqueta P1
+```
+
+`RUTA_DEL_CSV` se sustituye por la ruta anunciada por el monitor. Para seleccionar
+una reproducción y nombrar la carpeta del informe:
+
+```sh
+python3 proyecto1/herramientas_pc/analizar_metricas.py RUTA_DEL_CSV --reproduccion 1 --etiqueta P1 --salida proyecto1/herramientas_pc/resultados/P1_r1
+```
+
+La carpeta indicada debe estar vacía o no existir, para no mezclar informes viejos.
+Si se omite `--salida` se crea una carpeta nueva con fecha. No se instala ni usa
+ninguna dependencia de la simulación. El parser y `--sin-graficos` usan solo la
+biblioteca estándar; los gráficos requieren matplotlib (y sus dependencias).
+El receptor histórico mantiene su `requirements.txt` separado.
+
+| Opción | Uso |
+|---|---|
+| Archivos posicionales | Uno o varios CSV; también admite logs con mensajes ajenos |
+| `--etiqueta P1` | Etiqueta dada por el usuario; no identifica automáticamente el audio |
+| `--reproduccion 1` | Selecciona ID; se puede repetir. Se aplica a cada archivo |
+| `--salida CARPETA` | Carpeta vacía/nueva para resultados |
+| `--sin-graficos` | Genera solo CSV normalizado y tabla Markdown |
+
+La salida contiene `metricas.csv` con encabezado y metadatos, `informe.md` y una
+figura PNG y SVG por reproducción completa y válida. Cada figura compara los
+modos disponibles: SNR estimada de salida (con referencia de entrada), ΔSNR,
+energía, atenuación, MSE respecto de x, retardo, procesamiento y carga. La RAM y
+los tiempos totales se incluyen en el informe y CSV. **No hay muestras: no es
+posible graficar ondas ni espectros ni obtener métricas exactas frente a señal
+limpia a partir de estas líneas.**
+
+### Validez, repeticiones y versiones
+
+- v2 espera exactamente SIN_FILTRO, FIR, NOTCH y RESTA; v1 admite el modo temporal
+  seleccionado más RESTA, sin atribuir resultados a modos no medidos.
+- `metricas` repite resultados: las filas idénticas con mismo archivo, versión,
+  ID y modo se deduplican. IDs iguales de archivos distintos nunca se fusionan.
+- Filas contradictorias y campos comunes inconsistentes invalidan el conjunto;
+  no se elige silenciosamente el último resultado. Faltantes, líneas truncadas
+  o versiones desconocidas se informan. Un conjunto inválido no genera figuras.
+- NA permanece no disponible y se rotula en las figuras; nunca se transforma en
+  cero. Se conservan informes CONFIG_CAMBIADA o DATOS_NO_FINITOS como diagnóstico.
+- FIR/NOTCH comparten el cálculo temporal: sus barras incluyen ese costo conjunto
+  más la FFT de su propia salida; **no se suman** para obtener el tiempo total.
+  SIN FILTRO reutiliza x; su costo adicional es 0, no su costo global. El máximo
+  total es el que se contrasta con 64 ms. Retardo de notch cero significa ausencia
+  de desplazamiento fijo, no fase nula ni retardo de grupo cero.
+- Código de salida 0: selección completa/coherente, estado de placa OK y sin
+  líneas rechazadas. Código 2: error o captura incompleta/inválida; si hay filas
+  reconocidas se guarda un informe diagnóstico. No equivale a que el filtro haya
+  mejorado la señal ni garantiza que todos los cocientes sean finitos.
+
+### Validación de PC
+
+```sh
+python3 -m unittest discover -s proyecto1/herramientas_pc/tests -v
+```
+
+Las 13 pruebas verifican deduplicación, sesiones separadas, versiones, NA, inválidos,
+fragmentación, límites de línea, reinicios, tabla CLI e informes incompletos.
+Las referencias numpy verifican convenciones de retardo y conservación de
+energía por ventanas; no ejecutan C++ ni sustituyen pruebas del ESP32.
+La integración con el registro de filtros de PlatformIO y una figura sintética
+se verificaron sin abrir un puerto. Después se procesó la captura real de seis
+reproducciones del usuario: cinco informes válidos y uno invalidado a propósito,
+cuatro duplicados omitidos, sin líneas rechazadas. Los máximos observados en placa
+fueron menores de 64 ms, con margen ajustado. Resultados y límites en
+[VALIDACION_METRICAS.md](VALIDACION_METRICAS.md).

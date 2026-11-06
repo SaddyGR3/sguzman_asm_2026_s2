@@ -485,10 +485,14 @@ Pendiente de ejecutar en hardware con ambos firmwares actualizados:
    actual solo sugiere tonal/notch; un caso de 4 votos FIR de un tipo más 4 de
    otro debe ganar frente a 5 votos notch, y un empate debe elegir el menor ID.
 
-## Métricas de ambas rutas (paso 8a)
+## Métricas de cuatro modos en una reproducción (CSV v2)
 
 Al terminar cada reproducción, después de drenar el DAC y antes de aplicar una
-banda pendiente, se imprime una tabla de las dos rutas y dos líneas `METRICAS,`.
+banda pendiente, se imprime una tabla de cuatro modos y cuatro líneas `METRICAS,2,`: SIN FILTRO,
+FIR, NOTCH y RESTA. Se evalúan todos con la misma grabación y reproducción,
+aunque solo se escuche el seleccionado. No hace falta repetir para cada filtro.
+NOTCH usa su frecuencia/Q vigentes; no busca un notch óptimo distinto para cada
+audio. Esos parámetros se incluyen en las cuatro filas para interpretar la prueba.
 `metricas` vuelve a mostrar el mismo informe; no recalcula ni cambia la RAM
 registrada. Antes de terminar la primera reproducción avisa que no hay resultados.
 
@@ -502,15 +506,17 @@ métricas exactas en PC se necesita una referencia limpia y alineamiento adecuad
 
 La ruta temporal conserva su último modo SIN FILTRO, FIR o NOTCH aunque se
 escuche ESPECTRAL. Por ejemplo, ejecutar `modo fir`, luego `modo espectral` y
-`reproducir` permite escuchar resta y comparar **FIR contra RESTA**. `estado`
+`reproducir` permite escuchar resta mientras se evalúan **los cuatro modos**. `estado`
 muestra la selección temporal independiente. Al arrancar es SIN FILTRO.
 Con `auto on`, el diagnóstico configura la ruta temporal al comenzar cada
 reproducción, incluso si la escucha permanece en ESPECTRAL. Ambas rutas siguen
-procesando los mismos bloques. No se añade un segundo DAC.
+procesando los mismos bloques; se conservan las salidas FIR y NOTCH separadas
+para medirlas, sin modificar sus coeficientes ni sus algoritmos. No se añade un segundo DAC.
 
 ### Alineamiento y ventana común
 
-Se compara el mismo número L de muestras en las tres señales:
+Se compara el mismo número L de muestras para x y las cuatro salidas
+(SIN FILTRO reutiliza x):
 
 - SIN FILTRO: `y[n]` frente a `x[n]`, desplazamiento cero.
 - FIR: `y[n+18]` frente a `x[n]`, retardo de grupo de 2.25 ms.
@@ -518,7 +524,7 @@ Se compara el mismo número L de muestras en las tres señales:
   de frecuencia; su MSE incluye esa modificación de fase. Cero no implica fase nula.
 - RESTA: `y[n+512]` frente a `x[n]`, retardo adicional de 64 ms.
 
-Se conserva un bloque anterior de x y temporal: la salida espectral actual
+Se conserva un bloque anterior de x, FIR y NOTCH: la salida espectral actual
 corresponde a ese bloque anterior, y las últimas 18 muestras del FIR alineado se
 completan con el principio de su bloque actual. El bloque de ceros de vaciado
 existente recupera las últimas muestras reales. No se incluyen en el MSE ni el
@@ -527,7 +533,8 @@ muestras. Los retardos reportados son algorítmicos; excluyen adquisición por
 bloques, comunicación, colas/DMA, circuito analógico y tiempo hasta oír el audio.
 
 Para energía se usa FFT de 1024, avance 512 y raíz de Hann periódica, igual para
-x y ambas salidas **ya alineadas y reconstruidas**. Se analizan ventanas
+x, FIR, NOTCH y RESTA **ya alineadas y reconstruidas**. SIN FILTRO reutiliza
+la energía de x y su MSE es cero; no se añade una FFT idéntica. Se analizan ventanas
 `[ceros, bloque 0]`, `[bloque 0, bloque 1]`, ..., `[último bloque, ceros]`.
 Las ventanas al cuadrado suman uno para cada muestra real, incluidos los bordes.
 Se suman potencias unilaterales `2*|FFT|²/N` (DC/Nyquist llevan peso 1), sin
@@ -541,7 +548,7 @@ el espectro de la salida final tras solape y síntesis.
 
 ### Definiciones
 
-La banda protegida, el pico del diagnóstico, los modos y los parámetros se
+La banda protegida, el pico del diagnóstico y los parámetros se
 capturan al comenzar la reproducción. Las energías se acumulan en double durante
 el tramo completo; los cocientes y logaritmos se calculan al imprimir. No se
 promedian cocientes ni dB de bloques individuales.
@@ -554,9 +561,9 @@ promedian cocientes ni dB de bloques individuales.
 | Atenuación dB | `10*log10(E_interferencia_x/E_interferencia_salida)`. Positiva indica reducción. Si el pico guardado es finito y está en 100–3000, usa el bin más cercano ±2, recortado a ese intervalo; si no, usa toda la energía exterior a la protección. |
 | MSE(x) | `sum((y_alineada-x)^2)/L`. Mide cuánto cambió la ruta la entrada contaminada; reducir ruido puede aumentar este MSE. |
 | Retardo ms | 0 fijo para SIN FILTRO/NOTCH, 2.25 para FIR y 64 para RESTA, con la salvedad de fase del notch indicada arriba. |
-| Proc prom/max ms por ruta | Tiempo de sus filtros y su FFT de métricas, por llamada de reproducción. Temporal incluye el cálculo de FIR y notch, aunque se seleccione uno. |
+| Proc prom/max ms por modo | FIR y NOTCH: cálculo **conjunto y compartido** de ambos filtros + FFT de métricas de esa salida. RESTA: su procesamiento y FFT de métricas. SIN FILTRO: 0 adicional, reutiliza x. No son tiempos aislados de cada filtro: no sumar filas. |
 | Carga por ruta % | `100*proc_prom_us/64000`. No es una medición del uso global de CPU del sistema. |
-| Proc total prom/max | Decodificación, ambas rutas, métricas completas (incluida FFT de x y MSE), conversión y encolado. Es la medida para contrastar con el plazo de 64 ms; los tiempos de las rutas no incluyen el trabajo común. |
+| Proc total prom/max | Decodificación, cuatro modos, métricas completas (incluida FFT de x y MSE), conversión y encolado. Es la medida para contrastar con el plazo de 64 ms; los tiempos de las rutas no incluyen el trabajo común. |
 | Proc métricas prom/max | Coste completo de alineamiento, MSE y FFT de métricas; ya está incluido en total, no debe sumarse otra vez. |
 | RAM libre/mayor bloque B | RAM interna con capacidad de 8 bits al terminar, antes de imprimir y aplicar CONFIG pendiente; incluye la reserva de audio todavía existente. No es un máximo de consumo de toda la ejecución. |
 
@@ -568,21 +575,22 @@ seguir disponibles. Si ambas señales son silencio, sus cocientes son NA y el
 MSE válido es cero. `OK` significa configuración consistente y datos finitos;
 no garantiza que todas las razones tengan denominador distinto de cero.
 
-Se permite cambiar la escucha durante la reproducción. Cambiar la selección
-**temporal**, recalcular banda/notch o cambiar los parámetros espectrales marca
+Se permite cambiar la escucha durante la reproducción, incluida la selección
+temporal, sin invalidar: siempre se miden los cuatro modos. Recalcular
+banda/notch o cambiar los parámetros espectrales marca
 el informe `CONFIG_CAMBIADA`; se conserva la reproducción y sus tiempos, pero
 las métricas de señal salen NA para evitar comparar una mezcla de configuraciones
 como un solo filtro. El CSV conserva los parámetros iniciales, no los finales.
-Pasar solo a escuchar ESPECTRAL conservando la misma ruta temporal no invalida.
+Cambiar solo el modo de escucha no cambia el procesamiento que se está midiendo.
 Un comando espectral con los mismos parámetros efectivos tampoco invalida.
 Datos no finitos marcan `DATOS_NO_FINITOS`; un tramo vacío, `SIN_MUESTRAS`.
 Una nueva reproducción inicia acumuladores nuevos y vuelve a permitir `OK`.
 
 ### CSV para la computadora
 
-Cada informe lleva exactamente dos registros, uno por ruta, con punto decimal,
-sin unidades dentro de los campos y `NA` para valores no disponibles. Versión 1,
-33 campos contando el prefijo; cabecera para el futuro script de PC:
+Cada informe lleva exactamente cuatro registros con punto decimal, sin unidades
+dentro de los campos y `NA` para valores no disponibles. Versión 2, mismos
+33 campos que v1 contando el prefijo; cabecera para el script de PC:
 
 ```text
 METRICAS,version,reproduccion,estado,ruta,modo,banda_lo_hz,banda_hi_hz,pico_hz,snr_x_db,snr_y_db,delta_snr_db,energia_banda_pct,atenuacion_db,mse_x,retardo_ms,proc_prom_ms,proc_max_ms,carga_pct,ram_libre_b,ram_bloque_b,muestras,bloques_proc,proc_total_prom_ms,proc_total_max_ms,carga_total_pct,metricas_prom_ms,metricas_max_ms,notch_hz,notch_q,alfa,ganancia_minima,metodo_atenuacion
@@ -591,41 +599,66 @@ METRICAS,version,reproduccion,estado,ruta,modo,banda_lo_hz,banda_hi_hz,pico_hz,s
 `ruta` es `temporal` o `espectral`; `modo` es `SIN_FILTRO`, `FIR`, `NOTCH` o
 `RESTA`. El método de atenuación es `pico` o `fuera_banda`. El identificador de
 reproducción aumenta hasta reiniciar la placa; `metricas` repite ese ID. Los
-campos comunes, RAM y SNR de entrada son iguales para las dos filas del informe.
+campos comunes, RAM y SNR de entrada son iguales para las cuatro filas del informe.
+Hay tres registros `temporal` (SIN_FILTRO, FIR, NOTCH) y uno `espectral` (RESTA).
+El script conserva compatibilidad con v1, mostrando sus dos resultados sin inventar
+los modos que no se midieron.
 `bloques_proc` incluye la llamada de vaciado; `muestras` solo cuenta el audio
 real alineado. No mezclar esos dos contadores para inferir duración.
 
 ### Recursos y validación pendiente en placa
 
-Se añaden 18 KiB de arreglos float estáticos (entrada preservada, dos bloques
-anteriores y tres historiales de análisis), más resúmenes y contadores. No se
-reserva memoria por bloque ni se duplica la tabla o área FFT. Al existir estos
-búferes antes de reservar audio, la duración máxima disponible puede disminuir;
+Los búferes auxiliares suman **28 KiB de arreglos float estáticos**, frente a
+18 KiB de v1: entrada preservada, salidas FIR y NOTCH independientes, tres bloques
+anteriores y cuatro historiales de análisis. El incremento es **10 KiB**, además
+de resúmenes/contadores. No hay reservas por bloque ni duplicación de ventana,
+tabla o área FFT. La duración máxima disponible de grabación puede disminuir;
 comprobar la capacidad impresa al arrancar.
 
-Hay tres FFT de métricas por bloque alineado, más tres para la ventana final.
-La última llamada de vaciado concentra seis FFT de métricas; cuenta en los
-promedios, máximos y carga. Los promedios usan todas las llamadas, incluida la
-inicial que prepara el alineamiento. Si el máximo total alcanza 64 ms, el informe
-lo avisa. La carga total y su máximo son los relevantes para la holgura, no la
-suma de los máximos aislados de las rutas.
+Se ejecutan cuatro FFT de métricas por ventana alineada (x, FIR, NOTCH, RESTA),
+frente a tres en v1. La llamada final contiene ocho FFT al añadir la ventana de
+borde. Sus tiempos se incluyen en máximos y promedios; hay que medir esa llamada
+además de las normales. SIN FILTRO reutiliza el análisis de x. Los promedios
+incluyen la primera llamada que prepara el alineamiento. El tiempo total incluye
+costos compartidos y es el que debe quedar holgado frente a 64 ms.
 
-No se ha compilado ni medido todavía esta versión en el ESP32. Comprobar después:
+### Validación realizada y pendiente
 
-1. En LISTA, `modo sin`, `reproducir`: MSE temporal 0, energía en banda 100 % si
-   hay energía, ΔSNR 0 y atenuación 0 cuando los cocientes estén definidos.
-2. `modo fir`, luego `modo espectral`, `reproducir`: tabla temporal FIR y espectral
-   RESTA, aunque solo se escuche RESTA. Repetir sin cambios y comparar resultados.
-3. Con P1 guardado y diagnóstico de pico, `modo notch`, `reproducir`: atenuación
-   del pico positiva; comprobar ΔSNR y no interpretar MSE(x) como error limpio.
-4. Con protección 100–3000: SNR/ΔSNR NA; conservar MSE y energía válidos. Con
-   reproducción silenciosa, cocientes NA sin divisiones inválidas.
-5. Durante reproducción, escribir `estado` o alternar `vista`: los acumuladores
-   finales no se reinician. Cambiar el modo temporal o un parámetro de filtro:
-   informe CONFIG_CAMBIADA. Repetir otra reproducción para obtener OK.
-6. Cambiar banda desde nodo 1 durante reproducción: se difiere hasta terminar;
-   el informe debe usar la banda inicial y obtenerse antes de aplicar la nueva.
-7. `metricas` repite los dos CSV y la RAM capturada; comprobar los 33 campos y
-   que nunca se atribuya una métrica a un modo distinto del registrado.
-8. Revisar máximo total holgado frente a 64 ms y sin nuevos errores, pérdidas o
-   desbordes. La impresión final se hace con el audio ya drenado.
+Sin compilar ni cargar firmware: comprobaciones estáticas, 13 pruebas de parser,
+captura y referencia numérica en PC, integración con el registro de filtros de
+PlatformIO instalado, exportación
+de tabla/CSV y generación de figuras PNG/SVG con datos sintéticos. Las pruebas
+numéricas independientes comprueban las convenciones de retardo y ventanas, no
+ejecutan el C++. Después, el usuario probó esta versión en placa: seis informes
+de 91648 muestras, máximo total observado 58.918 ms, RAM libre 82812 B y
+mayor bloque 55296 B; sin aumentos de errores, pérdidas ni desbordes DAC en los
+reportes recibidos. El margen mínimo observado es 5.082 ms: cumple en estas
+corridas, pero no se declara holgura amplia ni garantía para otros escenarios.
+El registro está en [VALIDACION_METRICAS.md](../../herramientas_pc/VALIDACION_METRICAS.md).
+
+Después de cargar **nodo 2**, con una grabación LISTA:
+
+1. Conservar parámetros, escribir `reproducir` o usar el botón. Al terminar deben
+   aparecer cuatro filas de tabla y cuatro `METRICAS,2,` con el mismo ID. Comprobar
+   que SIN_FILTRO tiene MSE 0, energía 100%, ΔSNR 0 y atenuación 0 cuando se definan.
+2. Revisar máximo total holgado frente a 64 ms, RAM libre, mayor bloque y capacidad
+   de grabación. Sin aumentos nuevos de errores, pérdidas ni desbordes DAC. El
+   vaciado puede producir el máximo de procesamiento.
+3. Escribir `metricas`: repite los cuatro registros, ID y RAM originales. El
+   analizador de PC no debe duplicar las filas. No vuelve a procesar audio.
+4. Cambiar solo la escucha durante otra reproducción: informe OK. Cambiar un
+   parámetro FIR, notch o espectral: CONFIG_CAMBIADA, métricas de señal NA. La
+   siguiente reproducción con configuración estable debe volver a OK.
+5. Con protección 100–3000: SNR/ΔSNR NA; MSE y energía pueden seguir definidos.
+   En silencio digital los cocientes son NA y MSE válido es 0.
+6. Cambiar CONFIG desde nodo 1 durante reproducción: sigue difiriéndose hasta
+   después del informe. Nodo 1 y los paquetes UART no se modifican en esta etapa.
+7. Abrir el monitor con el filtro `metricas_csv` activado en `platformio.ini`.
+   Aparecerá la ruta del CSV al terminar la primera reproducción. Probar comandos
+   normales y confirmar que se sigue mostrando toda la consola.
+8. Analizar el CSV según el [README de PC](../../herramientas_pc/README.md#captura-y-gráficos-de-métricas).
+   Comparar las cifras de la tabla de placa, CSV e informe. El archivo solo guarda
+   líneas de métricas; los gráficos son de valores resumidos, no ondas/espectros.
+
+Las pruebas P1/P2/P3/P5 sirven para comparar filtros; P4 sigue como limitación del
+diagnóstico de nodo 1, fuera del alcance de estos cambios.
