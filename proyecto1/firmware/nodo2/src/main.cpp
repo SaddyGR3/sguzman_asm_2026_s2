@@ -23,7 +23,7 @@ constexpr gpio_num_t PIN_BOTON = GPIO_NUM_32;
 constexpr gpio_num_t PIN_REPRODUCIR = GPIO_NUM_33;
 constexpr int64_t BOTON_ESTABLE_US = 30000;
 constexpr int64_t BOTON_BLOQUEO_US = 200000;
-static_assert(ESPECTRAL_H == MUESTRAS_BLOQUE, "El avance espectral debe coincidir con el bloque reproducido");
+static_assert(ESPECTRAL_H == MUESTRAS_BLOQUE, "La capacidad de salto máxima debe cubrir el transporte");
 static_assert(COEFICIENTES_FIR % 2 == 1 && (COEFICIENTES_FIR - 1) / 2 < MUESTRAS_BLOQUE,
               "El alineamiento FIR requiere retardo entero menor que un bloque");
 
@@ -41,6 +41,7 @@ static bool automatico = false;
 static float banda_nodo1_lo = 100.0f, banda_nodo1_hi = 1200.0f;
 static uint32_t config_nodo1 = 0;
 static bool banda_pendiente = false;
+static unsigned n_pendiente = 1024;
 static float banda_pendiente_lo = 0.0f, banda_pendiente_hi = 0.0f;
 static uint32_t config_pendiente = 0;
 static bool banda_es_nodo1 = false;
@@ -79,38 +80,53 @@ static const char* nombre_modo(ModoFiltro seleccionado)
 
 static const char* nombre_modo() { return nombre_modo(modo); }
 
-static void aplicar_banda_nodo1(float inferior, float superior, uint32_t config_id)
+static void aplicar_banda_nodo1(float inferior, float superior, unsigned n, uint32_t config_id)
 {
-    filtros_cambiar_banda(inferior, superior);
+    const auto& vigente = filtros_configuracion();
+    if (vigente.banda_inferior_hz != inferior || vigente.banda_superior_hz != superior)
+        filtros_cambiar_banda(inferior, superior);
+    espectral_cambiar_n(n);
     banda_nodo1_lo = inferior;
     banda_nodo1_hi = superior;
     config_nodo1 = config_id;
     banda_es_nodo1 = true;
-    printf("Banda del nodo 1: %.6g-%.6g Hz (config %lu)\n",
-           inferior, superior, (unsigned long)config_id);
+    printf("CONFIG nodo 1: banda %.6g-%.6g Hz | N %u H %u (config %lu)\n",
+           inferior, superior, n, n / 2, (unsigned long)config_id);
 }
 
 static void procesar_control(const uint8_t* datos)
 {
     const uint32_t config_id = get_u32(datos + 12);
+    const unsigned n = get_u16(datos + 4);
     const float inferior = get_f32(datos + 24);
     const float superior = get_f32(datos + 28);
-    if (config_id == config_nodo1 || config_id == config_pendiente) return;
+    if ((config_id == config_nodo1 && !banda_pendiente) ||
+        (banda_pendiente && config_id == config_pendiente)) return;
     if (grabacion_estado() == EstadoGrabacion::REPRODUCIENDO) {
         banda_pendiente = true;
+        n_pendiente = n;
         banda_pendiente_lo = inferior;
         banda_pendiente_hi = superior;
         config_pendiente = config_id;
+        printf("CONFIG %lu diferida: banda %.6g-%.6g Hz N %u H %u; se aplica al terminar reproducción\n",
+               (unsigned long)config_id, inferior, superior, n, n / 2);
         return;
     }
-    aplicar_banda_nodo1(inferior, superior, config_id);
+    aplicar_banda_nodo1(inferior, superior, n, config_id);
 }
 
 static void aplicar_banda_pendiente()
 {
     if (!banda_pendiente || grabacion_estado() == EstadoGrabacion::REPRODUCIENDO) return;
-    aplicar_banda_nodo1(banda_pendiente_lo, banda_pendiente_hi, config_pendiente);
+    aplicar_banda_nodo1(banda_pendiente_lo, banda_pendiente_hi, n_pendiente, config_pendiente);
     banda_pendiente = false;
+}
+
+static void nueva_sesion_nodo1()
+{
+    config_nodo1 = config_pendiente = 0;
+    banda_pendiente = false;
+    grabacion_nueva_sesion();
 }
 
 static void reproducir()
@@ -152,6 +168,7 @@ static void reproducir()
         const auto& filtros = filtros_configuracion();
         const auto& espectral = espectral_configuracion();
         ConfiguracionMetricas configuracion;
+        configuracion.n = espectral_n();
         configuracion.banda_lo = filtros.banda_inferior_hz;
         configuracion.banda_hi = filtros.banda_superior_hz;
         configuracion.pico_hz = grabacion_diagnostico().pico_hz;
@@ -205,8 +222,8 @@ static void imprimir_estado()
         diagnostico.tipo_ruido, diagnostico.filtro_n2, diagnostico.pico_hz);
     printf("Ruta temporal independiente: %s\n", nombre_modo(modo_temporal));
     const auto& espectral = espectral_configuracion();
-    printf("Espectral: resta | alfa %.6g | ganancia minima %.6g | N %d H %d | retardo 64 ms\n",
-           espectral.alfa, espectral.ganancia_minima, ESPECTRAL_N, ESPECTRAL_H);
+    printf("Espectral: resta | alfa %.6g | ganancia minima %.6g | N %u H %u | retardo %.2f ms\n",
+           espectral.alfa, espectral.ganancia_minima, espectral_n(), espectral_h(), espectral_h() / 8.0);
     imprimir_fir();
     imprimir_notch();
 }
@@ -466,7 +483,7 @@ extern "C" void app_main(void)
     // Inicializar ESP-DSP antes de reservar la grabación: también usa RAM interna.
     ESP_ERROR_CHECK(espectral_iniciar());
     salida_dac_iniciar();
-    recepcion_iniciar(procesar_input, procesar_diag, procesar_control, grabacion_nueva_sesion);
+    recepcion_iniciar(procesar_input, procesar_diag, procesar_control, nueva_sesion_nodo1);
     grabacion_iniciar();
     const int banderas_consola = fcntl(STDIN_FILENO, F_GETFL, 0);
     ESP_ERROR_CHECK(banderas_consola >= 0 &&

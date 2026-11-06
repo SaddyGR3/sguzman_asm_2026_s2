@@ -4,6 +4,7 @@
 
 constexpr int N_MAX = 1024;
 static int longitud = 0;
+static bool tabla_iniciada = false;
 alignas(16) static float fft[2 * N_MAX];
 alignas(16) static float tabla[N_MAX];
 static float ventana[N_MAX];
@@ -12,15 +13,16 @@ static float vecinos[31];
 esp_err_t espectro_iniciar(int n)
 {
     if (n != 256 && n != 512 && n != 1024) return ESP_ERR_INVALID_ARG;
-    // Tabla máxima compartida: también permite transformar las longitudes menores.
-    const esp_err_t error = dsps_fft2r_init_fc32(tabla, N_MAX);
-    if (error != ESP_OK) return error;
-    longitud = n;
-    // Replica sim/nodo3.py::ventana_sqrt_hann(), periódica (denominador N).
-    for (int j = 0; j < n; ++j) {
-        const double hann = 0.5 * (1.0 - cos(2.0 * 3.14159265358979323846 * j / n));
-        ventana[j] = static_cast<float>(sqrt(hann));
+    if (!tabla_iniciada) {
+        const esp_err_t error = dsps_fft2r_init_fc32(tabla, N_MAX);
+        if (error != ESP_OK) return error;
+        for (int j = 0; j < N_MAX; ++j) {
+            const double hann = 0.5 * (1.0 - cos(2.0 * 3.14159265358979323846 * j / N_MAX));
+            ventana[j] = static_cast<float>(sqrt(hann));
+        }
+        tabla_iniciada = true;
     }
+    longitud = n;
     return ESP_OK;
 }
 
@@ -33,7 +35,7 @@ float espectro_magnitudes(const float* x, float* M, int inicio)
     const float media = static_cast<float>(suma / longitud);
     for (int j = 0; j < longitud; ++j) {
         const int k = (inicio + j) & (longitud - 1);
-        fft[2 * j] = (x[k] - media) * ventana[j];
+        fft[2 * j] = (x[k] - media) * ventana[j * (N_MAX / longitud)];
         fft[2 * j + 1] = 0.0f;
     }
     ESP_ERROR_CHECK(dsps_fft2r_fc32(fft, longitud));

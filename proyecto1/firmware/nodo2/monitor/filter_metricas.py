@@ -9,7 +9,7 @@ from platformio.device.monitor.filters.base import DeviceMonitorFilterBase
 PC_DIR = Path(__file__).resolve().parents[3] / 'herramientas_pc'
 if str(PC_DIR) not in sys.path:
     sys.path.insert(0, str(PC_DIR))
-from metricas_csv import interpretar  # noqa: E402
+from metricas_csv import interpretar, CAMPOS, CAMPOS_V2  # noqa: E402
 
 
 class GuardarMetricas(DeviceMonitorFilterBase):
@@ -54,7 +54,8 @@ class GuardarMetricas(DeviceMonitorFilterBase):
                 path = destino / f'metricas_{fecha}.csv'
                 self._archivo = path.open('x', encoding='utf-8', newline='')
                 print(f'--- Métricas guardadas en {path}', file=sys.stderr)
-            self._archivo.write(','.join(datos.values()) + '\n')
+            campos = CAMPOS if datos['version'] == '3' else CAMPOS_V2
+            self._archivo.write(','.join(datos[c] for c in campos) + '\n')
             self._archivo.flush()
         except OSError as exc:
             self.cerrar()

@@ -141,8 +141,9 @@ static void procesar_trama()
         const uint8_t* datos = decodificado + TAM_CABECERA;
         const float banda_lo = get_f32(datos + 24);
         const float banda_hi = get_f32(datos + 28);
-        if (get_u32(datos) != 8000 || get_u16(datos + 4) != 1024 ||
-            get_u16(datos + 6) != 512 || datos[8] != 0 || datos[9] != 1 ||
+        const unsigned n = get_u16(datos + 4);
+        if (get_u32(datos) != 8000 || (n != 256 && n != 512 && n != 1024) ||
+            get_u16(datos + 6) != n / 2 || datos[8] != 0 || datos[9] != 1 ||
             get_u16(datos + 10) != 0 || get_u32(datos + 12) == 0 ||
             !std::isfinite(banda_lo) || !std::isfinite(banda_hi) ||
             banda_lo < 100.0f || banda_hi > 3000.0f || banda_lo >= banda_hi) {

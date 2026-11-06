@@ -5,15 +5,16 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass
 
-CAMPOS = ('marca version reproduccion estado ruta modo banda_lo_hz banda_hi_hz pico_hz '
+CAMPOS_V2 = ('marca version reproduccion estado ruta modo banda_lo_hz banda_hi_hz pico_hz '
           'snr_x_db snr_y_db delta_snr_db energia_banda_pct atenuacion_db mse_x retardo_ms '
           'proc_prom_ms proc_max_ms carga_pct ram_libre_b ram_bloque_b muestras bloques_proc '
           'proc_total_prom_ms proc_total_max_ms carga_total_pct metricas_prom_ms metricas_max_ms '
           'notch_hz notch_q alfa ganancia_minima metodo_atenuacion').split()
+CAMPOS = CAMPOS_V2 + ['n_fft', 'h_fft']
 MODOS = ('SIN_FILTRO', 'FIR', 'NOTCH', 'RESTA')
 ESTADOS = {'OK', 'CONFIG_CAMBIADA', 'DATOS_NO_FINITOS', 'SIN_MUESTRAS'}
 INDEFINIDOS = set(CAMPOS[9:15])
-ENTEROS = {'version', 'reproduccion', 'ram_libre_b', 'ram_bloque_b', 'muestras', 'bloques_proc'}
+ENTEROS = {'version', 'reproduccion', 'ram_libre_b', 'ram_bloque_b', 'muestras', 'bloques_proc', 'n_fft', 'h_fft'}
 TEXTOS = {'marca', 'estado', 'ruta', 'modo', 'metodo_atenuacion'}
 COMUNES = set(CAMPOS) - {'ruta', 'modo', 'snr_y_db', 'delta_snr_db', 'energia_banda_pct',
                         'atenuacion_db', 'mse_x', 'retardo_ms', 'proc_prom_ms', 'proc_max_ms', 'carga_pct'}
@@ -26,14 +27,21 @@ def interpretar(linea):
     if not linea.startswith('METRICAS,'):
         return None
     fila = next(csv.reader([linea], strict=True))
-    if len(fila) != len(CAMPOS):
-        raise ValueError(f'se esperaban {len(CAMPOS)} campos, llegaron {len(fila)}')
-    d = dict(zip(CAMPOS, fila))
+    if len(fila) < 2 or fila[1] not in {'1', '2', '3'}:
+        raise ValueError('versión no soportada')
+    campos = CAMPOS if fila[1] == '3' else CAMPOS_V2
+    if len(fila) != len(campos):
+        raise ValueError(f'se esperaban {len(campos)} campos, llegaron {len(fila)}')
+    d = dict(zip(campos, fila))
+    if d['version'] != '3':
+        d.update(n_fft='1024', h_fft='512')  # contrato de firmware v1/v2 fijo
     for campo in ENTEROS:
         if not re.fullmatch(r'\d+', d[campo]):
             raise ValueError(f'{campo}: entero inválido')
-    if d['version'] not in {'1', '2'}:
+    if d['version'] not in {'1', '2', '3'}:
         raise ValueError(f"versión no soportada: {d['version']}")
+    if int(d['n_fft']) not in (256,512,1024) or int(d['h_fft']) != int(d['n_fft'])//2:
+        raise ValueError('N/H incompatibles')
     if d['estado'] not in ESTADOS or d['modo'] not in MODOS:
         raise ValueError('estado o modo desconocido')
     if d['ruta'] != ('espectral' if d['modo'] == 'RESTA' else 'temporal'):
@@ -53,6 +61,9 @@ def interpretar(linea):
             raise ValueError(f'{campo}: valor negativo')
     if not 100 <= float(d['banda_lo_hz']) < float(d['banda_hi_hz']) <= 3000:
         raise ValueError('banda inválida')
+    if d['version'] == '3' and d['modo'] == 'RESTA':
+        if abs(float(d['retardo_ms']) - int(d['h_fft']) / 8) > .00051:
+            raise ValueError('retardo espectral incompatible con H')
     return d
 
 
@@ -98,7 +109,7 @@ def agrupar(archivos):
     informes = []
     for clave, filas in sorted(grupos.items()):
         version = clave[1]
-        completo = (set(filas) == set(MODOS) if version == 2 else
+        completo = (set(filas) == set(MODOS) if version >= 2 else
                     len(filas) == 2 and 'RESTA' in filas)
         comunes = {tuple(d[c] for c in sorted(COMUNES)) for d in filas.values()}
         motivos = []

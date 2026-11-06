@@ -12,18 +12,19 @@ static float ventana[ESPECTRAL_N];
 static float historial[ESPECTRAL_N];
 static float solape[ESPECTRAL_H];
 
-constexpr int BINS = ESPECTRAL_N / 2 + 1;
+constexpr int BINS_MAX = ESPECTRAL_N / 2 + 1;
+static int n_actual = ESPECTRAL_N, h_actual = ESPECTRAL_H, bins_actual = BINS_MAX;
 constexpr int TRAMAS_RUIDO = 8;
 constexpr int SUAVIZADO_BINS = 31;
-static_assert(SUAVIZADO_BINS % 2 == 1 && SUAVIZADO_BINS <= BINS,
+static_assert(SUAVIZADO_BINS % 2 == 1 && SUAVIZADO_BINS <= BINS_MAX,
               "La ventana de mediana debe ser impar y caber en el espectro");
 
 // Historial de magnitudes originales, antes de aplicar cualquier ganancia.
 // Todos los búferes del estimador son estáticos: no se reserva memoria por bloque.
-static float magnitudes[BINS];
-static float historia_ruido[TRAMAS_RUIDO][BINS];
-static float perfil_ruido[BINS];
-static float piso_ruido[BINS];
+static float magnitudes[BINS_MAX];
+static float historia_ruido[TRAMAS_RUIDO][BINS_MAX];
+static float perfil_ruido[BINS_MAX];
+static float piso_ruido[BINS_MAX];
 static float trabajo_mediana[SUAVIZADO_BINS];
 static_assert(TRAMAS_RUIDO <= SUAVIZADO_BINS, "El trabajo debe caber en el búfer de mediana");
 static int siguiente_trama = 0;
@@ -73,7 +74,7 @@ static float mediana(int cantidad)
 
 static void estimar_ruido()
 {
-    for (int k = 0; k < BINS; ++k) {
+    for (int k = 0; k < bins_actual; ++k) {
         magnitudes[k] = std::hypot(fft[2 * k], fft[2 * k + 1]);
     }
 
@@ -83,7 +84,7 @@ static void estimar_ruido()
         return;
     }
 
-    std::memcpy(historia_ruido[siguiente_trama], magnitudes, sizeof(magnitudes));
+    std::memcpy(historia_ruido[siguiente_trama], magnitudes, bins_actual * sizeof(float));
     siguiente_trama = (siguiente_trama + 1) % TRAMAS_RUIDO;
     if (tramas_ruido < TRAMAS_RUIDO) ++tramas_ruido;
     // Hasta completar ocho tramas, el estimador permanece en calentamiento.
@@ -91,7 +92,7 @@ static void estimar_ruido()
 
     // La mediana no depende del orden circular. Incluye la trama actual y siete
     // anteriores; ninguna decisión requiere muestras futuras de la grabación.
-    for (int k = 0; k < BINS; ++k) {
+    for (int k = 0; k < bins_actual; ++k) {
         for (int t = 0; t < TRAMAS_RUIDO; ++t) {
             trabajo_mediana[t] = historia_ruido[t][k];
         }
@@ -101,11 +102,11 @@ static void estimar_ruido()
     // Mediana frecuencial de 31 bins, reflejando los extremos sin repetirlos.
     // Se escribe en otro búfer para no alterar vecinos aún por procesar.
     constexpr int RADIO = SUAVIZADO_BINS / 2;
-    for (int k = 0; k < BINS; ++k) {
+    for (int k = 0; k < bins_actual; ++k) {
         for (int j = 0; j < SUAVIZADO_BINS; ++j) {
             int vecino = k + j - RADIO;
             if (vecino < 0) vecino = -vecino;
-            else if (vecino >= BINS) vecino = 2 * (BINS - 1) - vecino;
+            else if (vecino >= bins_actual) vecino = 2 * (bins_actual - 1) - vecino;
             trabajo_mediana[j] = perfil_ruido[vecino];
         }
         piso_ruido[k] = mediana(SUAVIZADO_BINS);
@@ -129,7 +130,7 @@ static void modificar_espectro()
     // Sin ocho tramas reales aún no hay piso estimado: dejar pasar la entrada.
     const bool listo = tramas_ruido == TRAMAS_RUIDO;
     // Reponer el conjugado de cada bin positivo conserva una salida real.
-    for (int k = 0; k <= ESPECTRAL_N / 2; ++k) {
+    for (int k = 0; k <= n_actual / 2; ++k) {
         float ganancia = 1.0f;
         if (listo) {
             const float magnitud = std::max(magnitudes[k], EPSILON);
@@ -139,43 +140,63 @@ static void modificar_espectro()
         // Una ganancia real común a ambas partes conserva la fase de este bin.
         fft[2 * k] *= ganancia;
         fft[2 * k + 1] *= ganancia;
-        if (k > 0 && k < ESPECTRAL_N / 2) {
-            fft[2 * (ESPECTRAL_N - k)] = fft[2 * k];
-            fft[2 * (ESPECTRAL_N - k) + 1] = -fft[2 * k + 1];
+        if (k > 0 && k < n_actual / 2) {
+            fft[2 * (n_actual - k)] = fft[2 * k];
+            fft[2 * (n_actual - k) + 1] = -fft[2 * k + 1];
         }
     }
     // DC y Nyquist son reales y no tienen una pareja distinta.
     fft[1] = 0.0f;
-    fft[ESPECTRAL_N + 1] = 0.0f;
+    fft[n_actual + 1] = 0.0f;
 }
 
-void espectral_procesar(const float* entrada, float* salida)
+static void procesar_salto(const float* entrada, float* salida)
 {
-    std::memcpy(historial, historial + ESPECTRAL_H, ESPECTRAL_H * sizeof(float));
-    std::memcpy(historial + ESPECTRAL_H, entrada, ESPECTRAL_H * sizeof(float));
-    for (int j = 0; j < ESPECTRAL_N; ++j) {
-        fft[2 * j] = historial[j] * ventana[j];
+    std::memcpy(historial, historial + h_actual, h_actual * sizeof(float));
+    std::memcpy(historial + h_actual, entrada, h_actual * sizeof(float));
+    for (int j = 0; j < n_actual; ++j) {
+        fft[2 * j] = historial[j] * ventana[j * (ESPECTRAL_N / n_actual)];
         fft[2 * j + 1] = 0.0f;
     }
-    ESP_ERROR_CHECK(dsps_fft2r_fc32(fft, ESPECTRAL_N));
-    ESP_ERROR_CHECK(dsps_bit_rev_fc32(fft, ESPECTRAL_N));
+    ESP_ERROR_CHECK(dsps_fft2r_fc32(fft, n_actual));
+    ESP_ERROR_CHECK(dsps_bit_rev_fc32(fft, n_actual));
     estimar_ruido();
     modificar_espectro();
 
     // ESP-DSP entrega la FFT sin normalizar: IFFT(X) = conj(FFT(conj(X))) / N.
-    for (int j = 0; j < ESPECTRAL_N; ++j) fft[2 * j + 1] = -fft[2 * j + 1];
-    ESP_ERROR_CHECK(dsps_fft2r_fc32(fft, ESPECTRAL_N));
-    ESP_ERROR_CHECK(dsps_bit_rev_fc32(fft, ESPECTRAL_N));
-    constexpr float ESCALA = 1.0f / ESPECTRAL_N;
+    for (int j = 0; j < n_actual; ++j) fft[2 * j + 1] = -fft[2 * j + 1];
+    ESP_ERROR_CHECK(dsps_fft2r_fc32(fft, n_actual));
+    ESP_ERROR_CHECK(dsps_bit_rev_fc32(fft, n_actual));
+    const float ESCALA = 1.0f / n_actual;
 
     // Solo se usa la parte real: el conjugado final no la cambia.
     // La normalización 1/N se aplica aquí, junto a la ventana de síntesis.
     // w[j]^2 + w[j+H]^2 = Hann[j] + Hann[j+H] = 1, sin otra escala.
     // La primera salida corresponde a H ceros; la segunda reconstruye el bloque 0.
-    for (int j = 0; j < ESPECTRAL_H; ++j) {
-        salida[j] = solape[j] + fft[2 * j] * ESCALA * ventana[j];
-        solape[j] = fft[2 * (j + ESPECTRAL_H)] * ESCALA * ventana[j + ESPECTRAL_H];
+    for (int j = 0; j < h_actual; ++j) {
+        salida[j] = solape[j] + fft[2 * j] * ESCALA * ventana[j * (ESPECTRAL_N / n_actual)];
+        solape[j] = fft[2 * (j + h_actual)] * ESCALA * ventana[(j + h_actual) * (ESPECTRAL_N / n_actual)];
     }
+}
+
+void espectral_procesar(const float* entrada, float* salida)
+{
+    for (int offset = 0; offset < ESPECTRAL_H; offset += h_actual)
+        procesar_salto(entrada + offset, salida + offset);
+}
+
+unsigned espectral_n() { return static_cast<unsigned>(n_actual); }
+unsigned espectral_h() { return static_cast<unsigned>(h_actual); }
+
+bool espectral_cambiar_n(unsigned n)
+{
+    if (n != 256 && n != 512 && n != 1024) return false;
+    if (n == static_cast<unsigned>(n_actual)) return true;
+    n_actual = static_cast<int>(n);
+    h_actual = n_actual / 2;
+    bins_actual = h_actual + 1;
+    espectral_reiniciar();
+    return true;
 }
 
 EnergiaEspectral espectral_medir(const float* muestras, double banda_lo,
@@ -183,21 +204,21 @@ EnergiaEspectral espectral_medir(const float* muestras, double banda_lo,
 {
     // El audio de la llamada anterior ya está reconstruido. Se puede reutilizar
     // fft sin modificar historial, solape, magnitudes ni la historia del ruido.
-    for (int j = 0; j < ESPECTRAL_N; ++j) {
-        fft[2 * j] = muestras[j] * ventana[j];
+    for (int j = 0; j < n_actual; ++j) {
+        fft[2 * j] = muestras[j] * ventana[j * (ESPECTRAL_N / n_actual)];
         fft[2 * j + 1] = 0.0f;
     }
-    ESP_ERROR_CHECK(dsps_fft2r_fc32(fft, ESPECTRAL_N));
-    ESP_ERROR_CHECK(dsps_bit_rev_fc32(fft, ESPECTRAL_N));
+    ESP_ERROR_CHECK(dsps_fft2r_fc32(fft, n_actual));
+    ESP_ERROR_CHECK(dsps_bit_rev_fc32(fft, n_actual));
     const bool tiene_pico = std::isfinite(pico_hz) && pico_hz >= 100.0 && pico_hz <= 3000.0;
-    const int bin_pico = tiene_pico ? static_cast<int>(std::lround(pico_hz * ESPECTRAL_N / 8000.0)) : -10;
+    const int bin_pico = tiene_pico ? static_cast<int>(std::lround(pico_hz * n_actual / 8000.0)) : -10;
     EnergiaEspectral energia;
-    for (int k = 0; k <= ESPECTRAL_N / 2; ++k) {
-        const double hz = k * 8000.0 / ESPECTRAL_N;
+    for (int k = 0; k <= n_actual / 2; ++k) {
+        const double hz = k * 8000.0 / n_actual;
         if (hz < 100.0 || hz > 3000.0) continue;
         const double real = fft[2 * k], imaginaria = fft[2 * k + 1];
-        const double peso = k == 0 || k == ESPECTRAL_N / 2 ? 1.0 : 2.0;
-        const double potencia = peso * (real * real + imaginaria * imaginaria) / ESPECTRAL_N;
+        const double peso = k == 0 || k == n_actual / 2 ? 1.0 : 2.0;
+        const double potencia = peso * (real * real + imaginaria * imaginaria) / n_actual;
         if (hz >= banda_lo && hz <= banda_hi) energia.dentro += potencia;
         else energia.fuera += potencia;
         if (tiene_pico && k >= bin_pico - 2 && k <= bin_pico + 2) energia.pico += potencia;

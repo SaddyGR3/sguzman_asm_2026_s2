@@ -92,7 +92,7 @@ Si hay errores de CRC solo en la PC, el sospechoso es el adaptador a 921 600 bau
 
 En la rama de métricas la placa de nodos 2+3 calcula SIN FILTRO, FIR, NOTCH y
 RESTA en **una sola reproducción** de la misma grabación. Solo se escucha el
-modo elegido. Emite cuatro registros `METRICAS,2,` al terminar, o al ejecutar
+modo elegido. Emite cuatro registros `METRICAS,3,` al terminar, o al ejecutar
 `metricas`. La PC no abre otro puerto, no modifica muestras ni procesa filtros.
 
 ### 1. Mantener el monitor y guardar solo métricas
@@ -167,7 +167,7 @@ limpia a partir de estas líneas.**
 
 ### Validez, repeticiones y versiones
 
-- v2 espera exactamente SIN_FILTRO, FIR, NOTCH y RESTA; v1 admite el modo temporal
+- v2/v3 esperan exactamente SIN_FILTRO, FIR, NOTCH y RESTA; v1 admite el modo temporal
   seleccionado más RESTA, sin atribuir resultados a modos no medidos.
 - `metricas` repite resultados: las filas idénticas con mismo archivo, versión,
   ID y modo se deduplican. IDs iguales de archivos distintos nunca se fusionan.
@@ -202,3 +202,23 @@ reproducciones del usuario: cinco informes válidos y uno invalidado a propósit
 cuatro duplicados omitidos, sin líneas rechazadas. Los máximos observados en placa
 fueron menores de 64 ms, con margen ajustado. Resultados y límites en
 [VALIDACION_METRICAS.md](VALIDACION_METRICAS.md).
+
+## FFT configurable y métricas v3
+
+`n 256|512|1024` se envía por la consola de nodo 1; no es un argumento del script.
+La placa aplica el CONFIG y emite cuatro registros CSV v3 de 35 campos. Los dos
+últimos son `n_fft` y `h_fft`; se validan N en 256/512/1024 y H=N/2, y el retardo
+espectral reportado H/8 ms. Tabla Markdown, CSV normalizado y título de figura
+incluyen N/H para asociar las mediciones a su resolución y retardo reales.
+
+Las versiones v1/v2 conservan 33 campos en la captura y se interpretan con sus
+valores fijos originales N=1024/H=512; el CSV normalizado añade esa información.
+No mezclar tamaños o sesiones con el mismo ID manualmente; cada reproducción
+genera su grupo y sus cuatro modos. La validación cruzada de campos comunes
+incluye N/H. El archivo de captura conserva el formato de cada versión original.
+
+Pasaron 18 pruebas de PC, incluida reconstrucción OLA con ganancia unidad,
+compensación de retardo y energías/MSE en los bordes para los tres N, fragmentación
+v3 y compatibilidad histórica. Son referencias independientes, no ejecución C++.
+Se generaron figuras sintéticas v3 de los tres tamaños; faltan los tiempos y
+clasificaciones reales en placa. Guía paso a paso: [PRUEBA_N_CONFIGURABLE.md](PRUEBA_N_CONFIGURABLE.md).

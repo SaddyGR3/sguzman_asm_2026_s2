@@ -11,7 +11,7 @@ import unittest
 
 PC = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PC))
-from metricas_csv import CAMPOS, MODOS, agrupar, interpretar
+from metricas_csv import CAMPOS, CAMPOS_V2, MODOS, agrupar, interpretar
 
 
 def linea(modo='SIN_FILTRO', version=2, id=1, **cambios):
@@ -19,24 +19,35 @@ def linea(modo='SIN_FILTRO', version=2, id=1, **cambios):
                '100', '1200', '2150', '0', '0', '0', '100', '0', '0', '0',
                '0', '0', '0', '100000', '80000', '1024', '3', '10', '20',
                '15.625', '4', '8', '2150', '8.5', '3', '0.05', 'pico']
-    d = dict(zip(CAMPOS, valores))
+    campos = CAMPOS if version == 3 else CAMPOS_V2
+    d = dict(zip(CAMPOS_V2, valores))
+    if version == 3: d.update(n_fft='1024',h_fft='512')
     if modo == 'RESTA':
         d['ruta'] = 'espectral'
         d['retardo_ms'] = '64'
     elif modo == 'FIR':
         d['retardo_ms'] = '2.25'
     d.update(cambios)
-    return ','.join(d[c] for c in CAMPOS)+'\n'
+    return ','.join(d[c] for c in campos)+'\n'
 
 
 class Parser(unittest.TestCase):
     def test_versiones_y_na(self):
-        for version in (1,2):
+        for version in (1,2,3):
             self.assertEqual(interpretar(linea('RESTA',version,snr_y_db='NA'))['snr_y_db'],'NA')
         self.assertIsNone(interpretar('#0012 | RX 15.6/s'))
 
+    def test_n_h_v3(self):
+        for n in (256,512,1024):
+            row=linea('RESTA',3,n_fft=str(n),h_fft=str(n//2),retardo_ms=str(n/16))
+            self.assertEqual(interpretar(row)['n_fft'],str(n))
+        self.assertEqual(interpretar(linea())['n_fft'],'1024')
+        for cambios in [dict(n_fft='128'),dict(h_fft='128'),dict(n_fft='256',h_fft='128',retardo_ms='64')]:
+            with self.assertRaises(ValueError):
+                interpretar(linea('RESTA',3,**cambios))
+
     def test_invalidos(self):
-        for row in [linea(version=3), linea(ruta='espectral'), linea(mse_x='nan'),
+        for row in [linea(version=4), linea(ruta='espectral'), linea(mse_x='nan'),
                     linea(proc_max_ms='NA'), linea(banda_hi_hz='99'), linea(modo='OTRO'),
                     linea().strip()+',extra', 'METRICAS,2,1', linea(muestras='-1')]:
             with self.subTest(row=row), self.assertRaises(ValueError):
@@ -127,6 +138,16 @@ class Monitor(unittest.TestCase):
             rows=[r for p in files for r in p.read_text().splitlines()]
             self.assertEqual(len(rows),3)
             self.assertTrue(all(r.startswith('METRICAS,') for r in rows))
+
+    def test_captura_v3(self):
+        with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stderr(io.StringIO()):
+            self.modulo.PC_DIR=Path(tmp)
+            filtro=self.modulo.GuardarMetricas()()
+            row=linea('RESTA',3,n_fft='256',h_fft='128',retardo_ms='16')
+            filtro.rx(row);filtro.cerrar()
+            p=next(Path(tmp).rglob('*.csv'))
+            self.assertEqual(p.read_text(),row)
+            self.assertEqual(agrupar([p])[0][0].filas['RESTA']['h_fft'],'128')
 
     def test_linea_excesiva_y_truncada_no_contamina(self):
         with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stderr(io.StringIO()):
