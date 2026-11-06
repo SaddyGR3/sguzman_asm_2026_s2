@@ -1,8 +1,12 @@
 #include "espectral.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <cstdint>
 #include <cstring>
 #include "dsps_fft2r.h"
+#include "esp_timer.h"
 
 // Origen: nodo1/src/espectro.cpp (raíz de Hann periódica, tabla y FFT ESP-DSP).
 // Se conserva el espectro complejo completo para modificarlo y reconstruir audio real.
@@ -123,6 +127,69 @@ esp_err_t espectral_iniciar()
     }
     espectral_reiniciar();
     return ESP_OK;
+}
+
+bool espectral_validar_fft()
+{
+    constexpr int N = 256;
+    constexpr double PI = 3.14159265358979323846;
+    const int64_t inicio = esp_timer_get_time();
+    // Alineación explícita para ESP-DSP sin aumentar la pila ni los estáticos.
+    void* reserva = std::malloc(3 * N * sizeof(float) + 15);
+    double error_max = NAN, relativo = NAN;
+    bool finitos = false;
+    if (reserva) {
+        const uintptr_t direccion = (reinterpret_cast<uintptr_t>(reserva) + 15) & ~uintptr_t(15);
+        float* espectro = reinterpret_cast<float*>(direccion);
+        float* entrada = espectro + 2 * N;
+        for (int j = 0; j < N; ++j) {
+            const double t = j / 8000.0;
+            entrada[j] = static_cast<float>(0.1 + 0.5 * std::sin(2 * PI * 437 * t)
+                                               + 0.2 * std::cos(2 * PI * 1234 * t));
+            espectro[2 * j] = entrada[j];
+            espectro[2 * j + 1] = 0.0f;
+        }
+        // Misma tabla máxima inicializada por espectral_iniciar(), signo,
+        // escala y orden natural que en la ruta de audio. Sin ventana aquí.
+        esp_err_t error = dsps_fft2r_fc32(espectro, N);
+        if (error == ESP_OK) error = dsps_bit_rev_fc32(espectro, N);
+        if (error == ESP_OK) {
+            error_max = 0.0;
+            double referencia_max = 0.0;
+            finitos = true;
+            for (int k = 0; k < N; ++k) {
+                // DFT por definición, sin FFT ni recurrencias de referencia.
+                // Se usa exactamente la entrada float de ESP-DSP, convertida a double.
+                double real = 0.0, imaginaria = 0.0;
+                for (int j = 0; j < N; ++j) {
+                    const double angulo = 2 * PI * k * j / N;
+                    real += static_cast<double>(entrada[j]) * std::cos(angulo);
+                    imaginaria -= static_cast<double>(entrada[j]) * std::sin(angulo);
+                }
+                const double diferencia = std::hypot(espectro[2 * k] - real,
+                                                     espectro[2 * k + 1] - imaginaria);
+                const double referencia = std::hypot(real, imaginaria);
+                if (!std::isfinite(diferencia) || !std::isfinite(referencia)) finitos = false;
+                else {
+                    error_max = std::max(error_max, diferencia);
+                    referencia_max = std::max(referencia_max, referencia);
+                }
+            }
+            if (referencia_max > 0.0) relativo = error_max / referencia_max;
+        } else {
+            printf("Autoprueba FFT: error ESP-DSP %s\n", esp_err_to_name(error));
+        }
+        std::free(reserva);
+    } else {
+        printf("Autoprueba FFT: no se pudo reservar memoria temporal\n");
+    }
+    const bool pasa = finitos && std::isfinite(relativo) && relativo < 1e-4;
+    const int64_t duracion = esp_timer_get_time() - inicio;
+    printf("Validación FFT ESP-DSP vs DFT directa (N 256): error máx %.9g, relativo %.9g → %s\n",
+           error_max, relativo, pasa ? "PASS" : "FAIL");
+    printf("Autoprueba FFT: %.3f ms (incluye señal, FFT, DFT, comparación y memoria temporal)\n",
+           duracion / 1000.0);
+    return pasa;
 }
 
 static void modificar_espectro()
