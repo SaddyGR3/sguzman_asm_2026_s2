@@ -50,6 +50,7 @@ static int reproducir_anterior = 1;
 static float salida[MUESTRAS_BLOQUE];
 static float entrada_reproduccion[MUESTRAS_BLOQUE];
 static float salida_espectral[MUESTRAS_BLOQUE];
+static float salida_fir[MUESTRAS_BLOQUE], salida_notch[MUESTRAS_BLOQUE];
 static bool cola_espectral_pendiente = false;
 static char linea_comando[96];
 static size_t longitud_comando = 0;
@@ -151,9 +152,6 @@ static void reproducir()
         const auto& filtros = filtros_configuracion();
         const auto& espectral = espectral_configuracion();
         ConfiguracionMetricas configuracion;
-        configuracion.modo_temporal = modo_temporal == ModoFiltro::SIN_FILTRO
-            ? "SIN_FILTRO" : nombre_modo(modo_temporal);
-        configuracion.retardo_temporal = modo_temporal == ModoFiltro::FIR ? (COEFICIENTES_FIR - 1) / 2 : 0;
         configuracion.banda_lo = filtros.banda_inferior_hz;
         configuracion.banda_hi = filtros.banda_superior_hz;
         configuracion.pico_hz = grabacion_diagnostico().pico_hz;
@@ -168,7 +166,6 @@ static void reproducir()
 static void seleccionar_modo(ModoFiltro nuevo, bool manual = true)
 {
     if (nuevo != ModoFiltro::ESPECTRAL && nuevo != modo_temporal) {
-        metricas_invalidar();
         modo_temporal = nuevo;
     }
     if (manual && automatico) {
@@ -422,6 +419,8 @@ static void atender_reproduccion()
         const float x = entrada_reproduccion[k];
         float fir, notch;
         filtros_procesar(x, fir, notch);
+        salida_fir[k] = fir;
+        salida_notch[k] = notch;
         switch (temporal_bloque) {
             case ModoFiltro::SIN_FILTRO:
             case ModoFiltro::ESPECTRAL: salida[k] = x; break;
@@ -431,14 +430,14 @@ static void atender_reproduccion()
     }
     const uint64_t temporal_us = static_cast<uint64_t>(esp_timer_get_time() - inicio_temporal_us);
     const int64_t inicio_metricas_us = esp_timer_get_time();
-    const TiempoMetricas coste = metricas_procesar(entrada_reproduccion, salida, salida_espectral, ultimo);
+    const TiempoMetricas coste = metricas_procesar(entrada_reproduccion, salida_fir, salida_notch, salida_espectral, ultimo);
     const uint64_t metricas_us = static_cast<uint64_t>(esp_timer_get_time() - inicio_metricas_us);
     salida_dac_input(modo_bloque == ModoFiltro::ESPECTRAL ? salida_espectral : salida, ultimo);
     const uint64_t total_us = static_cast<uint64_t>(esp_timer_get_time() - inicio_proc_us);
     registrar_duracion(proc_temporal, temporal_us + coste.temporal_us);
     registrar_duracion(proc_espectral, espectral_us + coste.espectral_us);
     registrar_duracion(proc_total, total_us);
-    metricas_registrar_tiempos(temporal_us + coste.temporal_us, espectral_us + coste.espectral_us,
+    metricas_registrar_tiempos(coste, temporal_us, espectral_us,
                                total_us, metricas_us);
     ++bloques_proc;
 }
