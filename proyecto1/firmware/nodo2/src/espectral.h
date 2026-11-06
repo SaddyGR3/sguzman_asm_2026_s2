@@ -21,3 +21,15 @@ void espectral_reiniciar();
 // Durante el calentamiento del estimador se mantiene ganancia 1.
 // Al terminar, procesar un bloque de ceros para recuperar la última salida.
 void espectral_procesar(const float* entrada, float* salida);
+
+struct EnergiaEspectral {
+    double dentro = 0.0;
+    double fuera = 0.0;
+    double pico = 0.0;
+};
+
+// Analiza N muestras con la misma ventana y FFT, sin tocar estimador ni solape.
+// Solo llamar después de espectral_procesar(), nunca desde otra tarea.
+// Energía unilateral normalizada por N; el pico incluye el bin más cercano ±2.
+EnergiaEspectral espectral_medir(const float* muestras, double banda_lo,
+                                double banda_hi, double pico_hz);
