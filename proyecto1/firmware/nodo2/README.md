@@ -98,7 +98,7 @@ se requiere `std::atomic` en esta implementación.
 | SIN FILTRO | Audio grabado sin filtrar, después de decodificar μ-law. |
 | FIR | Kaiser de 37 coeficientes. Inicialmente pasa bajas con corte de 1500 Hz; retardo de 18 muestras (2.25 ms). |
 | NOTCH | Inicialmente rechaza 2150 Hz con Q = 8.5. |
-| ESPECTRAL | FFT → resta espectral con piso de ruido adaptativo → IFFT con solape y suma; retardo algorítmico adicional de 512 muestras (64 ms). |
+| ESPECTRAL | FFT → resta espectral con piso de ruido adaptativo → IFFT con solape y suma; retardo algorítmico adicional H=N/2 (16/32/64 ms). |
 
 Los coeficientes se calculan en double y se guardan en float. Ambos filtros
 procesan todas las muestras reproducidas y mantienen estado entre bloques y
@@ -118,7 +118,8 @@ limpia ni el diagnóstico del nodo 1 para decidir la ganancia espectral.
 Cada bloque decodificado alimenta **las dos rutas independientes**, aunque se
 escuche una sola: FIR y notch procesan todas las muestras, y el espectral recibe
 esas mismas muestras antes de que se seleccione la salida temporal. La ventana
-es **N = 1024**, el avance **H = 512** y la frecuencia de muestreo **8000 Hz**.
+es **N = 256, 512 o 1024** (inicial 1024), el avance **H=N/2** y fs=8000 Hz.
+Cada lote de 512 contiene 512/H saltos de análisis.
 El historial contiene el bloque anterior y el actual; después del análisis,
 la IFFT y la síntesis se suma la primera mitad con la cola anterior y se guarda
 la segunda mitad para el bloque siguiente.
@@ -134,7 +135,7 @@ Por tanto, con ganancia 1 la suma con solape tiene **reconstrucción perfecta**
 en aritmética exacta; en float32 quedan errores de redondeo. ESP-DSP realiza
 una FFT directa sin normalizar. La inversa usa
 `IFFT(X) = conj(FFT(conj(X))) / N`, con reordenamiento de bits después de cada
-FFT y división por **1024 una sola vez**. No se aplica otra escala al solape.
+FFT y división por **N una sola vez**. No se aplica otra escala al solape.
 
 `modificar_espectro()` aplica una ganancia real a las partes real e imaginaria
 de cada bin positivo y repone `X[N-k] = conj(X[k])`. DC y Nyquist mantienen parte
@@ -142,11 +143,11 @@ imaginaria cero. La ganancia conserva la fase de cada bin y la simetría necesar
 para obtener una salida real; su cálculo se describe en "Resta espectral".
 
 El historial y la cola se limpian al iniciar **cada** reproducción. El primer
-bloque espectral corresponde a silencio; el segundo entrega el primer
-bloque grabado con las ganancias correspondientes. El retardo algorítmico adicional es **H/fs = 64 ms**, aparte de
+salto de H muestras corresponde a silencio; el segundo entrega el primer
+salto grabado. El retardo algorítmico es **H/fs = 16/32/64 ms**, aparte de
 las colas y DMA del DAC. Al agotar la grabación, el lazo de reproducción procesa
 un bloque extra de ceros por ambas rutas antes de marcar el último bloque del
-DAC. Así se recuperan las últimas 512 muestras del espectral. Este vaciado se
+DAC. Así se recuperan las últimas H muestras del espectral; el resto del lote es cola. Este vaciado se
 hace en todos los modos: en SIN FILTRO añade silencio al final, y en FIR/NOTCH
 permite salir a su cola. No modifica el audio guardado ni el receptor.
 
@@ -485,10 +486,10 @@ Pendiente de ejecutar en hardware con ambos firmwares actualizados:
    actual solo sugiere tonal/notch; un caso de 4 votos FIR de un tipo más 4 de
    otro debe ganar frente a 5 votos notch, y un empate debe elegir el menor ID.
 
-## Métricas de cuatro modos en una reproducción (CSV v2)
+## Métricas de cuatro modos en una reproducción (CSV v3)
 
 Al terminar cada reproducción, después de drenar el DAC y antes de aplicar una
-banda pendiente, se imprime una tabla de cuatro modos y cuatro líneas `METRICAS,2,`: SIN FILTRO,
+banda pendiente, se imprime una tabla de cuatro modos y cuatro líneas `METRICAS,3,`: SIN FILTRO,
 FIR, NOTCH y RESTA. Se evalúan todos con la misma grabación y reproducción,
 aunque solo se escuche el seleccionado. No hace falta repetir para cada filtro.
 NOTCH usa su frecuencia/Q vigentes; no busca un notch óptimo distinto para cada
@@ -522,24 +523,25 @@ Se compara el mismo número L de muestras para x y las cuatro salidas
 - FIR: `y[n+18]` frente a `x[n]`, retardo de grupo de 2.25 ms.
 - NOTCH: desplazamiento fijo cero. El IIR tiene fase y retardo de grupo dependientes
   de frecuencia; su MSE incluye esa modificación de fase. Cero no implica fase nula.
-- RESTA: `y[n+512]` frente a `x[n]`, retardo adicional de 64 ms.
+- RESTA: `y[n+H]` frente a `x[n]`, H=N/2; retardo de 16/32/64 ms.
 
-Se conserva un bloque anterior de x, FIR y NOTCH: la salida espectral actual
-corresponde a ese bloque anterior, y las últimas 18 muestras del FIR alineado se
+Se conserva un lote anterior de x, FIR, NOTCH y RESTA: la salida espectral se alinea con su desplazamiento vigente, y las últimas 18 muestras del FIR alineado se
 completan con el principio de su bloque actual. El bloque de ceros de vaciado
 existente recupera las últimas muestras reales. No se incluyen en el MSE ni el
 silencio inicial del espectral ni las colas posteriores al tramo alineado de L
 muestras. Los retardos reportados son algorítmicos; excluyen adquisición por
 bloques, comunicación, colas/DMA, circuito analógico y tiempo hasta oír el audio.
 
-Para energía se usa FFT de 1024, avance 512 y raíz de Hann periódica, igual para
+Para energía se usa FFT de N vigente, avance H=N/2 y raíz de Hann periódica, igual para
 x, FIR, NOTCH y RESTA **ya alineadas y reconstruidas**. SIN FILTRO reutiliza
 la energía de x y su MSE es cero; no se añade una FFT idéntica. Se analizan ventanas
 `[ceros, bloque 0]`, `[bloque 0, bloque 1]`, ..., `[último bloque, ceros]`.
 Las ventanas al cuadrado suman uno para cada muestra real, incluidos los bordes.
 Se suman potencias unilaterales `2*|FFT|²/N` (DC/Nyquist llevan peso 1), sin
 retirar DC ni cambiar el audio. Solo se acumulan bins con centro en 100–3000 Hz.
-Las frecuencias se asignan por el centro del bin, con resolución 7.8125 Hz.
+Las frecuencias se asignan por el centro del bin, con resolución 8000/N Hz.
+En esta descripción de ventanas, cada bloque de análisis tiene H muestras,
+aunque el transporte y la reproducción entregan lotes de 512.
 
 Se reutilizan tabla, ventana y área de trabajo FFT de `espectral` en llamadas
 secuenciales después de reconstruir el audio. Las FFT de métricas no cambian el
@@ -560,7 +562,7 @@ promedian cocientes ni dB de bloques individuales.
 | Energía en banda conservada % | `100*E_dentro_salida/E_dentro_x`. No distingue ruido de señal limpia y puede superar 100 %. |
 | Atenuación dB | `10*log10(E_interferencia_x/E_interferencia_salida)`. Positiva indica reducción. Si el pico guardado es finito y está en 100–3000, usa el bin más cercano ±2, recortado a ese intervalo; si no, usa toda la energía exterior a la protección. |
 | MSE(x) | `sum((y_alineada-x)^2)/L`. Mide cuánto cambió la ruta la entrada contaminada; reducir ruido puede aumentar este MSE. |
-| Retardo ms | 0 fijo para SIN FILTRO/NOTCH, 2.25 para FIR y 64 para RESTA, con la salvedad de fase del notch indicada arriba. |
+| Retardo ms | 0 fijo para SIN FILTRO/NOTCH, 2.25 para FIR y H/8 para RESTA, con la salvedad de fase del notch indicada arriba. |
 | Proc prom/max ms por modo | FIR y NOTCH: cálculo **conjunto y compartido** de ambos filtros + FFT de métricas de esa salida. RESTA: su procesamiento y FFT de métricas. SIN FILTRO: 0 adicional, reutiliza x. No son tiempos aislados de cada filtro: no sumar filas. |
 | Carga por ruta % | `100*proc_prom_us/64000`. No es una medición del uso global de CPU del sistema. |
 | Proc total prom/max | Decodificación, cuatro modos, métricas completas (incluida FFT de x y MSE), conversión y encolado. Es la medida para contrastar con el plazo de 64 ms; los tiempos de las rutas no incluyen el trabajo común. |
@@ -589,11 +591,10 @@ Una nueva reproducción inicia acumuladores nuevos y vuelve a permitir `OK`.
 ### CSV para la computadora
 
 Cada informe lleva exactamente cuatro registros con punto decimal, sin unidades
-dentro de los campos y `NA` para valores no disponibles. Versión 2, mismos
-33 campos que v1 contando el prefijo; cabecera para el script de PC:
+dentro de los campos y `NA` para valores no disponibles. Versión 3: 35 campos, los 33 de v2 más `n_fft` y `h_fft` al final; cabecera para el script de PC:
 
 ```text
-METRICAS,version,reproduccion,estado,ruta,modo,banda_lo_hz,banda_hi_hz,pico_hz,snr_x_db,snr_y_db,delta_snr_db,energia_banda_pct,atenuacion_db,mse_x,retardo_ms,proc_prom_ms,proc_max_ms,carga_pct,ram_libre_b,ram_bloque_b,muestras,bloques_proc,proc_total_prom_ms,proc_total_max_ms,carga_total_pct,metricas_prom_ms,metricas_max_ms,notch_hz,notch_q,alfa,ganancia_minima,metodo_atenuacion
+METRICAS,version,reproduccion,estado,ruta,modo,banda_lo_hz,banda_hi_hz,pico_hz,snr_x_db,snr_y_db,delta_snr_db,energia_banda_pct,atenuacion_db,mse_x,retardo_ms,proc_prom_ms,proc_max_ms,carga_pct,ram_libre_b,ram_bloque_b,muestras,bloques_proc,proc_total_prom_ms,proc_total_max_ms,carga_total_pct,metricas_prom_ms,metricas_max_ms,notch_hz,notch_q,alfa,ganancia_minima,metodo_atenuacion,n_fft,h_fft
 ```
 
 `ruta` es `temporal` o `espectral`; `modo` es `SIN_FILTRO`, `FIR`, `NOTCH` o
@@ -601,23 +602,24 @@ METRICAS,version,reproduccion,estado,ruta,modo,banda_lo_hz,banda_hi_hz,pico_hz,s
 reproducción aumenta hasta reiniciar la placa; `metricas` repite ese ID. Los
 campos comunes, RAM y SNR de entrada son iguales para las cuatro filas del informe.
 Hay tres registros `temporal` (SIN_FILTRO, FIR, NOTCH) y uno `espectral` (RESTA).
-El script conserva compatibilidad con v1, mostrando sus dos resultados sin inventar
-los modos que no se midieron.
+El script conserva compatibilidad con v1/v2 (N=1024, H=512 fijos en esas
+versiones); v1 contiene solo dos resultados. No inventa modos no medidos.
 `bloques_proc` incluye la llamada de vaciado; `muestras` solo cuenta el audio
 real alineado. No mezclar esos dos contadores para inferir duración.
 
 ### Recursos y validación pendiente en placa
 
-Los búferes auxiliares suman **28 KiB de arreglos float estáticos**, frente a
-18 KiB de v1: entrada preservada, salidas FIR y NOTCH independientes, tres bloques
-anteriores y cuatro historiales de análisis. El incremento es **10 KiB**, además
+Los búferes auxiliares suman **30 KiB de arreglos float estáticos**, frente a
+18 KiB de v1: entrada preservada, salidas FIR y NOTCH independientes, cuatro bloques
+anteriores y cuatro historiales de análisis. El incremento sobre v1 es **12 KiB** (2 KiB más que v2 para la salida
+espectral anterior al compensar retardos menores que 512), además
 de resúmenes/contadores. No hay reservas por bloque ni duplicación de ventana,
 tabla o área FFT. La duración máxima disponible de grabación puede disminuir;
 comprobar la capacidad impresa al arrancar.
 
 Se ejecutan cuatro FFT de métricas por ventana alineada (x, FIR, NOTCH, RESTA),
-frente a tres en v1. La llamada final contiene ocho FFT al añadir la ventana de
-borde. Sus tiempos se incluyen en máximos y promedios; hay que medir esa llamada
+frente a tres en v1. La llamada final contiene `4*(512/H + 1)` FFT al añadir la ventana de
+borde (8 con N=1024, 12 con N=512, 20 con N=256). Sus tiempos se incluyen en máximos y promedios; hay que medir esa llamada
 además de las normales. SIN FILTRO reutiliza el análisis de x. Los promedios
 incluyen la primera llamada que prepara el alineamiento. El tiempo total incluye
 costos compartidos y es el que debe quedar holgado frente a 64 ms.
@@ -662,3 +664,59 @@ Después de cargar **nodo 2**, con una grabación LISTA:
 
 Las pruebas P1/P2/P3/P5 sirven para comparar filtros; P4 sigue como limitación del
 diagnóstico de nodo 1, fuera del alcance de estos cambios.
+
+## N configurable por CONFIG de nodo 1
+
+`n 256|512|1024` se escribe en **nodo 1**. Aquí no hay un comando local paralelo:
+la placa recibe N/H en los campos de CONFIG de 32 bytes ya existentes. Se valida
+N y H=N/2; INPUT sigue con 512 float32, a 921600 baudios, uno cada 64 ms.
+
+Se aplican juntos banda, N e ID. Si está REPRODUCIENDO, se guarda únicamente la
+configuración más reciente; se imprime el informe con sus parámetros iniciales,
+y después se aplica la pendiente. Un N cambiado limpia ventana, estimador y
+solape espectrales, conservando alfa/ganancia mínima. Si N es el mismo no reinicia
+espectral; si la banda es la misma tampoco reinicia FIR. Los coeficientes y
+retardos temporales se conservan al cambiar solo N.
+
+`estado` muestra el N/H activo. El procesamiento espectral divide cada lote de
+512 en 512/H saltos: 1, 2 o 4. La tabla y los arreglos permanecen dimensionados
+para 1024; no se reserva memoria al cambiar N. Ocho tramas del estimador y la
+mediana de 31 bins conservan sus cantidades; su duración y cobertura en Hz varían.
+
+Las métricas usan el **mismo N y ventana vigentes** para x y las salidas, con
+avance H. El retardo espectral compensado/reportado es 64/32/16 ms para
+N=1024/512/256. Para H menor que 512, la compensación usa la cola del bloque
+espectral anterior y el principio del actual. La llamada final de 512 ceros sigue
+recuperando el final; solo se miden las L muestras reales y una ventana de borde H.
+MSE temporal debe conservarse con la misma grabación y parámetros. Las energías
+por banda pueden variar por resolución, fuga y asignación del centro de los bins;
+pico ±2 cubre distinto ancho en Hz según N.
+
+El retardo algorítmico **no es la latencia completa hasta el parlante**: el INPUT,
+la tarea DAC y sus colas siguen entregando lotes de 512. El plazo de CPU sigue
+siendo 64 ms por lote. Hay 4 × (512/H) FFT de métricas por lote alineado y cuatro
+adicionales en el vaciado para la ventana final de H ceros. Validar máximos y
+pérdidas para cada N, no extrapolar los tiempos históricos de CSV v2.
+
+El CSV actual es `METRICAS,3,...,metodo_atenuacion,n_fft,h_fft`, cuatro filas con
+el N/H inicial del informe. La captura y figuras de PC aceptan v1/v2/v3 y muestran
+N/H en tabla y figura. Los resultados v2 ya registrados siguen siendo evidencia
+de la versión anterior; esta ampliación queda pendiente de compilación y prueba
+en placa. Guía: [PRUEBA_N_CONFIGURABLE.md](../../herramientas_pc/PRUEBA_N_CONFIGURABLE.md).
+
+### Cierre de métricas fuera del plazo de audio
+
+Las cuatro FFT de la última ventana de borde se calculan cuando el DAC confirma
+que terminó la reproducción, antes de imprimir el informe y de aplicar CONFIG
+pendiente. Se conserva la misma energía acumulada y el mismo MSE; solo cambia
+el momento de ejecutar esa ventana. El bloque de ceros que vacía las rutas
+sigue procesándose y encolándose durante la reproducción.
+
+La línea `Cierre de métricas después del DAC` informa el costo de esas cuatro
+FFT por separado. Este costo está excluido de proc/carga por bloque, tanto en
+la tabla como en el CSV `METRICAS,3,`; esas columnas miden el trabajo necesario
+antes de encolar cada bloque. El formato CSV conserva sus 35 campos. Para medir
+el costo computacional completo de una reproducción, sumar el cierre a
+`proc_total_prom × bloques`; conservar el informe de consola para ese dato.
+La carga máxima por bloque todavía debe verificarse en placa: diferir el cierre
+no garantiza que los bloques normales cumplan el plazo de 64 ms.

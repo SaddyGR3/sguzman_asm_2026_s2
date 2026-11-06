@@ -10,7 +10,8 @@ placa que integra los nodos 2 y 3. UART0 (USB) se usa para la consola.
   12 bits y 12 dB. El ritmo lo marca la adquisición ADC, sin temporizador.
 - **Procesamiento:** tabla raw → mV, FIR de 37 coeficientes con decimación ÷3
   a 8 kHz, pasa altos de 10 Hz y normalización con escala de 1200 mV.
-- **Diagnóstico:** una FFT de 1024 muestras, salto de 512, piso por mediana y
+- **Diagnóstico:** FFT seleccionable de 256/512/1024 muestras (inicial 1024),
+  salto N/2, piso por mediana y
   clasificación tonal, familia 50/60 Hz, impulsiva, de banda ancha o limitada.
 - **Salida única:** INPUT + DIAG por UART1 a 921600 baudios, 8N1, con destino
   lógico nodo 2, más CONTROL CONFIG cuando corresponde. La cabecera tiene 32 B;
@@ -62,6 +63,10 @@ INPUT + DIAG y CONTROL CONFIG por UART1.
 ## Consola y contadores
 
 Comandos por UART0 a 115200 baudios:
+
+- `n <256|512|1024>`: cambia la FFT del diagnóstico, con salto H=N/2. El
+  transporte conserva 512 muestras y 64 ms. Cambiar N incrementa `config_id`
+  y envía CONFIG; repetir N no incrementa ni reinicia. Otro valor no modifica nada.
 
 - `banda <lo> <hi>`: cambia la banda protegida; admite `100 ≤ lo < hi ≤ 3000` Hz;
   inicialmente 100–1200 Hz.
@@ -397,7 +402,7 @@ incrementa. Las repeticiones conservan el ID. `estado` muestra la protección y
 su ID; DIAG conserva el ID y comunica la región de ruido con la semántica anterior.
 
 CONFIG comparte la secuencia de INPUT y DIAG; `indice_efectivo` indica la primera
-muestra del próximo INPUT. Usa fs=8000, N=1024, H=512, método=0, opcode=1 y
+muestra del próximo INPUT. Usa fs=8000, N vigente (256/512/1024), H=N/2, método=0, opcode=1 y
 status=0. Ocupa como máximo 70 bytes en el cable. No hay confirmación de vuelta:
 la repetición permite recuperar la configuración si se pierde o reinicia nodo 2.
 
@@ -519,3 +524,51 @@ Para validar CONFIG con las dos placas, seguir la prueba del README de
   dependencias: `pio run -t fullclean` y volver a compilar.
 - **Basura en el monitor con el YP-05 conectado:** PlatformIO puede abrir el
   puerto equivocado. Indicar el puerto con `-p /dev/ttyUSB0`.
+
+## FFT configurable: análisis separado del transporte
+
+El INPUT conserva 512 float32, sus índices y un paquete por 64 ms. `n` solo cambia
+el diagnóstico y los campos N/H existentes de CONFIG y DIAG; no cambia ADC,
+decimación, FIR de entrada, normalización, velocidad UART ni formato binario.
+
+| N | H | Análisis por INPUT | Resolución fs/N | Retardo espectral en la placa |
+|---:|---:|---:|---:|---:|
+| 1024 | 512 | 1 | 7.8125 Hz | 64 ms |
+| 512 | 256 | 2 | 15.625 Hz | 32 ms |
+| 256 | 128 | 4 | 31.25 Hz | 16 ms |
+
+El historial máximo se mantiene en orden cronológico. Cada subbloque de H forma
+su ventana de N; se publica un único DIAG por INPUT, correspondiente al **último
+análisis**, con su inicio de ventana absoluto. El tiempo de análisis incluye
+todos los subanálisis y, durante la captura de fondo, las tres referencias.
+Las confirmaciones espectrales se cuentan por análisis (su duración temporal
+cambia con H); la cresta, subbloques de 4 ms y mayoría impulsiva se calculan una
+vez por INPUT de 512, conservando las reglas temporales PL02. Los contadores de
+`DEBUG intervalo` cuentan análisis; los rangos temporales se observan por INPUT.
+
+Al cambiar N se limpian ventana/historias de clasificación, sin reiniciar audio,
+umbrales ni fondo. Durante la calibración en silencio se capturan **tres perfiles
+espectrales**, uno por rejilla N, promediando los subanálisis de cada INPUT. Las
+referencias temporales PL02 siguen usando bloques de 512. Cambiar N después no
+aprende el sonido reproducido ni necesita otra calibración. Si la captura inicial
+fue con audio, repetir `fondo_diag calibrar` en silencio como antes.
+
+La tabla FFT se inicializa una sola vez para 1024; una ventana máxima sqrt-Hann
+permite obtener las menores por submuestreo. Los búferes conservan capacidad
+máxima. Los dos perfiles adicionales de fondo añaden 8208 bytes estáticos. La
+captura de los tres perfiles aumenta el costo durante calibración: revisar
+`análisis max`, desbordes ADC y TX tanto al arrancar como en uso normal.
+
+Los umbrales en bins conservan sus cantidades: mediana local 31, tolerancia 1,
+pico ±2, región mínima 8. Su cobertura en Hz crece al reducir N, por lo que no se
+garantiza la misma clasificación fina ni bordes iguales para todos los tamaños.
+No se ajustaron para memorizar P1–P5. P4 sigue como limitación conocida.
+
+CONFIG sigue después del DIAG y se repite aproximadamente cada segundo. Banda
+y N comparten `config_id`. Una placa reiniciada recupera la configuración por
+repetición; un reinicio de nodo 1 se reconoce como sesión nueva. N vuelve a 1024
+al arrancar. En placa, `estado` debe mostrar el nuevo N/H antes de reproducir.
+
+Pruebas y comandos en [PRUEBA_N_CONFIGURABLE.md](../../herramientas_pc/PRUEBA_N_CONFIGURABLE.md).
+No se compiló ni se validó todavía en placa esta ampliación. Las comprobaciones
+numéricas de PC no ejecutan C++ ni garantizan tiempos reales.

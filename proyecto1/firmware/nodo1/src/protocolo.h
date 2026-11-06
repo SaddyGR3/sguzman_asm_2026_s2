@@ -102,4 +102,4 @@ struct Diag {
 void armar_diag(const Diag& d, uint8_t* salida);
 // Escribe CONFIG (32 B), sin relleno ni dependencia de alineación.
 void armar_control_config(uint32_t config_id, uint64_t indice_efectivo,
-                          float banda_lo, float banda_hi, uint8_t* salida);
+                          float banda_lo, float banda_hi, uint16_t n, uint8_t* salida);

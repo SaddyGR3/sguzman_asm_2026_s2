@@ -19,7 +19,7 @@ enum class Fuente { GENERADOR, ADC };
 // Generador: respaldo si falla el micrófono y prueba de la placa N2+N3 sin señal acústica.
 constexpr Fuente FUENTE_ENTRADA = Fuente::ADC;
 
-constexpr int N_FFT = 1024;      // dos bloques de 512
+static unsigned N_FFT = 1024;    // transporte fijo en 512; salto de análisis N/2
 static float banda_lo = 100.0f, banda_hi = 1200.0f;
 static uint32_t config_id = 1;
 static bool config_pendiente = true;
@@ -83,7 +83,7 @@ static void imprimir_diagnostico(const ResultadoDiagnostico& r)
 static void imprimir_linea_diag(const ResultadoDiagnostico& r, const ResumenAdc* adc,
                                 uint32_t desbordes, uint32_t overruns, uint32_t saturaciones)
 {
-    printf("DIAG | banda %g-%g Hz | tipo %u %s", banda_lo, banda_hi,
+    printf("DIAG | N %u H %u | banda %g-%g Hz | tipo %u %s", N_FFT, N_FFT / 2, banda_lo, banda_hi,
            static_cast<unsigned>(r.tipo_ruido), nombre_ruido(r.tipo_ruido));
     if (r.tipo_ruido == 1 || r.tipo_ruido == 2) {
         printf(" | pico %.1f Hz", r.pico_hz);
@@ -107,7 +107,7 @@ static void imprimir_linea_diag(const ResultadoDiagnostico& r, const ResumenAdc*
 
 static void ayuda_consola()
 {
-    printf(">> comando no reconocido. Comandos: banda <lo> <hi>, estado, vista diag|todo|debug, "
+    printf(">> comando no reconocido. Comandos: n <256|512|1024>, banda <lo> <hi>, estado, vista diag|todo|debug, "
            "fondo_diag calibrar, umbral_diag <nombre> <valor>\n"
            ">> umbrales: tonal red impulsivo banda fondo tonal_pct red_rel red_pct region_pct rafaga pico_fondo\n");
 }
@@ -191,7 +191,7 @@ static void imprimir_debug()
         if (!publicada.cantidad) printf("DEBUG lista publicada no capturada aún; activar debug antes de la señal\n");
     }
     imprimir_grupo_debug("máximos fuera de protección (antes de excluir red)", d.maximos);
-    printf("DEBUG intervalo %lu bloques | supera cresta %lu | confirma impulsivo 2/3 %lu | "
+    printf("DEBUG intervalo %lu análisis | supera cresta %lu | confirma impulsivo 2/3 %lu | "
            "tipos 0:%lu 1:%lu 2:%lu 3:%lu 4:%lu 5:%lu\n",
            (unsigned long)d.bloques, (unsigned long)d.supera_cresta, (unsigned long)d.confirma_impulsivo,
            (unsigned long)d.tipos[0], (unsigned long)d.tipos[1], (unsigned long)d.tipos[2],
@@ -224,7 +224,22 @@ static void comando_consola(const char* linea)
     char comando[16], modo[16], extra;
     float lo, hi;
     if (sscanf(linea, " %15s", comando) != 1) return;
-    if (strcmp(comando, "umbral_diag") == 0) {
+    if (strcmp(comando, "n") == 0) {
+        if (sscanf(linea, " %15s %15s %c", comando, modo, &extra) != 2 ||
+            (strcmp(modo, "256") != 0 && strcmp(modo, "512") != 0 && strcmp(modo, "1024") != 0)) {
+            printf(">> error: n 256|512|1024; configuración conservada\n");
+            return;
+        }
+        const unsigned solicitado = strcmp(modo, "256") == 0 ? 256u : strcmp(modo, "512") == 0 ? 512u : 1024u;
+        if (!diagnostico_cambiar_n(solicitado)) return;
+        if (solicitado != N_FFT) {
+            N_FFT = solicitado;
+            if (++config_id == 0) config_id = 1;
+            config_pendiente = true;
+        }
+        printf(">> FFT N %u H %u | resolución %.4f Hz | config %lu\n",
+               N_FFT, N_FFT / 2, 8000.0 / N_FFT, (unsigned long)config_id);
+    } else if (strcmp(comando, "umbral_diag") == 0) {
         float valor;
         if (sscanf(linea, " %15s %15s %f %c", comando, modo, &valor, &extra) != 3 ||
             !diagnostico_ajustar_umbral(modo, valor)) {
@@ -265,6 +280,7 @@ static void comando_consola(const char* linea)
                sscanf(linea, " %15s %c", comando, &extra) == 1) {
         printf(">> banda protegida: %g-%g Hz | config %lu\n>> vista: %s\n",
                banda_lo, banda_hi, (unsigned long)config_id, nombre_vista());
+        printf(">> FFT N %u H %u | resolución %.4f Hz\n", N_FFT, N_FFT / 2, 8000.0 / N_FFT);
         imprimir_umbrales();
         printf(">> ");
         imprimir_linea_diag(diagnostico_resultado(), nullptr, 0, 0, 0);
@@ -387,7 +403,7 @@ static bool enviar_config(uint32_t& secuencia, uint64_t indice_efectivo)
     // Una escritura adicional: reservar de nuevo el margen para su metadato y relleno.
     if (libre < CABLE_CONTROL + MARGEN_TX) return false;
     const int64_t inicio = esp_timer_get_time();
-    armar_control_config(config_id, indice_efectivo, banda_lo, banda_hi, control32);
+    armar_control_config(config_id, indice_efectivo, banda_lo, banda_hi, static_cast<uint16_t>(N_FFT), control32);
     const size_t largo = armar_paquete(TIPO_CONTROL, NODO_1, NODO_2, 0,
         session_id, secuencia++, indice_efectivo, 0, FORMATO_META, 0,
         control32, TAM_CONTROL, trabajo, sal_control);
@@ -477,7 +493,7 @@ extern "C" void app_main(void)
     ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 1024, 4096, 0, nullptr, 0));
     // Los resúmenes se copian a TX; su transmisión a 115200 no frena el bloque.
     uart_vfs_dev_use_driver(UART_NUM_0);
-    printf("Consola: banda <lo> <hi>, estado, vista diag|todo|debug, "
+    printf("Consola: n <256|512|1024>, banda <lo> <hi>, estado, vista diag|todo|debug, "
            "fondo_diag calibrar, umbral_diag <nombre> <valor> | banda protegida inicial 100 1200 Hz\n");
     if (FUENTE_ENTRADA == Fuente::ADC)
         printf("Fondo: mantener silencio con micrófono conectado ~3 s; esperar fondo listo antes de reproducir.\n");
@@ -602,7 +618,7 @@ extern "C" void app_main(void)
         Diag d;
         d.fs = static_cast<uint32_t>(FS_HZ);
         d.N = N_FFT;
-        d.H = HOP;
+        d.H = N_FFT / 2;
         d.pico_Hz = diagnostico.pico_hz;
         // DIAG describe ruido; CONTROL CONFIG conserva la banda protegida.
         d.banda_lo = diagnostico.banda_detectada_lo;

@@ -2,6 +2,7 @@
 #include <cstdint>
 
 struct ConfiguracionMetricas {
+    unsigned n = 1024;
     double banda_lo = 100.0, banda_hi = 1200.0;
     double pico_hz = -1.0;
     double notch_hz = 2150.0, notch_q = 8.5;
@@ -18,7 +19,7 @@ struct TiempoMetricas {
 void metricas_iniciar(const ConfiguracionMetricas& configuracion);
 void metricas_invalidar();  // cambio de configuración durante la reproducción
 // Cuatro bloques de H=512 antes del DAC; SIN FILTRO reutiliza x.
-// El último es el vaciado existente.
+// El último es el vaciado existente; las FFT finales de borde se difieren.
 // Devuelve el coste de analizar cada salida; el análisis de x es coste común.
 TiempoMetricas metricas_procesar(const float* x, const float* fir,
                                 const float* notch, const float* espectral, bool vaciado);
@@ -26,6 +27,7 @@ TiempoMetricas metricas_procesar(const float* x, const float* fir,
 void metricas_registrar_tiempos(const TiempoMetricas& coste,
                                uint64_t filtros_temporales_us, uint64_t espectral_us,
                                uint64_t total_us, uint64_t metricas_us);
-// Captura RAM y resultados antes de aplicar parámetros pendientes o imprimir.
+// Llamar después de terminar el DAC: calcula las cuatro FFT finales de borde,
+// mide su coste por separado y captura RAM/resultados antes de aplicar parámetros.
 void metricas_finalizar();
 void metricas_imprimir();

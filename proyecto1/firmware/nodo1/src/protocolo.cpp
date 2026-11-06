@@ -116,11 +116,11 @@ size_t armar_paquete(uint8_t tipo, uint8_t src, uint8_t dst, uint16_t flags,
 }
 
 void armar_control_config(uint32_t config_id, uint64_t indice_efectivo,
-                          float banda_lo, float banda_hi, uint8_t* salida)
+                          float banda_lo, float banda_hi, uint16_t n, uint8_t* salida)
 {
     put_u32(salida, 8000);
-    put_u16(salida + 4, 1024);
-    put_u16(salida + 6, 512);
+    put_u16(salida + 4, n);
+    put_u16(salida + 6, n / 2);
     salida[8] = 0;
     salida[9] = 1;  // CONFIG
     put_u16(salida + 10, 0);

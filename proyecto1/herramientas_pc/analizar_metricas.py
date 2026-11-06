@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tablas y gráficos de METRICAS v1/v2 ya capturadas; nunca abre el serial."""
+"""Tablas y gráficos de METRICAS v1/v2/v3 ya capturadas; nunca abre el serial."""
 import argparse
 import csv
 from datetime import datetime
@@ -50,7 +50,7 @@ def graficar(informe, etiqueta, destino):
         eje.grid(axis='y', alpha=.2)
     primera = next(iter(informe.filas.values()))
     fig.suptitle(f'{etiqueta} · reproducción {informe.reproduccion} · CSV v{informe.version}\n'
-                 f"Banda {primera['banda_lo_hz']}–{primera['banda_hi_hz']} Hz · estimadas sin referencia limpia")
+                 f"N {primera['n_fft']} H {primera['h_fft']} · banda {primera['banda_lo_hz']}–{primera['banda_hi_hz']} Hz · estimadas sin referencia limpia")
     fig.text(.5, .012, 'MSE mide modificación de x. FIR/NOTCH comparten tiempo de filtros: no sumar sus barras. '
              'SIN FILTRO reutiliza x; costo común incluido en total.', ha='center', fontsize=9)
     fig.tight_layout(rect=(0, .04, 1, .93))
@@ -90,7 +90,8 @@ def ejecutar(args):
         etiqueta = args.etiqueta or Path(informe.archivo).stem
         salida += [f'## {etiqueta} — reproducción {informe.reproduccion}, v{informe.version}', '',
                    f'Archivo: `{informe.archivo}`', '',
-                   f"Estado del conjunto: {informe.problema or 'completo y coherente; estado de placa OK'}.", '']
+                   f"Estado del conjunto: {informe.problema or 'completo y coherente; estado de placa OK'}.",
+                   f"FFT N {next(iter(informe.filas.values()))['n_fft']} H {next(iter(informe.filas.values()))['h_fft']}.", '']
         if informe.version == 1:
             salida += ['CSV v1 contiene solo el modo temporal seleccionado y RESTA; no permite comparar los cuatro modos.', '']
         salida += ['| Modo | Estado | SNR x dB | SNR y dB | ΔSNR dB | E banda % | Aten dB | MSE(x) | Ret ms | Proc prom/max ms |',

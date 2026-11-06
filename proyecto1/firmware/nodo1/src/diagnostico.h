@@ -117,7 +117,8 @@ void diagnostico_debug_activar(bool activar);
 const DiagnosticoDebug& diagnostico_debug();
 void diagnostico_debug_reiniciar_contadores();
 
-// N fijo de este nodo: 1024, H=512 y fs=8000. Una sola tarea.
+// INPUT siempre 512; análisis N configurable, H=N/2, fs=8000. Una sola tarea.
+bool diagnostico_cambiar_n(unsigned n);
 void diagnostico_iniciar(bool calibrar_fondo = true);
 void diagnostico_banda(float lo, float hi);
 const UmbralesDiagnostico& diagnostico_umbrales();

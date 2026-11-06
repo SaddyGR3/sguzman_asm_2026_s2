@@ -28,14 +28,16 @@ struct Resumen {
     uint32_t bloques = 0;
     uint32_t id = 0;
     TiempoAcumulado tiempos[6];  // cuatro modos, total, métricas
+    uint64_t cierre_us = 0;  // después del DAC; fuera del plazo por bloque
     size_t ram_libre = 0, ram_bloque = 0;
     const char* estado = "OK";
 };
 
 static Resumen actual, ultimas;
 static bool activa = false, tiene_ultimas = false, tiene_anterior = false;
+static bool cierre_pendiente = false;
 static uint32_t siguiente_id = 0;
-static float x_anterior[H], fir_anterior[H], notch_anterior[H];
+static float x_anterior[H], fir_anterior[H], notch_anterior[H], espectral_anterior[H];
 static float historial[MODOS][ESPECTRAL_N];
 
 static void sumar(TiempoAcumulado& tiempo, uint64_t us)
@@ -62,6 +64,7 @@ void metricas_iniciar(const ConfiguracionMetricas& configuracion)
     actual.id = ++siguiente_id;
     activa = true;
     tiene_anterior = false;
+    cierre_pendiente = false;
     std::memset(historial, 0, sizeof(historial));
 }
 
@@ -75,51 +78,45 @@ TiempoMetricas metricas_procesar(const float* x, const float* fir,
 {
     TiempoMetricas coste;
     if (!activa) return coste;
+    const unsigned n = actual.configuracion.n, salto = n / 2;
     if (tiene_anterior) {
-        // La salida espectral actual corresponde al INPUT anterior. Para FIR,
-        // completar las últimas 18 muestras con el principio de la salida actual.
-        for (int s = 0; s < MODOS; ++s) {
-            std::memmove(historial[s], historial[s] + H, H * sizeof(float));
-        }
-        for (int j = 0; j < H; ++j) {
-            const unsigned indice = static_cast<unsigned>(j) + RETARDO_FIR;
-            float valores[MODOS] = {x_anterior[j],
-                indice < H ? fir_anterior[indice] : fir[indice - H],
-                notch_anterior[j], espectral[j]};
-            for (int s = 0; s < MODOS; ++s) {
-                if (!std::isfinite(valores[s])) {
-                    actual.estado = "DATOS_NO_FINITOS";
-                    valores[s] = 0.0f;
+        for (unsigned offset = 0; offset < H; offset += salto) {
+            for (int s = 0; s < MODOS; ++s)
+                std::memmove(historial[s], historial[s] + salto, salto * sizeof(float));
+            for (unsigned j = 0; j < salto; ++j) {
+                const unsigned posicion = offset + j;
+                const unsigned indice_fir = posicion + RETARDO_FIR;
+                const unsigned indice_espectral = posicion + salto;
+                float valores[MODOS] = {x_anterior[posicion],
+                    indice_fir < H ? fir_anterior[indice_fir] : fir[indice_fir - H],
+                    notch_anterior[posicion],
+                    indice_espectral < H ? espectral_anterior[indice_espectral] : espectral[indice_espectral - H]};
+                for (int s = 0; s < MODOS; ++s) {
+                    if (!std::isfinite(valores[s])) {
+                        actual.estado = "DATOS_NO_FINITOS";
+                        valores[s] = 0.0f;
+                    }
+                    historial[s][salto + j] = valores[s];
                 }
-                historial[s][H + j] = valores[s];
-            }
-            for (int r = 1; r < MODOS; ++r) {
-                const double diferencia = static_cast<double>(valores[r]) - valores[0];
-                actual.error[r] += diferencia * diferencia;
-            }
-        }
-        actual.muestras += H;
-        analizar(0);
-        coste.fir_us += analizar(FIR);
-        coste.notch_us += analizar(NOTCH);
-        coste.espectral_us += analizar(RESTA);
-        if (vaciado) {
-            // Ventana final [último bloque, ceros]. Junto con la inicial
-            // [ceros, primer bloque], las ventanas al cuadrado pesan 1 por muestra.
-            for (int s = 0; s < MODOS; ++s) {
-                std::memmove(historial[s], historial[s] + H, H * sizeof(float));
-                std::memset(historial[s] + H, 0, H * sizeof(float));
+                for (int r = 1; r < MODOS; ++r) {
+                    const double diferencia = static_cast<double>(valores[r]) - valores[0];
+                    actual.error[r] += diferencia * diferencia;
+                }
             }
             analizar(0);
             coste.fir_us += analizar(FIR);
             coste.notch_us += analizar(NOTCH);
             coste.espectral_us += analizar(RESTA);
         }
+        actual.muestras += H;
+        // Las cuatro FFT de borde esperan a que termine el DAC.
+        if (vaciado) cierre_pendiente = true;
     }
     if (!vaciado) {
         std::memcpy(x_anterior, x, sizeof(x_anterior));
         std::memcpy(fir_anterior, fir, sizeof(fir_anterior));
         std::memcpy(notch_anterior, notch, sizeof(notch_anterior));
+        std::memcpy(espectral_anterior, espectral, sizeof(espectral_anterior));
         tiene_anterior = true;
     } else {
         tiene_anterior = false;
@@ -147,6 +144,18 @@ void metricas_registrar_tiempos(const TiempoMetricas& coste,
 void metricas_finalizar()
 {
     if (!activa) return;
+    if (cierre_pendiente) {
+        const int64_t inicio = esp_timer_get_time();
+        const unsigned salto = actual.configuracion.n / 2;
+        // Misma ventana de borde y misma energía que antes, sin MSE extra.
+        for (int s = 0; s < MODOS; ++s) {
+            std::memmove(historial[s], historial[s] + salto, salto * sizeof(float));
+            std::memset(historial[s] + salto, 0, salto * sizeof(float));
+            analizar(s);
+        }
+        actual.cierre_us = static_cast<uint64_t>(esp_timer_get_time() - inicio);
+        cierre_pendiente = false;
+    }
     actual.ram_libre = heap_caps_get_free_size(MEMORIA);
     actual.ram_bloque = heap_caps_get_largest_free_block(MEMORIA);
     if (!actual.muestras) actual.estado = "SIN_MUESTRAS";
@@ -183,8 +192,8 @@ void metricas_imprimir()
     const double proc_metricas = m.tiempos[METRICAS].suma / divisor;
     printf("\nMétricas estimadas sin referencia limpia | reproducción %lu | %s | %llu muestras\n",
            (unsigned long)m.id, m.estado, (unsigned long long)m.muestras);
-    printf("Banda %.6g-%.6g Hz | pico %.6g Hz | atenuación: %s | MSE respecto de x decodificada\n",
-           c.banda_lo, c.banda_hi, c.pico_hz, tiene_pico ? "bin del pico ±2" : "fuera de banda");
+    printf("N %u H %u | banda %.6g-%.6g Hz | pico %.6g Hz | atenuación: %s | MSE respecto de x decodificada\n",
+           c.n, c.n / 2, c.banda_lo, c.banda_hi, c.pico_hz, tiene_pico ? "bin del pico ±2" : "fuera de banda");
     printf("Ruta       Modo         SNR x dB   SNR y dB   Delta dB   E banda %%  Aten dB    MSE(x)     Ret ms  Proc ms prom/max  Carga %%\n");
     for (int r = 0; r < MODOS; ++r) {
         const auto& entrada = m.energia[0];
@@ -195,7 +204,7 @@ void metricas_imprimir()
         const double atenuacion = valida ? razon_db(tiene_pico ? entrada.pico : entrada.fuera,
                                                    tiene_pico ? salida.pico : salida.fuera) : NAN;
         const double mse = valida && m.muestras ? m.error[r] / m.muestras : NAN;
-        const double retardo_ms = RETARDOS[r] / 8.0;
+        const double retardo_ms = (r == RESTA ? c.n / 2 : RETARDOS[r]) / 8.0;
         const double proc_us = m.tiempos[r].suma / divisor;
         const double max_us = m.tiempos[r].maximo;
         const char* ruta = r == RESTA ? "espectral" : "temporal";
@@ -218,8 +227,10 @@ void metricas_imprimir()
     printf("Métricas: %.3f ms prom / %.3f ms max (incluidas en total) | RAM interna libre %lu B, mayor bloque %lu B\n",
            proc_metricas / 1000.0, m.tiempos[METRICAS].maximo / 1000.0,
            (unsigned long)m.ram_libre, (unsigned long)m.ram_bloque);
+    printf("Cierre de métricas después del DAC: %.3f ms (fuera de proc/carga por bloque y del CSV METRICAS)\n",
+           m.cierre_us / 1000.0);
     if (m.tiempos[TOTAL].maximo >= 64000) printf("Métricas: máximo total alcanzó o superó el plazo de 64 ms\n");
-    // Orden fijo CSV v2 (cuatro modos, mismos 33 campos); ninguna cifra usa separador decimal dependiente de consola.
+    // Orden fijo CSV v3 (cuatro modos, 35 campos con N/H al final); ninguna cifra usa separador decimal dependiente de consola.
     for (int r = 0; r < MODOS; ++r) {
         const auto& entrada = m.energia[0];
         const auto& salida = m.energia[r];
@@ -233,10 +244,10 @@ void metricas_imprimir()
         numero(valores[4], sizeof(valores[4]), valida ? razon_db(tiene_pico ? entrada.pico : entrada.fuera,
                                                                tiene_pico ? salida.pico : salida.fuera) : NAN);
         numero(valores[5], sizeof(valores[5]), valida && m.muestras ? m.error[r] / m.muestras : NAN);
-        printf("METRICAS,2,%lu,%s,%s,%s,%.6g,%.6g,%.6g,%s,%s,%s,%s,%s,%s,%.3f,%.3f,%.3f,%.3f,%lu,%lu,%llu,%lu,%.3f,%.3f,%.3f,%.3f,%.3f,%.6g,%.6g,%.6g,%.6g,%s\n",
+        printf("METRICAS,3,%lu,%s,%s,%s,%.6g,%.6g,%.6g,%s,%s,%s,%s,%s,%s,%.3f,%.3f,%.3f,%.3f,%lu,%lu,%llu,%lu,%.3f,%.3f,%.3f,%.3f,%.3f,%.6g,%.6g,%.6g,%.6g,%s,%u,%u\n",
                (unsigned long)m.id, m.estado, r == RESTA ? "espectral" : "temporal", NOMBRES[r],
                c.banda_lo, c.banda_hi, c.pico_hz, valores[0], valores[1], valores[2], valores[3], valores[4], valores[5],
-               RETARDOS[r] / 8.0,
+               (r == RESTA ? c.n / 2 : RETARDOS[r]) / 8.0,
                m.tiempos[r].suma / divisor / 1000.0, m.tiempos[r].maximo / 1000.0,
                m.tiempos[r].suma / divisor / 640.0,
                (unsigned long)m.ram_libre, (unsigned long)m.ram_bloque,
@@ -244,6 +255,6 @@ void metricas_imprimir()
                proc_total / 1000.0, m.tiempos[TOTAL].maximo / 1000.0, proc_total / 640.0,
                proc_metricas / 1000.0, m.tiempos[METRICAS].maximo / 1000.0,
                c.notch_hz, c.notch_q, c.alfa, c.ganancia_minima,
-               tiene_pico ? "pico" : "fuera_banda");
+               tiene_pico ? "pico" : "fuera_banda", c.n, c.n / 2);
     }
 }
