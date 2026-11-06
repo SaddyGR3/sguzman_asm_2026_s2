@@ -24,8 +24,13 @@ static float banda_lo = 100.0f, banda_hi = 1200.0f;
 static uint32_t config_id = 1;
 static bool config_pendiente = true;
 constexpr int64_t REPETICION_CONFIG_US = 1000000;
-enum class Vista { DIAG, TODO };
+enum class Vista { DIAG, TODO, DEBUG };
 static Vista vista = Vista::DIAG;
+
+static const char* nombre_vista()
+{
+    return vista == Vista::DEBUG ? "debug" : (vista == Vista::TODO ? "todo" : "diag");
+}
 
 // 512 muestras a 8 kHz = 64 ms: solo el generador usa el temporizador.
 constexpr uint64_t PERIODO_US = 64000;
@@ -102,8 +107,99 @@ static void imprimir_linea_diag(const ResultadoDiagnostico& r, const ResumenAdc*
 
 static void ayuda_consola()
 {
-    printf(">> comando no reconocido. Comandos: banda <lo> <hi>, estado, vista diag|todo, "
-           "umbral_diag tonal|red|impulsivo|banda <valor>\n");
+    printf(">> comando no reconocido. Comandos: banda <lo> <hi>, estado, vista diag|todo|debug, "
+           "fondo_diag calibrar, umbral_diag <nombre> <valor>\n"
+           ">> umbrales: tonal red impulsivo banda fondo tonal_pct red_rel red_pct region_pct rafaga pico_fondo\n");
+}
+
+static void imprimir_grupo_debug(const char* nombre, const GrupoPicosDebug& grupo)
+{
+    printf("DEBUG %s: %u picos", nombre, grupo.cantidad);
+    const unsigned mostrados = grupo.cantidad < DIAG_DEBUG_MAX_PICOS ? grupo.cantidad : DIAG_DEBUG_MAX_PICOS;
+    if (grupo.cantidad > mostrados) printf(" (solo %u más fuertes)", mostrados);
+    for (unsigned j = 0; j < mostrados; ++j) {
+        const auto& p = grupo.picos[j];
+        const double magnitud = std::fmax(p.magnitud, 1e-12f);
+        const double contraste = 20.0 * std::log10(magnitud / std::fmax(p.piso, 1e-12f));
+        const double relativo = 20.0 * std::log10(magnitud / std::fmax(grupo.picos[0].magnitud, 1e-12f));
+        printf(" | %.1fHz C%.1f R%.1f", p.hz, contraste, relativo);
+    }
+    putchar('\n');
+}
+
+static void imprimir_energia_debug(const char* nombre, const EnergiaPicoDebug& pico, double total)
+{
+    if (pico.hz < 0.0f) {
+        printf("DEBUG energía %s: --\n", nombre);
+        return;
+    }
+    const double resto = total - pico.energia;
+    printf("DEBUG energía %s %.1fHz | bin ±2 %.6g | fracción %.2f %% | resto %.6g",
+           nombre, pico.hz, pico.energia, pico.porcentaje, resto);
+    if (pico.energia > 0.0 && resto > 0.0)
+        printf(" | pico/resto %.2f dB\n", 10.0 * std::log10(pico.energia / resto));
+    else printf(" | pico/resto --\n");
+}
+
+static void imprimir_debug()
+{
+    const auto& d = diagnostico_debug();
+    const auto& u = diagnostico_umbrales();
+    const auto& f = diagnostico_fondo();
+    printf("DEBUG fondo PL02 %s | espera %u bloques | captura %u/%u | RMS %.6g | corto P95 %.6g pico P95 %.6g | nivel sobre fondo %u\n",
+           f.listo ? "listo" : "calibrando", f.espera, f.bloques, DIAG_FONDO_BLOQUES, f.rms,
+           f.corto_p95, f.pico_p95,
+           d.nivel_suficiente ? 1u : 0u);
+    printf("DEBUG selección | exceso fuera %.6g | pico evaluado %.1f Hz %.2f %% (mín %g) | red 50 %.2f %% 60 %.2f %% (mín %g) | región %.2f %% (mín %g)\n",
+           d.exceso_fuera, d.pico_evaluado_hz, d.tonal_porcentaje, u.tonal_pct, d.red_porcentaje_50, d.red_porcentaje_60,
+           u.red_pct, d.region_porcentaje, u.region_pct);
+    printf("DEBUG armónicos antes de nivel relativo | 50 %u 60 %u | magnitud mínima %g %% del más fuerte\n",
+           d.armonicos_brutos_50, d.armonicos_brutos_60, u.red_rel);
+    printf("DEBUG impulso PL02 | contraste corto %.3f | subbloques fuertes %u/16 | candidato %u | candidatos intervalo %lu\n",
+           d.razon_rafaga, d.subbloques_fuertes, d.impulso_candidato ? 1u : 0u,
+           (unsigned long)d.candidatas_impulsivo);
+    printf("DEBUG umbrales impulso | corto máximo %.6g mínimo fondo %.6g | pico mínimo fondo %.6g | supera ambos %u | rechazados fondo intervalo %lu\n",
+           d.corto_max, d.corto_min_fondo, d.pico_min_fondo, d.impulso_sobre_fondo ? 1u : 0u,
+           (unsigned long)d.impulsos_rechazados_fondo);
+    printf("DEBUG activo %u ventana_valida %u | umbrales tonal %g red %g cresta %g | candidato independiente %.1f Hz\n",
+           d.activo ? 1u : 0u, d.ventana_valida ? 1u : 0u, u.tonal, u.red, u.impulsivo, d.candidato_tonal_hz);
+    printf("DEBUG nivel actual [min,max intervalo] | RMS %.6g [%.6g,%.6g] | pico abs %.6g [%.6g,%.6g] | cresta %.3f [%.3f,%.3f]\n",
+           d.rms.actual, d.rms.minimo, d.rms.maximo, d.pico_temporal.actual, d.pico_temporal.minimo,
+           d.pico_temporal.maximo, d.cresta.actual, d.cresta.minimo, d.cresta.maximo);
+    printf("DEBUG ancha PL01 evaluada %u | ocupación %.2f %% [%.2f,%.2f] mínimo %.0f %% | planitud piso %.4f [%.4f,%.4f] mínimo %.2f | "
+           "candidata %u confirmada %u confirma %u/3 ausencias %u/3\n",
+           d.ancha_evaluada ? 1u : 0u, d.ocupacion.actual, d.ocupacion.minimo, d.ocupacion.maximo,
+           100.0f * DIAG_OCUPACION_MINIMA, d.planitud.actual, d.planitud.minimo, d.planitud.maximo,
+           DIAG_PLANITUD_MINIMA, d.ancha_candidata ? 1u : 0u, d.ancha_confirmada ? 1u : 0u,
+           d.confirmaciones_ancha, d.ausencias_ancha);
+    printf("DEBUG limitada candidata %.1f-%.1f Hz | confirmada %.1f-%.1f Hz | confirma %u/3 ausencias %u/3 | "
+           "piso global %.6g umbral %.6g | energía región candidata %.6g\n",
+           d.limitada_candidata_lo, d.limitada_candidata_hi, d.limitada_publicada_lo, d.limitada_publicada_hi,
+           d.confirmaciones_limitada, d.ausencias_limitada, d.referencia_global, d.umbral_limitada, d.energia_region);
+    printf("DEBUG energía FFT 100-3000 Hz: %.6g (suma de magnitudes al cuadrado)\n", d.energia_analisis);
+    imprimir_energia_debug("publicado", d.energia_publicado, d.energia_analisis);
+    imprimir_energia_debug("candidato tonal", d.energia_candidato, d.energia_analisis);
+    printf("DEBUG red elegida %u Hz | 50: actuales %u publicados %u confirma %u/3 ausencias %u/3 | "
+           "60: actuales %u publicados %u confirma %u/3 ausencias %u/3\n",
+           d.familia_elegida, d.red_50.cantidad, d.armonicos_publicados_50, d.confirmaciones_50, d.ausencias_50,
+           d.red_60.cantidad, d.armonicos_publicados_60, d.confirmaciones_60, d.ausencias_60);
+    imprimir_grupo_debug("50 actual", d.red_50);
+    imprimir_grupo_debug("60 actual", d.red_60);
+    if (d.familia_elegida) {
+        const auto& publicada = d.familia_elegida == 50 ? d.publicada_50 : d.publicada_60;
+        imprimir_grupo_debug("familia publicada", publicada);
+        if (!publicada.cantidad) printf("DEBUG lista publicada no capturada aún; activar debug antes de la señal\n");
+    }
+    imprimir_grupo_debug("máximos fuera de protección (antes de excluir red)", d.maximos);
+    printf("DEBUG intervalo %lu bloques | supera cresta %lu | confirma impulsivo 2/3 %lu | "
+           "tipos 0:%lu 1:%lu 2:%lu 3:%lu 4:%lu 5:%lu\n",
+           (unsigned long)d.bloques, (unsigned long)d.supera_cresta, (unsigned long)d.confirma_impulsivo,
+           (unsigned long)d.tipos[0], (unsigned long)d.tipos[1], (unsigned long)d.tipos[2],
+           (unsigned long)d.tipos[3], (unsigned long)d.tipos[4], (unsigned long)d.tipos[5]);
+    printf("DEBUG bandas intervalo | ancha candidata %lu confirmada %lu | limitada candidata %lu confirmada %lu\n",
+           (unsigned long)d.candidatas_ancha, (unsigned long)d.confirmadas_ancha,
+           (unsigned long)d.candidatas_limitada, (unsigned long)d.confirmadas_limitada);
+    diagnostico_debug_reiniciar_contadores();
 }
 
 static void imprimir_umbrales()
@@ -113,6 +209,14 @@ static void imprimir_umbrales()
            ">> banda ancha: ocupación mínima %.0f %% con piso > %g de mediana global | planitud mínima %g\n",
            u.tonal, u.red, u.impulsivo, u.banda, DIAG_RMS_MINIMO,
            100.0f * DIAG_OCUPACION_MINIMA, DIAG_FRACCION_PISO, DIAG_PLANITUD_MINIMA);
+    printf(">> razones: fondo %g rafaga %g pico_fondo %g | porcentajes: tonal_pct %g red_rel %g red_pct %g region_pct %g\n",
+           u.fondo, u.rafaga, u.pico_fondo, u.tonal_pct, u.red_rel, u.red_pct, u.region_pct);
+    printf(">> banda ancha PL01 exige elevación sobre fondo; planitud del piso sin resta. Limitada: máximo %g Hz.\n",
+           DIAG_ANCHURA_MAXIMA_HZ);
+    const auto& f = diagnostico_fondo();
+    printf(">> fondo PL02 %s | espera %u bloques | captura %u/%u | RMS %.6g | corto P95 %.6g pico P95 %.6g | margen %g\n",
+           f.listo ? "listo" : "calibrando", f.espera, f.bloques, DIAG_FONDO_BLOQUES, f.rms,
+           f.corto_p95, f.pico_p95, DIAG_MARGEN_TRANSITORIOS);
 }
 
 static void comando_consola(const char* linea)
@@ -124,11 +228,19 @@ static void comando_consola(const char* linea)
         float valor;
         if (sscanf(linea, " %15s %15s %f %c", comando, modo, &valor, &extra) != 3 ||
             !diagnostico_ajustar_umbral(modo, valor)) {
-            printf(">> error: umbral_diag tonal|red|impulsivo|banda <valor>, finito en (1, 100]. "
+            printf(">> error: umbral_diag <nombre> <valor>, finito en (1, 100]. "
                    "Se conservan los umbrales.\n");
+            ayuda_consola();
         } else {
             printf(">> umbral_diag %s %g | clasificación reiniciada\n", modo, valor);
         }
+    } else if (strcmp(comando, "fondo_diag") == 0 &&
+               sscanf(linea, " %15s %15s %c", comando, modo, &extra) == 2 &&
+               strcmp(modo, "calibrar") == 0) {
+        if (FUENTE_ENTRADA == Fuente::ADC) {
+            diagnostico_calibrar_fondo();
+            printf(">> calibrando fondo: mantener silencio con micrófono conectado ~3 s; esperar fondo listo.\n");
+        } else printf(">> el generador utiliza fondo cero; la calibración corresponde al micrófono.\n");
     } else if (strcmp(comando, "banda") == 0 &&
         sscanf(linea, " %15s %f %f %c", comando, &lo, &hi, &extra) == 3) {
         if (std::isfinite(lo) && std::isfinite(hi) && lo >= 100.0f && lo < hi && hi <= 3000.0f) {
@@ -145,13 +257,14 @@ static void comando_consola(const char* linea)
         }
     } else if (strcmp(comando, "vista") == 0 &&
                sscanf(linea, " %15s %15s %c", comando, modo, &extra) == 2 &&
-               (strcmp(modo, "diag") == 0 || strcmp(modo, "todo") == 0)) {
-        vista = strcmp(modo, "diag") == 0 ? Vista::DIAG : Vista::TODO;
-        printf(">> vista: %s\n", vista == Vista::DIAG ? "diag" : "todo");
+               (strcmp(modo, "diag") == 0 || strcmp(modo, "todo") == 0 || strcmp(modo, "debug") == 0)) {
+        vista = strcmp(modo, "debug") == 0 ? Vista::DEBUG : (strcmp(modo, "diag") == 0 ? Vista::DIAG : Vista::TODO);
+        diagnostico_debug_activar(vista == Vista::DEBUG);
+        printf(">> vista: %s\n", nombre_vista());
     } else if (strcmp(comando, "estado") == 0 &&
                sscanf(linea, " %15s %c", comando, &extra) == 1) {
         printf(">> banda protegida: %g-%g Hz | config %lu\n>> vista: %s\n",
-               banda_lo, banda_hi, (unsigned long)config_id, vista == Vista::DIAG ? "diag" : "todo");
+               banda_lo, banda_hi, (unsigned long)config_id, nombre_vista());
         imprimir_umbrales();
         printf(">> ");
         imprimir_linea_diag(diagnostico_resultado(), nullptr, 0, 0, 0);
@@ -359,13 +472,15 @@ extern "C" void app_main(void)
 
     // Análisis común sobre la x transmitida; no avanza los generadores.
     ESP_ERROR_CHECK(espectro_iniciar(N_FFT));
-    diagnostico_iniciar();
+    diagnostico_iniciar(FUENTE_ENTRADA == Fuente::ADC);
     diagnostico_banda(banda_lo, banda_hi);
     ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 1024, 4096, 0, nullptr, 0));
     // Los resúmenes se copian a TX; su transmisión a 115200 no frena el bloque.
     uart_vfs_dev_use_driver(UART_NUM_0);
-    printf("Consola: banda <lo> <hi>, estado, vista diag|todo, "
-           "umbral_diag tonal|red|impulsivo|banda <valor> | banda protegida inicial 100 1200 Hz\n");
+    printf("Consola: banda <lo> <hi>, estado, vista diag|todo|debug, "
+           "fondo_diag calibrar, umbral_diag <nombre> <valor> | banda protegida inicial 100 1200 Hz\n");
+    if (FUENTE_ENTRADA == Fuente::ADC)
+        printf("Fondo: mantener silencio con micrófono conectado ~3 s; esperar fondo listo antes de reproducir.\n");
 
     // Un único 0x00 en UART1. Si el emisor se reinicia a mitad de un paquete, ese paquete
     // queda cortado sin su 0x00; el receptor juntaría esos restos con el primer paquete de la
@@ -457,7 +572,10 @@ extern "C" void app_main(void)
         if (duracion > v_procesamiento_max) v_procesamiento_max = duracion;
 
         leer_consola();
+        const bool capturando_fondo = !diagnostico_fondo().listo;
         const auto& diagnostico = diagnostico_procesar(x, muestra_inicial);
+        if (capturando_fondo && diagnostico_fondo().listo)
+            printf(">> fondo listo | RMS %.6g | puede reproducir\n", diagnostico_fondo().rms);
         if (diagnostico.tiempo_us > v_analisis_max) v_analisis_max = diagnostico.tiempo_us;
         uint16_t flags_analisis = 0;
         if (diagnostico.parcial) flags_analisis |= FLAG_VENTANA_PARCIAL;
@@ -531,7 +649,7 @@ extern "C" void app_main(void)
             ContadoresAdc contadores_resumen;
             printf("#%04lu t=%.1fs | ", (unsigned long)++numero_resumen,
                    esp_timer_get_time() / 1000000.0);
-            if (vista == Vista::DIAG) {
+            if (vista == Vista::DIAG || vista == Vista::DEBUG) {
                 ResumenAdc adc;
                 if (FUENTE_ENTRADA == Fuente::ADC) {
                     adc = entrada_adc_resumen();
@@ -542,6 +660,15 @@ extern "C" void app_main(void)
                     contadores_resumen.desbordes_pool - desbordes_previos,
                     overruns - overruns_previos,
                     contadores_resumen.saturaciones - saturaciones_previas);
+                if (vista == Vista::DEBUG) {
+                    imprimir_debug();
+                    if (FUENTE_ENTRADA == Fuente::ADC) {
+                        printf("DEBUG ADC intervalo | crudo %u-%u | mV %d-%d | saturaciones nuevas %lu\n",
+                               static_cast<unsigned>(adc.x.crudo_min), static_cast<unsigned>(adc.x.crudo_max),
+                               adc.x.mv_min, adc.x.mv_max,
+                               (unsigned long)(contadores_resumen.saturaciones - saturaciones_previas));
+                    }
+                }
             } else {
                 imprimir_diagnostico(diagnostico_resultado());
                 printf("análisis max %lu us\n", (unsigned long)v_analisis_max);

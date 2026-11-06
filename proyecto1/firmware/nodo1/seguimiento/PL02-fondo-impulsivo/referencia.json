@@ -1,0 +1,18 @@
+{
+  "rama": "nodo1-debug-ampliado",
+  "HEAD": "3b741d186159d6f82929ae4012cef746ff282ce5",
+  "sha256_antes": {
+    "src/diagnostico.cpp": "9cbf2fe4899bb053f72325e466a3f33edd5f3c5ec1a4efbebb84cb4019be0350",
+    "src/diagnostico.h": "42bb8693290ad2e8365205f9d5db921a2b3f739924f7b66e6aaf29c65db41e21",
+    "src/main.cpp": "2fee224f156026fdaac41690ce78e115817268e40dcee244f6042fbae8d7a0f0",
+    "README.md": "e46a3af4fe216d2b99e8f4aa90e1253512206882bd20f776c04ec3c5776532ae",
+    "PLAN_CORRECCION_DIAGNOSTICO.md": "b12b6cbfc0b1f13f65c7ea3ee0442a4ea8f35d853ac4958ef88ef425a2b7390e"
+  },
+  "sha256_despues": {
+    "src/diagnostico.cpp": "c524fec715e2c9977b5dbe641151f80690a5a4cd5525a865d0b752604d410505",
+    "src/diagnostico.h": "b2eed3476c9c04850d0a1f429e517f559dc824341857499e43ec80e85bf75ff3",
+    "src/main.cpp": "fa08176646b6640baa22f115d135d9140a397f911eb0fa08cac5c30146bdc278",
+    "README.md": "ce2c9e953fb72009d101f50a4e025fff8e39884640164ed2824f6e9ea7414024",
+    "PLAN_CORRECCION_DIAGNOSTICO.md": "a501a518be8752b6c9452d32ef1b5e704b1a18d3bc8890730abc1d95ec91ae98"
+  }
+}

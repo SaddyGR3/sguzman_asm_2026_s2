@@ -23,6 +23,8 @@ struct Pico {
 struct Familia {
     int armonicos = 0;
     double suma = 0.0;
+    double porcentaje = 0.0;
+    bool valida = false;
     Pico fuerte;
 };
 
@@ -66,9 +68,24 @@ static EstadoRed red_50, red_60;
 static EstadoAncha ancha;
 static EstadoLimitada limitada;
 static ResultadoDiagnostico resultado;
+static bool debug_activado = false;
+static DiagnosticoDebug debug;
+static FondoDiagnostico fondo;
+static float fondo_potencia[N / 2 + 1], fondo_piso2[N / 2 + 1];
+static double fondo_temporal2 = 0.0, exceso_fuera = 0.0, exceso_piso_fuera = 0.0;
+static float rms_bloque = 0.0f, pico_bloque = 0.0f;
+static float rms_cortos[H / DIAG_SUBBLOQUE];
+static unsigned subbloques_fuertes = 0;
+static float razon_rafaga = 0.0f;
+static bool impulso_candidato = false;
+// PL02: máximos temporales medidos durante la misma captura de fondo.
+static float fondo_cortos[DIAG_FONDO_BLOQUES], fondo_picos[DIAG_FONDO_BLOQUES];
+static float corto_max = 0.0f, corto_min_fondo = 0.0f, pico_min_fondo = 0.0f;
+static bool impulso_sobre_fondo = false, impulso_rechazado_fondo = false;
 
 static void reiniciar_clasificacion()
 {
+    debug = DiagnosticoDebug{};
     tonal = EstadoTonal{};
     red_50 = red_60 = EstadoRed{};
     ancha = EstadoAncha{};
@@ -92,7 +109,33 @@ static bool maximo(int bin, float umbral)
 {
     return !protegido(bin) && magnitudes[bin] >= magnitudes[bin - 1] &&
         magnitudes[bin] >= magnitudes[bin + 1] &&
-        magnitudes[bin] > umbral * fmaxf(piso[bin], EPSILON);
+        magnitudes[bin] > umbral * fmaxf(piso[bin], EPSILON) &&
+        static_cast<double>(magnitudes[bin]) * magnitudes[bin] >
+            umbrales.fondo * umbrales.fondo * fondo_potencia[bin];
+}
+
+static double exceso(int bin)
+{
+    return std::max(0.0, static_cast<double>(magnitudes[bin]) * magnitudes[bin] - fondo_potencia[bin]);
+}
+
+static double exceso_piso(int bin)
+{
+    return std::max(0.0, static_cast<double>(piso[bin]) * piso[bin] - fondo_piso2[bin]);
+}
+
+static double energia_pico(int bin, int desde, int hasta)
+{
+    double energia = 0.0;
+    for (int k = std::max(desde, bin - 2); k <= std::min(hasta, bin + 2); ++k)
+        if (!protegido(k)) energia += exceso(k);
+    return energia;
+}
+
+static bool piso_sobre_fondo(int bin)
+{
+    return static_cast<double>(piso[bin]) * piso[bin] >
+        umbrales.fondo * umbrales.fondo * fmaxf(fondo_piso2[bin], EPSILON);
 }
 
 static Pico obtener_pico(int bin)
@@ -104,11 +147,31 @@ static Pico obtener_pico(int bin)
     return pico;
 }
 
+static void guardar_pico_debug(GrupoPicosDebug& grupo, int bin)
+{
+    ++grupo.cantidad;
+    int posicion = static_cast<int>(std::min(grupo.cantidad, static_cast<unsigned>(DIAG_DEBUG_MAX_PICOS))) - 1;
+    if (grupo.cantidad > DIAG_DEBUG_MAX_PICOS && magnitudes[bin] <= grupo.picos[posicion].magnitud) return;
+    while (posicion > 0 && magnitudes[bin] > grupo.picos[posicion - 1].magnitud) {
+        grupo.picos[posicion] = grupo.picos[posicion - 1];
+        --posicion;
+    }
+    grupo.picos[posicion] = {espectro_bin_a_hz(bin, FS), magnitudes[bin], piso[bin]};
+}
+
 static float contraste(const Pico& pico)
 {
     // La razón se forma en double para evitar desbordes con magnitudes extremas.
     const double razon = static_cast<double>(fmaxf(pico.magnitud, EPSILON)) / fmaxf(pico.piso, EPSILON);
     return static_cast<float>(20.0 * log10(razon));
+}
+
+static void registrar_medida_debug(MedidaDebug& medida, float valor)
+{
+    medida.actual = std::isfinite(valor) ? valor : -1.0f;
+    if (medida.actual < 0.0f) return;
+    if (medida.minimo < 0.0f || valor < medida.minimo) medida.minimo = valor;
+    if (medida.maximo < 0.0f || valor > medida.maximo) medida.maximo = valor;
 }
 
 // El RMS y la cresta pertenecen al bloque actual de 512 muestras. Una mitad
@@ -118,21 +181,66 @@ static bool incorporar_bloque(const float* x)
     double cuadrados = 0.0;
     float absoluto = 0.0f;
     bool valido = true;
+    double corto = 0.0;
     for (int j = 0; j < H; ++j) {
         if (!std::isfinite(x[j])) {
             valido = false;
-            continue;
+        } else {
+            cuadrados += static_cast<double>(x[j]) * x[j];
+            corto += static_cast<double>(x[j]) * x[j];
+            absoluto = fmaxf(absoluto, fabsf(x[j]));
+            if (fabsf(x[j]) >= 0.999f) valido = false;
         }
-        cuadrados += static_cast<double>(x[j]) * x[j];
-        absoluto = fmaxf(absoluto, fabsf(x[j]));
+        if ((j + 1) % DIAG_SUBBLOQUE == 0) {
+            rms_cortos[j / DIAG_SUBBLOQUE] = static_cast<float>(sqrt(corto / DIAG_SUBBLOQUE));
+            corto = 0.0;
+        }
     }
     float* destino = historial + mitad * H;
     if (valido) memcpy(destino, x, H * sizeof(float));
     else memset(destino, 0, H * sizeof(float));
     mitades_validas[mitad] = valido;
     const float rms = valido ? static_cast<float>(sqrt(cuadrados / H)) : 0.0f;
+    rms_bloque = rms;
+    pico_bloque = valido ? absoluto : 0.0f;
     resultado.factor_cresta = rms > DIAG_RMS_MINIMO ? absoluto / rms : 0.0f;
+    if (debug_activado) {
+        registrar_medida_debug(debug.rms, valido ? rms : -1.0f);
+        registrar_medida_debug(debug.pico_temporal, valido ? absoluto : -1.0f);
+        registrar_medida_debug(debug.cresta, valido ? resultado.factor_cresta : -1.0f);
+    }
     return valido && rms > DIAG_RMS_MINIMO;
+}
+
+static void actualizar_fondo(bool ventana_valida)
+{
+    if (fondo.listo) return;
+    if (fondo.espera) {
+        --fondo.espera;
+        return;
+    }
+    if (!ventana_valida) {
+        // Se exige una captura continua válida. No aceptar una referencia parcial.
+        diagnostico_calibrar_fondo();
+        return;
+    }
+    fondo_temporal2 += static_cast<double>(rms_bloque) * rms_bloque;
+    fondo_cortos[fondo.bloques] = *std::max_element(rms_cortos, rms_cortos + H / DIAG_SUBBLOQUE);
+    fondo_picos[fondo.bloques] = pico_bloque;
+    for (int k = 0; k <= N / 2; ++k) {
+        fondo_potencia[k] += magnitudes[k] * magnitudes[k] / DIAG_FONDO_BLOQUES;
+        fondo_piso2[k] += piso[k] * piso[k] / DIAG_FONDO_BLOQUES;
+    }
+    if (++fondo.bloques == DIAG_FONDO_BLOQUES) {
+        fondo.rms = static_cast<float>(sqrt(fondo_temporal2 / DIAG_FONDO_BLOQUES));
+        std::sort(fondo_cortos, fondo_cortos + DIAG_FONDO_BLOQUES);
+        std::sort(fondo_picos, fondo_picos + DIAG_FONDO_BLOQUES);
+        // Rango más cercano superior: ceil(0.95 * 32) - 1 = 30.
+        constexpr unsigned INDICE = (DIAG_FONDO_PERCENTIL * DIAG_FONDO_BLOQUES + 99) / 100 - 1;
+        fondo.corto_p95 = fondo_cortos[INDICE];
+        fondo.pico_p95 = fondo_picos[INDICE];
+        fondo.listo = true;
+    }
 }
 
 static float referencia_global(int desde, int hasta)
@@ -163,10 +271,28 @@ static Familia buscar_familia(int base, int desde, int hasta, bool* usados)
         // Un máximo por armónico y cada máximo una sola vez por familia.
         if (elegido < 0) continue;
         usados[elegido] = true;
-        ++familia.armonicos;
-        familia.suma += magnitudes[elegido];
         if (familia.fuerte.bin < 0 || magnitudes[elegido] > familia.fuerte.magnitud)
             familia.fuerte = obtener_pico(elegido);
+    }
+    unsigned brutos = 0;
+    double energia = 0.0;
+    for (int k = desde; k <= hasta; ++k) {
+        if (!usados[k]) continue;
+        ++brutos;
+        if (magnitudes[k] < familia.fuerte.magnitud * umbrales.red_rel / 100.0f) {
+            usados[k] = false;
+            continue;
+        }
+        ++familia.armonicos;
+        familia.suma += magnitudes[k];
+        energia += energia_pico(k, desde, hasta);
+        if (debug_activado) guardar_pico_debug(base == 50 ? debug.red_50 : debug.red_60, k);
+    }
+    familia.porcentaje = exceso_fuera > EPSILON ? 100.0 * energia / exceso_fuera : 0.0;
+    familia.valida = familia.armonicos >= ARMONICOS_MINIMOS && familia.porcentaje >= umbrales.red_pct;
+    if (debug_activado) {
+        if (base == 50) debug.armonicos_brutos_50 = brutos;
+        else debug.armonicos_brutos_60 = brutos;
     }
     return familia;
 }
@@ -175,9 +301,10 @@ static Pico buscar_tonal(int desde, int hasta, const Familia& f50, const Familia
 {
     Pico candidato;
     for (int k = desde; k <= hasta; ++k) {
-        if ((f50.armonicos >= ARMONICOS_MINIMOS && picos_50[k]) ||
-            (f60.armonicos >= ARMONICOS_MINIMOS && picos_60[k])) continue;
-        if (maximo(k, umbrales.tonal) && magnitudes[k] > candidato.magnitud)
+        if ((f50.valida && picos_50[k]) || (f60.valida && picos_60[k])) continue;
+        if (maximo(k, umbrales.tonal) && exceso_fuera > EPSILON &&
+            100.0 * energia_pico(k, desde, hasta) >= umbrales.tonal_pct * exceso_fuera &&
+            magnitudes[k] > candidato.magnitud)
             candidato = obtener_pico(k);
     }
     return candidato;
@@ -207,14 +334,14 @@ static void persistir_tonal(const Pico& candidato)
 
 static void persistir_red(EstadoRed& estado, const Familia& candidata)
 {
-    if (candidata.armonicos >= ARMONICOS_MINIMOS) {
+    if (candidata.valida) {
         estado.entradas = std::min(estado.entradas + 1, CONFIRMACIONES);
         estado.ausencias = 0;
-        if (estado.entradas >= CONFIRMACIONES || estado.publicada.armonicos >= ARMONICOS_MINIMOS)
+        if (estado.entradas >= CONFIRMACIONES || estado.publicada.valida)
             estado.publicada = candidata;
     } else {
         estado.entradas = 0;
-        if (estado.publicada.armonicos >= ARMONICOS_MINIMOS && ++estado.ausencias >= RETIRADA) {
+        if (estado.publicada.valida && ++estado.ausencias >= RETIRADA) {
             estado.publicada = Familia{};
             estado.ausencias = 0;
         }
@@ -226,13 +353,20 @@ static bool detectar_ancha(int desde, int hasta, float referencia)
     int ocupados = 0;
     double suma = 0.0, logaritmos = 0.0;
     for (int k = desde; k <= hasta; ++k) {
-        if (piso[k] > DIAG_FRACCION_PISO * referencia) ++ocupados;
+        if (piso[k] > DIAG_FRACCION_PISO * referencia && piso_sobre_fondo(k)) ++ocupados;
+        // PL01: el fondo decide actividad y cobertura, no la forma espectral.
+        // Restarlo aquí crea ceros que hunden la media geométrica de la planitud.
         suma += piso[k];
         logaritmos += log(fmaxf(piso[k], EPSILON));
     }
     const int cantidad = hasta - desde + 1;
     const double media = suma / cantidad;
     const double planitud = exp(logaritmos / cantidad) / std::max(media, static_cast<double>(EPSILON));
+    if (debug_activado) {
+        debug.ancha_evaluada = true;
+        registrar_medida_debug(debug.ocupacion, 100.0f * ocupados / cantidad);
+        registrar_medida_debug(debug.planitud, static_cast<float>(planitud));
+    }
     return ocupados >= DIAG_OCUPACION_MINIMA * cantidad && planitud >= DIAG_PLANITUD_MINIMA;
 }
 
@@ -240,6 +374,9 @@ static void elegir_region(const Region& candidata, Region& mejor)
 {
     // El recorrido ascendente conserva la menor frecuencia inicial en un empate.
     if (candidata.inicio >= 0 && candidata.fin - candidata.inicio + 1 >= ANCHURA_MINIMA &&
+        (candidata.fin - candidata.inicio + 1) * FS / N <= DIAG_ANCHURA_MAXIMA_HZ &&
+        exceso_piso_fuera > EPSILON &&
+        100.0 * candidata.energia >= umbrales.region_pct * exceso_piso_fuera &&
         (mejor.inicio < 0 || candidata.energia > mejor.energia)) mejor = candidata;
 }
 
@@ -255,10 +392,10 @@ static Region buscar_limitada(int desde, int hasta, float referencia)
             actual = Region{};
             huecos = 0;
             energia_hueco = 0.0;
-        } else if (piso[k] > umbral) {
+        } else if (piso[k] > umbral && piso_sobre_fondo(k)) {
             if (actual.inicio < 0) actual.inicio = k;
             actual.fin = k;
-            actual.energia += energia_hueco + static_cast<double>(magnitudes[k]) * magnitudes[k];
+            actual.energia += energia_hueco + exceso_piso(k);
             huecos = 0;
             energia_hueco = 0.0;
         } else if (actual.inicio >= 0) {
@@ -267,7 +404,7 @@ static Region buscar_limitada(int desde, int hasta, float referencia)
                 actual = Region{};
                 huecos = 0;
                 energia_hueco = 0.0;
-            } else energia_hueco += static_cast<double>(magnitudes[k]) * magnitudes[k];
+            } else energia_hueco += exceso_piso(k);
         }
     }
     elegir_region(actual, mejor);
@@ -318,7 +455,31 @@ static void persistir_limitada(const Region& candidata)
 
 static bool actualizar_impulsivo(bool activo)
 {
-    impulsos[posicion_impulso] = activo && resultado.factor_cresta > umbrales.impulsivo;
+    subbloques_fuertes = 0;
+    razon_rafaga = 0.0f;
+    impulso_candidato = false;
+    corto_max = corto_min_fondo = pico_min_fondo = 0.0f;
+    impulso_sobre_fondo = impulso_rechazado_fondo = false;
+    if (activo && fondo.listo) {
+        // Se puede ordenar: solo interesa duración total, no el orden de segmentos.
+        constexpr int CANTIDAD = H / DIAG_SUBBLOQUE;
+        std::sort(rms_cortos, rms_cortos + CANTIDAD);
+        const float mediana = 0.5f * (rms_cortos[CANTIDAD / 2 - 1] + rms_cortos[CANTIDAD / 2]);
+        const float base = fmaxf(fmaxf(mediana, fondo.rms), DIAG_RMS_MINIMO);
+        const float umbral = resultado.factor_cresta > umbrales.impulsivo
+            ? fminf(umbrales.rafaga, 2.0f) : umbrales.rafaga;
+        razon_rafaga = rms_cortos[CANTIDAD - 1] / base;
+        for (float rms : rms_cortos) if (rms > umbral * base) ++subbloques_fuertes;
+        const bool candidato_contraste = subbloques_fuertes >= 1 && subbloques_fuertes <= DIAG_SUBBLOQUES_MAX &&
+            resultado.factor_cresta > 3.0f && pico_bloque > umbrales.pico_fondo * fmaxf(fondo.rms, DIAG_RMS_MINIMO);
+        corto_max = rms_cortos[CANTIDAD - 1];
+        corto_min_fondo = DIAG_MARGEN_TRANSITORIOS * fondo.corto_p95;
+        pico_min_fondo = DIAG_MARGEN_TRANSITORIOS * fondo.pico_p95;
+        impulso_sobre_fondo = corto_max > corto_min_fondo && pico_bloque > pico_min_fondo;
+        impulso_candidato = candidato_contraste && impulso_sobre_fondo;
+        impulso_rechazado_fondo = candidato_contraste && !impulso_sobre_fondo;
+    }
+    impulsos[posicion_impulso] = impulso_candidato;
     posicion_impulso = (posicion_impulso + 1) % HISTORIA_IMPULSIVA;
     int positivos = 0;
     for (bool impulso : impulsos) if (impulso) ++positivos;
@@ -329,14 +490,15 @@ static const Familia& elegir_red()
 {
     const Familia& a = red_50.publicada;
     const Familia& b = red_60.publicada;
-    if (b.armonicos > a.armonicos || (b.armonicos == a.armonicos && b.suma > a.suma)) return b;
+    if (b.valida && (!a.valida || b.armonicos > a.armonicos ||
+        (b.armonicos == a.armonicos && b.suma > a.suma))) return b;
     return a;
 }
 
 static void publicar(bool impulsivo)
 {
     const Familia& red = elegir_red();
-    if (tonal.publicado.bin >= 0 || red.armonicos >= ARMONICOS_MINIMOS) {
+    if (tonal.publicado.bin >= 0 || red.valida) {
         const bool es_tonal = tonal.publicado.bin >= 0;
         const Pico& pico = es_tonal ? tonal.publicado : red.fuerte;
         resultado.tipo_ruido = es_tonal ? 1 : 2;
@@ -349,18 +511,32 @@ static void publicar(bool impulsivo)
         resultado.filtro_n2 = 1;
         resultado.metodo = 2;
     } else if (ancha.publicada || limitada.publicada.inicio >= 0) {
-        resultado.tipo_ruido = ancha.publicada ? 3 : 4;
+        const bool es_limitada = limitada.publicada.inicio >= 0;
+        resultado.tipo_ruido = es_limitada ? 4 : 3;
         resultado.filtro_n2 = 1;
         resultado.metodo = 2;
-        resultado.banda_detectada_lo = ancha.publicada ? ANALISIS_LO :
+        resultado.banda_detectada_lo = !es_limitada ? ANALISIS_LO :
             espectro_bin_a_hz(limitada.publicada.inicio, FS);
-        resultado.banda_detectada_hi = ancha.publicada ? ANALISIS_HI :
+        resultado.banda_detectada_hi = !es_limitada ? ANALISIS_HI :
             espectro_bin_a_hz(limitada.publicada.fin, FS);
     }
 }
 } // espacio de nombres
 
-void diagnostico_iniciar()
+void diagnostico_calibrar_fondo()
+{
+    fondo = FondoDiagnostico{};
+    fondo_temporal2 = 0.0;
+    memset(fondo_potencia, 0, sizeof(fondo_potencia));
+    memset(fondo_piso2, 0, sizeof(fondo_piso2));
+    memset(fondo_cortos, 0, sizeof(fondo_cortos));
+    memset(fondo_picos, 0, sizeof(fondo_picos));
+    reiniciar_clasificacion();
+}
+
+const FondoDiagnostico& diagnostico_fondo() { return fondo; }
+
+void diagnostico_iniciar(bool calibrar_fondo)
 {
     memset(historial, 0, sizeof(historial));
     memset(mitades_validas, 0, sizeof(mitades_validas));
@@ -368,7 +544,11 @@ void diagnostico_iniciar()
     primera = true;
     umbrales = UmbralesDiagnostico{};
     resultado = ResultadoDiagnostico{};
-    reiniciar_clasificacion();
+    diagnostico_calibrar_fondo();
+    if (!calibrar_fondo) {
+        fondo.listo = true;
+        fondo.espera = 0;
+    }
 }
 
 void diagnostico_banda(float lo, float hi)
@@ -393,10 +573,58 @@ bool diagnostico_ajustar_umbral(const char* nombre, float valor)
     else if (strcmp(nombre, "red") == 0) destino = &umbrales.red;
     else if (strcmp(nombre, "impulsivo") == 0) destino = &umbrales.impulsivo;
     else if (strcmp(nombre, "banda") == 0) destino = &umbrales.banda;
+    else if (strcmp(nombre, "fondo") == 0) destino = &umbrales.fondo;
+    else if (strcmp(nombre, "tonal_pct") == 0) destino = &umbrales.tonal_pct;
+    else if (strcmp(nombre, "red_rel") == 0) destino = &umbrales.red_rel;
+    else if (strcmp(nombre, "red_pct") == 0) destino = &umbrales.red_pct;
+    else if (strcmp(nombre, "region_pct") == 0) destino = &umbrales.region_pct;
+    else if (strcmp(nombre, "rafaga") == 0) destino = &umbrales.rafaga;
+    else if (strcmp(nombre, "pico_fondo") == 0) destino = &umbrales.pico_fondo;
     if (destino == nullptr) return false;
     *destino = valor;
     reiniciar_clasificacion();
     return true;
+}
+
+void diagnostico_debug_activar(bool activar)
+{
+    debug_activado = activar;
+    debug = DiagnosticoDebug{};
+}
+
+const DiagnosticoDebug& diagnostico_debug() { return debug; }
+
+static void reiniciar_rango_debug(MedidaDebug& medida)
+{
+    // El último valor pertenece al bloque mostrado; min/max son del intervalo.
+    medida.minimo = medida.maximo = -1.0f;
+}
+
+void diagnostico_debug_reiniciar_contadores()
+{
+    debug.bloques = debug.supera_cresta = debug.confirma_impulsivo = 0;
+    debug.candidatas_impulsivo = 0;
+    debug.impulsos_rechazados_fondo = 0;
+    for (auto& cantidad : debug.tipos) cantidad = 0;
+    debug.candidatas_ancha = debug.confirmadas_ancha = 0;
+    debug.candidatas_limitada = debug.confirmadas_limitada = 0;
+    reiniciar_rango_debug(debug.rms);
+    reiniciar_rango_debug(debug.pico_temporal);
+    reiniciar_rango_debug(debug.cresta);
+    reiniciar_rango_debug(debug.ocupacion);
+    reiniciar_rango_debug(debug.planitud);
+}
+
+static EnergiaPicoDebug medir_energia_pico_debug(int bin, int desde, int hasta)
+{
+    EnergiaPicoDebug medida;
+    if (bin < desde || bin > hasta) return medida;
+    medida.hz = espectro_bin_a_hz(bin, FS);
+    for (int k = std::max(desde, bin - 2); k <= std::min(hasta, bin + 2); ++k)
+        medida.energia += static_cast<double>(magnitudes[k]) * magnitudes[k];
+    if (debug.energia_analisis > 0.0)
+        medida.porcentaje = 100.0 * medida.energia / debug.energia_analisis;
+    return medida;
 }
 
 const ResultadoDiagnostico& diagnostico_procesar(const float* x, uint64_t first_sample)
@@ -404,6 +632,15 @@ const ResultadoDiagnostico& diagnostico_procesar(const float* x, uint64_t first_
     const int64_t comienzo = esp_timer_get_time();
     resultado = ResultadoDiagnostico{};
     const bool activo = incorporar_bloque(x);
+    if (debug_activado) {
+        debug.red_50 = GrupoPicosDebug{};
+        debug.red_60 = GrupoPicosDebug{};
+        debug.maximos = GrupoPicosDebug{};
+        debug.armonicos_brutos_50 = debug.armonicos_brutos_60 = 0;
+        debug.activo = activo;
+        debug.ancha_evaluada = false;
+        debug.ocupacion.actual = debug.planitud.actual = -1.0f;
+    }
     resultado.parcial = primera;
     resultado.inicio_ventana = primera ? 0 : first_sample - H;
     // Primera: bloque + ceros a la derecha. Después: mitad anterior + actual.
@@ -428,14 +665,24 @@ const ResultadoDiagnostico& diagnostico_procesar(const float* x, uint64_t first_
     const int desde = static_cast<int>(ceilf(espectro_hz_a_bin(ANALISIS_LO, FS)));
     const int hasta = static_cast<int>(floorf(espectro_hz_a_bin(ANALISIS_HI, FS)));
     const float referencia = referencia_global(desde, hasta);
+    const bool calibrando = !fondo.listo;
+    actualizar_fondo(ventana_valida);
+    const bool nivel_suficiente = !calibrando && activo &&
+        rms_bloque > umbrales.fondo * fmaxf(fondo.rms, DIAG_RMS_MINIMO);
+    exceso_fuera = exceso_piso_fuera = 0.0;
+    for (int k = desde; k <= hasta; ++k) {
+        if (protegido(k)) continue;
+        exceso_fuera += exceso(k);
+        exceso_piso_fuera += exceso_piso(k);
+    }
 
     Pico candidato;
     Familia familia_50, familia_60;
     Region region;
     bool banda_ancha = false;
-    if (ventana_valida) {
+    if (ventana_valida && !calibrando) {
         completos = std::min(completos + 1, CONFIRMACIONES);
-        if (activo) {
+        if (nivel_suficiente) {
             familia_50 = buscar_familia(50, desde, hasta, picos_50);
             familia_60 = buscar_familia(60, desde, hasta, picos_60);
             candidato = buscar_tonal(desde, hasta, familia_50, familia_60);
@@ -450,7 +697,7 @@ const ResultadoDiagnostico& diagnostico_procesar(const float* x, uint64_t first_
     persistir_red(red_60, familia_60);
     persistir_ancha(banda_ancha);
     persistir_limitada(region);
-    const bool impulsivo = actualizar_impulsivo(activo);
+    const bool impulsivo = actualizar_impulsivo(activo && ventana_valida && !calibrando);
     resultado.calentamiento = completos < CONFIRMACIONES ? 1 : 0;
     if (candidato.bin >= 0) {
         resultado.magnitud_candidato = candidato.magnitud;
@@ -458,6 +705,90 @@ const ResultadoDiagnostico& diagnostico_procesar(const float* x, uint64_t first_
         resultado.contraste_db = contraste(candidato);
     }
     publicar(impulsivo);
+    if (debug_activado) {
+        debug.ventana_valida = ventana_valida;
+        debug.nivel_suficiente = nivel_suficiente;
+        debug.exceso_fuera = exceso_fuera;
+        debug.tonal_porcentaje = 0.0;
+        debug.pico_evaluado_hz = -1.0f;
+        debug.red_porcentaje_50 = familia_50.porcentaje;
+        debug.red_porcentaje_60 = familia_60.porcentaje;
+        debug.region_porcentaje = region.inicio >= 0 && exceso_piso_fuera > EPSILON
+            ? 100.0 * region.energia / exceso_piso_fuera : 0.0;
+        debug.subbloques_fuertes = subbloques_fuertes;
+        debug.razon_rafaga = razon_rafaga;
+        debug.impulso_candidato = impulso_candidato;
+        debug.corto_max = corto_max;
+        debug.corto_min_fondo = corto_min_fondo;
+        debug.pico_min_fondo = pico_min_fondo;
+        debug.impulso_sobre_fondo = impulso_sobre_fondo;
+        debug.referencia_global = referencia;
+        debug.umbral_limitada = umbrales.banda * fmaxf(referencia, EPSILON);
+        debug.ancha_candidata = banda_ancha;
+        debug.ancha_confirmada = ancha.publicada;
+        debug.confirmaciones_ancha = ancha.entradas;
+        debug.ausencias_ancha = ancha.ausencias;
+        debug.limitada_candidata_lo = region.inicio >= 0 ? espectro_bin_a_hz(region.inicio, FS) : -1.0f;
+        debug.limitada_candidata_hi = region.fin >= 0 ? espectro_bin_a_hz(region.fin, FS) : -1.0f;
+        debug.limitada_publicada_lo = limitada.publicada.inicio >= 0
+            ? espectro_bin_a_hz(limitada.publicada.inicio, FS) : -1.0f;
+        debug.limitada_publicada_hi = limitada.publicada.fin >= 0
+            ? espectro_bin_a_hz(limitada.publicada.fin, FS) : -1.0f;
+        debug.energia_region = region.energia;
+        debug.confirmaciones_limitada = limitada.entradas;
+        debug.ausencias_limitada = limitada.ausencias;
+        debug.energia_analisis = 0.0;
+        if (ventana_valida) {
+            for (int k = desde; k <= hasta; ++k)
+                debug.energia_analisis += static_cast<double>(magnitudes[k]) * magnitudes[k];
+        }
+        const int bin_publicado = resultado.tipo_ruido == 1 || resultado.tipo_ruido == 2
+            ? static_cast<int>(lroundf(espectro_hz_a_bin(resultado.pico_hz, FS))) : -1;
+        debug.energia_publicado = ventana_valida ? medir_energia_pico_debug(bin_publicado, desde, hasta)
+                                                : EnergiaPicoDebug{};
+        debug.energia_candidato = ventana_valida ? medir_energia_pico_debug(candidato.bin, desde, hasta)
+                                                : EnergiaPicoDebug{};
+        debug.candidato_tonal_hz = candidato.bin >= 0 ? espectro_bin_a_hz(candidato.bin, FS) : -1.0f;
+        // Estos máximos no excluyen las familias de red: muestran también los
+        // picos que el clasificador descartó como candidatos tonales independientes.
+        if (ventana_valida && activo && !calibrando) {
+            int mas_fuerte = -1;
+            for (int k = desde; k <= hasta; ++k) {
+                if (!maximo(k, umbrales.tonal)) continue;
+                guardar_pico_debug(debug.maximos, k);
+                if (mas_fuerte < 0 || magnitudes[k] > magnitudes[mas_fuerte]) mas_fuerte = k;
+            }
+            if (mas_fuerte >= 0) {
+                debug.pico_evaluado_hz = espectro_bin_a_hz(mas_fuerte, FS);
+                debug.tonal_porcentaje = exceso_fuera > EPSILON
+                    ? 100.0 * energia_pico(mas_fuerte, desde, hasta) / exceso_fuera : 0.0;
+            }
+        }
+        if (familia_50.valida && red_50.publicada.valida)
+            debug.publicada_50 = debug.red_50;
+        else if (!red_50.publicada.valida) debug.publicada_50 = GrupoPicosDebug{};
+        if (familia_60.valida && red_60.publicada.valida)
+            debug.publicada_60 = debug.red_60;
+        else if (!red_60.publicada.valida) debug.publicada_60 = GrupoPicosDebug{};
+        debug.confirmaciones_50 = red_50.entradas;
+        debug.confirmaciones_60 = red_60.entradas;
+        debug.ausencias_50 = red_50.ausencias;
+        debug.ausencias_60 = red_60.ausencias;
+        debug.armonicos_publicados_50 = red_50.publicada.armonicos;
+        debug.armonicos_publicados_60 = red_60.publicada.armonicos;
+        debug.familia_elegida = elegir_red().valida
+            ? (&elegir_red() == &red_50.publicada ? 50 : 60) : 0;
+        ++debug.bloques;
+        if (banda_ancha) ++debug.candidatas_ancha;
+        if (ancha.publicada) ++debug.confirmadas_ancha;
+        if (region.inicio >= 0) ++debug.candidatas_limitada;
+        if (limitada.publicada.inicio >= 0) ++debug.confirmadas_limitada;
+        if (activo && resultado.factor_cresta > umbrales.impulsivo) ++debug.supera_cresta;
+        if (impulsivo) ++debug.confirma_impulsivo;
+        if (impulso_candidato) ++debug.candidatas_impulsivo;
+        if (impulso_rechazado_fondo) ++debug.impulsos_rechazados_fondo;
+        ++debug.tipos[resultado.tipo_ruido];
+    }
     resultado.tiempo_us = static_cast<uint32_t>(esp_timer_get_time() - comienzo);
     return resultado;
 }

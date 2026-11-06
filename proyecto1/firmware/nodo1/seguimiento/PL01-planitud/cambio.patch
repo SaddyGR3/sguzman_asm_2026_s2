@@ -1,0 +1,110 @@
+--- a/proyecto1/firmware/nodo1/src/diagnostico.cpp
++++ b/proyecto1/firmware/nodo1/src/diagnostico.cpp
+@@ -342,9 +342,10 @@
+     double suma = 0.0, logaritmos = 0.0;
+     for (int k = desde; k <= hasta; ++k) {
+         if (piso[k] > DIAG_FRACCION_PISO * referencia && piso_sobre_fondo(k)) ++ocupados;
+-        const double residual = sqrt(exceso_piso(k));
+-        suma += residual;
+-        logaritmos += log(std::max(residual, static_cast<double>(EPSILON)));
++        // PL01: el fondo decide actividad y cobertura, no la forma espectral.
++        // Restarlo aquí crea ceros que hunden la media geométrica de la planitud.
++        suma += piso[k];
++        logaritmos += log(fmaxf(piso[k], EPSILON));
+     }
+     const int cantidad = hasta - desde + 1;
+     const double media = suma / cantidad;
+--- a/proyecto1/firmware/nodo1/src/main.cpp
++++ b/proyecto1/firmware/nodo1/src/main.cpp
+@@ -162,7 +162,7 @@
+     printf("DEBUG nivel actual [min,max intervalo] | RMS %.6g [%.6g,%.6g] | pico abs %.6g [%.6g,%.6g] | cresta %.3f [%.3f,%.3f]\n",
+            d.rms.actual, d.rms.minimo, d.rms.maximo, d.pico_temporal.actual, d.pico_temporal.minimo,
+            d.pico_temporal.maximo, d.cresta.actual, d.cresta.minimo, d.cresta.maximo);
+-    printf("DEBUG ancha evaluada %u | ocupación %.2f %% [%.2f,%.2f] mínimo %.0f %% | planitud %.4f [%.4f,%.4f] mínimo %.2f | "
++    printf("DEBUG ancha PL01 evaluada %u | ocupación %.2f %% [%.2f,%.2f] mínimo %.0f %% | planitud piso %.4f [%.4f,%.4f] mínimo %.2f | "
+            "candidata %u confirmada %u confirma %u/3 ausencias %u/3\n",
+            d.ancha_evaluada ? 1u : 0u, d.ocupacion.actual, d.ocupacion.minimo, d.ocupacion.maximo,
+            100.0f * DIAG_OCUPACION_MINIMA, d.planitud.actual, d.planitud.minimo, d.planitud.maximo,
+@@ -207,7 +207,7 @@
+            100.0f * DIAG_OCUPACION_MINIMA, DIAG_FRACCION_PISO, DIAG_PLANITUD_MINIMA);
+     printf(">> razones: fondo %g rafaga %g pico_fondo %g | porcentajes: tonal_pct %g red_rel %g red_pct %g region_pct %g\n",
+            u.fondo, u.rafaga, u.pico_fondo, u.tonal_pct, u.red_rel, u.red_pct, u.region_pct);
+-    printf(">> banda ancha exige elevación sobre fondo; planitud del piso en exceso. Limitada: máximo %g Hz.\n",
++    printf(">> banda ancha PL01 exige elevación sobre fondo; planitud del piso sin resta. Limitada: máximo %g Hz.\n",
+            DIAG_ANCHURA_MAXIMA_HZ);
+     const auto& f = diagnostico_fondo();
+     printf(">> fondo %s | espera %u bloques | captura %u/%u | RMS %.6g\n",
+--- a/proyecto1/firmware/nodo1/README.md
++++ b/proyecto1/firmware/nodo1/README.md
+@@ -109,7 +109,8 @@
+   niveles acústicos. La referencia de fondo se captura por separado y queda fija.
+ - `ancha` muestra ocupación en porcentaje y planitud, ambas con rango del
+   intervalo; junto a ellas aparecen los límites reales usados por el detector.
+-  La ocupación exige elevación sobre el fondo y la planitud usa el piso en exceso.
++  La ocupación exige elevación sobre el fondo; desde PL01 la planitud usa el piso
++  actual sin restarle el fondo. `DEBUG ancha PL01` identifica esta versión.
+   `evaluada` indica si se ejecutó la prueba en el bloque actual. Un valor −1
+   significa medida no disponible; si no hubo evaluaciones, min/max también son −1.
+   `candidata`, `confirmada`, `confirma` y `ausencias` permiten distinguir evidencia
+@@ -251,7 +252,7 @@
+ | Cresta mínima adicional para impulsivo | Mayor que 3 |
+ | Hueco máximo / anchura de región limitada | 2 bins / 8–128 bins (62.5–1000 Hz) |
+ | Ocupación mínima para banda ancha | 80 %, sobre fondo y sobre 0.25 × mediana global |
+-| Planitud mínima del piso en exceso para banda ancha | 0.5 |
++| Planitud mínima del piso actual para banda ancha | 0.5 |
+ 
+ ### Referencia del ambiente y actividad
+ 
+@@ -326,8 +327,12 @@
+ 
+ Ancha analiza todo 100–3000 Hz, incluida la protección. Cuenta bins con piso >
+ 0.25 × mediana global **y** por encima de su fondo aprendido por factor `fondo`.
+-Exige ocupación >=80% y planitud >=0.5 sobre `sqrt(max(piso² − piso_fondo², 0))`.
+-La planitud es la media geométrica / aritmética. Confirma y se retira en tres.
++Exige ocupación >=80% y planitud >=0.5 sobre el **piso actual sin resta**
++(PL01). La planitud es la media geométrica / aritmética. Restar la referencia
++antes de calcularla producía ceros artificiales que rechazaban ruido ancho.
++El fondo sigue siendo obligatorio para actividad y ocupación; su resta se
++conserva para energía de selección tonal, red y limitada. Confirma y se retira
++en tres.
+ 
+ La prioridad completa es **tonal cualificado → red cualificada → impulsivo →
+ limitada → ancha → ninguno**. Una limitada confirmada tiene preferencia frente a
+@@ -403,6 +408,8 @@
+ ## Validación de esta corrección
+ 
+ El plan está en [PLAN_CORRECCION_DIAGNOSTICO.md](PLAN_CORRECCION_DIAGNOSTICO.md).
++El ajuste PL01, la referencia previa y las instrucciones para revertirlo están en
++[seguimiento/PL01-planitud/REGISTRO.md](seguimiento/PL01-planitud/REGISTRO.md).
+ Se revisaron reglas, límites, comandos y conservación de interfaces. No se compiló,
+ no se cargó firmware y no se ejecutaron WAV de `simulacion/` durante este cambio.
+ La clasificación real y los tiempos permanecen pendientes de comprobar en placa.
+--- a/proyecto1/firmware/nodo1/PLAN_CORRECCION_DIAGNOSTICO.md
++++ b/proyecto1/firmware/nodo1/PLAN_CORRECCION_DIAGNOSTICO.md
+@@ -39,7 +39,7 @@
+ 5. **Bandas:** conservar selección local/global y persistencia. Exigir elevación
+    sobre el fondo. Para limitada, anchura entre 8 bins y 1000 Hz y >=35% del exceso
+    de energía del piso fuera de protección. Para ancha, ocupación >=80% de todo
+-   100–3000 Hz y planitud >=0.5 del piso en exceso sobre el fondo. Una limitada
++   100–3000 Hz y planitud >=0.5 del piso actual sin resta (ajuste PL01). Una limitada
+    confirmada tiene preferencia frente a ancha. No inferir regiones protegidas.
+ 6. **Impulsivo:** 16 subbloques de 32 muestras (4 ms). Comparar su RMS con el mayor
+    entre su mediana y el RMS de fondo. Exigir de 1 a 4 subbloques por encima de
+@@ -92,3 +92,17 @@
+   confirmado 2/3. Impulsos repetidos dieron 118 confirmaciones de 119 ventanas.
+ 
+ El README contiene los resultados, límites y la primera comprobación en placa.
++
++## Ajuste PL01: planitud sin resta de fondo
++
++Las corridas acústicas posteriores dieron P1 tipo 1, P2 tipo 4 y P5 correcto,
++pero P3 quedó mayormente tipo 0 incluso con protección 100–3000. El debug mostró
++planitud ~0.09–0.18 en muchos resúmenes, con ocupación frecuentemente >=80%.
++P4 también sigue pendiente (tipo 0 según el usuario); PL01 no corrige impulsivo.
++
++Se reemplaza únicamente la magnitud residual usada para la planitud por el piso
++actual. El fondo conserva su función en actividad y ocupación. Umbrales y resto
++de detectores se conservan. Identificación en consola: `DEBUG ancha PL01`.
++
++Referencia completa anterior, parche incremental reversible, resultados y tabla
++de regresión: [seguimiento/PL01-planitud/REGISTRO.md](seguimiento/PL01-planitud/REGISTRO.md).
