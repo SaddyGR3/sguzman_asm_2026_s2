@@ -109,6 +109,8 @@ al comenzar la reproducción según el diagnóstico guardado (ver más abajo).
 
 ## Ruta espectral
 
+Al arrancar, antes de iniciar la recepción, valida una FFT ESP-DSP de N=256 contra una DFT directa en double (DC y dos tonos fuera de bin, sin ventana): imprime error complejo máximo, relativo respecto al máximo de la DFT, PASS si es finito y menor que 1e-4, y duración total; libera los ~3 KiB temporales y un FAIL se informa sin detener el arranque.
+
 Los pasos **6b-1 y 6b-2** implementan el nodo 3 en esta misma placa, en `src/espectral.*`.
 Reutiliza de `nodo1/src/espectro.cpp` la raíz de Hann periódica, la tabla y las
 llamadas FFT de ESP-DSP. No quita la media antes de la FFT y conserva los valores

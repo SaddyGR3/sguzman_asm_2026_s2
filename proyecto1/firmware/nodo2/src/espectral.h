@@ -14,6 +14,9 @@ struct ConfiguracionEspectral {
 
 // Búferes estáticos compartidos: usar desde una sola tarea, después de iniciar.
 esp_err_t espectral_iniciar();
+// Una vez al arrancar, tras iniciar ESP-DSP y antes de recibir: FFT vs DFT N=256.
+// Imprime errores y duración; libera toda la memoria temporal incluso con FAIL.
+bool espectral_validar_fft();
 // Configurar entre bloques: alfa en 0.5–10 y ganancia mínima en 0–0.5.
 // Si algún valor es inválido, devuelve false sin cambiar la configuración.
 bool espectral_configurar(double alfa, double ganancia_minima);

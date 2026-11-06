@@ -482,6 +482,9 @@ extern "C" void app_main(void)
     filtros_iniciar();
     // Inicializar ESP-DSP antes de reservar la grabación: también usa RAM interna.
     ESP_ERROR_CHECK(espectral_iniciar());
+    // Autoprueba única; no altera N, ventana, estimador ni estados de audio.
+    // FAIL queda visible en consola y no impide diagnosticar el resto de la placa.
+    espectral_validar_fft();
     salida_dac_iniciar();
     recepcion_iniciar(procesar_input, procesar_diag, procesar_control, nueva_sesion_nodo1);
     grabacion_iniciar();
