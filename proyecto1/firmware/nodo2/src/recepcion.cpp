@@ -4,13 +4,14 @@
 #include "driver/uart.h"
 #include "esp_err.h"
 #include "esp_timer.h"
+#include <cmath>
 
 constexpr int TAM_RX_DRIVER = 16384;
 constexpr int64_t AUSENCIA_INPUT_US = 200000;
 constexpr int64_t ERROR_RECIENTE_US = 500000;
 
 static uint8_t lectura[1024];
-static uint8_t trama[CABLE_INPUT];
+static uint8_t trama[TAM_TRAMA];
 static uint8_t decodificado[R_INPUT];
 static size_t acumulados = 0;
 static bool sincronizado = false;
@@ -23,11 +24,18 @@ static int64_t ultimo_input_us = 0;  // al iniciar sirve de referencia para el w
 static int64_t ultimo_error_us = -1;
 static ContadoresRecepcion contadores;
 static void (*al_recibir_input)(const uint8_t*, uint64_t) = nullptr;
+static void (*al_recibir_diag)(const uint8_t*) = nullptr;
+static void (*al_recibir_control)(const uint8_t*) = nullptr;
 static void (*al_cambiar_sesion)() = nullptr;
 
-void recepcion_iniciar(void (*procesar_input)(const uint8_t*, uint64_t), void (*nueva_sesion)())
+void recepcion_iniciar(void (*procesar_input)(const uint8_t*, uint64_t),
+                       void (*procesar_diag)(const uint8_t*),
+                       void (*procesar_control)(const uint8_t*),
+                       void (*nueva_sesion)())
 {
     al_recibir_input = procesar_input;
+    al_recibir_diag = procesar_diag;
+    al_recibir_control = procesar_control;
     al_cambiar_sesion = nueva_sesion;
     crc32_iniciar();
     uart_config_t cfg = {};
@@ -64,6 +72,10 @@ static bool cabecera_valida(const Cabecera& c, size_t n)
     if (c.tipo == TIPO_DIAG) {
         return c.sample_count == 0 && c.format == FORMATO_META &&
                c.channels == 0 && c.payload_bytes == TAM_DIAG;
+    }
+    if (c.tipo == TIPO_CONTROL) {
+        return c.sample_count == 0 && c.format == FORMATO_META &&
+               c.channels == 0 && c.payload_bytes == TAM_CONTROL;
     }
     return false;
 }
@@ -122,8 +134,24 @@ static void procesar_trama()
         tiene_input = true;
         ultimo_input_us = esp_timer_get_time();
         al_recibir_input(decodificado + TAM_CABECERA, c.first_sample);
-    } else {
+    } else if (c.tipo == TIPO_DIAG) {
         ++contadores.diag;
+        al_recibir_diag(decodificado + TAM_CABECERA);
+    } else {
+        const uint8_t* datos = decodificado + TAM_CABECERA;
+        const float banda_lo = get_f32(datos + 24);
+        const float banda_hi = get_f32(datos + 28);
+        const unsigned n = get_u16(datos + 4);
+        if (get_u32(datos) != 8000 || (n != 256 && n != 512 && n != 1024) ||
+            get_u16(datos + 6) != n / 2 || datos[8] != 0 || datos[9] != 1 ||
+            get_u16(datos + 10) != 0 || get_u32(datos + 12) == 0 ||
+            !std::isfinite(banda_lo) || !std::isfinite(banda_hi) ||
+            banda_lo < 100.0f || banda_hi > 3000.0f || banda_lo >= banda_hi) {
+            registrar_error(contadores.err_cabecera);
+            return;
+        }
+        ++contadores.control;
+        al_recibir_control(datos);
     }
 }
 

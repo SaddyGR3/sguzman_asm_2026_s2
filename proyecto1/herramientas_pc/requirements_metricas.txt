@@ -1,0 +1,2 @@
+# Solo para generar gráficos; el parser y el filtro del monitor usan stdlib.
+matplotlib>=3.6,<4

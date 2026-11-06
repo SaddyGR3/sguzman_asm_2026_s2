@@ -1,8 +1,11 @@
 #pragma once
 #include "esp_err.h"
 
-constexpr int ESPECTRAL_N = 1024;
-constexpr int ESPECTRAL_H = ESPECTRAL_N / 2;
+constexpr int ESPECTRAL_N = 1024;  // capacidad máxima, no longitud vigente
+constexpr int ESPECTRAL_H = ESPECTRAL_N / 2;  // capacidad máxima
+bool espectral_cambiar_n(unsigned n);
+unsigned espectral_n();
+unsigned espectral_h();
 
 struct ConfiguracionEspectral {
     float alfa = 3.0f;
@@ -11,13 +14,29 @@ struct ConfiguracionEspectral {
 
 // Búferes estáticos compartidos: usar desde una sola tarea, después de iniciar.
 esp_err_t espectral_iniciar();
+// Una vez al arrancar, tras iniciar ESP-DSP y antes de recibir: FFT vs DFT N=256.
+// Imprime errores y duración; libera toda la memoria temporal incluso con FAIL.
+bool espectral_validar_fft();
 // Configurar entre bloques: alfa en 0.5–10 y ganancia mínima en 0–0.5.
 // Si algún valor es inválido, devuelve false sin cambiar la configuración.
 bool espectral_configurar(double alfa, double ganancia_minima);
 const ConfiguracionEspectral& espectral_configuracion();
 // Limpia audio, estimador y solape al reproducir; conserva los parámetros.
 void espectral_reiniciar();
-// Recibe y entrega H muestras. Resta espectral con retardo de H muestras (64 ms).
+// Recibe y entrega 512 muestras, divididas en saltos del H vigente.
+// Retardo H=N/2: 16, 32 o 64 ms. El transporte conserva su cadencia de 64 ms.
 // Durante el calentamiento del estimador se mantiene ganancia 1.
 // Al terminar, procesar un bloque de ceros para recuperar la última salida.
 void espectral_procesar(const float* entrada, float* salida);
+
+struct EnergiaEspectral {
+    double dentro = 0.0;
+    double fuera = 0.0;
+    double pico = 0.0;
+};
+
+// Analiza N vigente muestras con la misma ventana y FFT, sin tocar estimador ni solape.
+// Solo llamar después de espectral_procesar(), nunca desde otra tarea.
+// Energía unilateral normalizada por N; el pico incluye el bin más cercano ±2.
+EnergiaEspectral espectral_medir(const float* muestras, double banda_lo,
+                                double banda_hi, double pico_hz);
