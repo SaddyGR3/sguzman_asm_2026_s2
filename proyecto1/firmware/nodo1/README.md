@@ -435,11 +435,9 @@ O con los botones de PlatformIO en VS Code.
 
 ## Validación de esta corrección
 
-El plan está en [PLAN_CORRECCION_DIAGNOSTICO.md](PLAN_CORRECCION_DIAGNOSTICO.md).
-El ajuste PL01, la referencia previa y las instrucciones para revertirlo están en
-[seguimiento/PL01-planitud/REGISTRO.md](seguimiento/PL01-planitud/REGISTRO.md).
-PL02 y su reversión independiente están en
-[seguimiento/PL02-fondo-impulsivo/REGISTRO.md](seguimiento/PL02-fondo-impulsivo/REGISTRO.md).
+Los resultados siguientes documentan comprobaciones históricas de las correcciones
+PL01 y PL02. Los planes, respaldos y scripts auxiliares de depuración se conservaron
+fuera del repositorio y no forman parte del firmware entregado.
 Se revisaron reglas, límites, comandos y conservación de interfaces. No se compiló,
 no se cargó firmware y no se ejecutaron WAV de `simulacion/` durante este cambio.
 La clasificación real y los tiempos permanecen pendientes de comprobar en placa.
@@ -472,8 +470,8 @@ el parlante, el MAX4466, el circuito ni los tiempos del ESP32.
 
 ### Comprobación independiente de PL02
 
-La referencia reproducible [referencia_numerica.py](seguimiento/PL02-fondo-impulsivo/referencia_numerica.py)
-usa numpy y semilla 20261106. Calibra 32 bloques de fondo sintético con
+La referencia independiente utilizada durante la depuración empleó numpy y semilla
+20261106; su script auxiliar se conserva fuera del repositorio. Calibra 32 bloques de fondo sintético con
 transitorios recurrentes; obtuvo RMS 0.006678, corto P95 0.029373 y pico P95
 0.054152. No usa grabaciones reales ni ejecuta el C++.
 
