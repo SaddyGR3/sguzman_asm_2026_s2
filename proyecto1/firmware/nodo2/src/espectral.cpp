@@ -177,3 +177,30 @@ void espectral_procesar(const float* entrada, float* salida)
         solape[j] = fft[2 * (j + ESPECTRAL_H)] * ESCALA * ventana[j + ESPECTRAL_H];
     }
 }
+
+EnergiaEspectral espectral_medir(const float* muestras, double banda_lo,
+                                double banda_hi, double pico_hz)
+{
+    // El audio de la llamada anterior ya está reconstruido. Se puede reutilizar
+    // fft sin modificar historial, solape, magnitudes ni la historia del ruido.
+    for (int j = 0; j < ESPECTRAL_N; ++j) {
+        fft[2 * j] = muestras[j] * ventana[j];
+        fft[2 * j + 1] = 0.0f;
+    }
+    ESP_ERROR_CHECK(dsps_fft2r_fc32(fft, ESPECTRAL_N));
+    ESP_ERROR_CHECK(dsps_bit_rev_fc32(fft, ESPECTRAL_N));
+    const bool tiene_pico = std::isfinite(pico_hz) && pico_hz >= 100.0 && pico_hz <= 3000.0;
+    const int bin_pico = tiene_pico ? static_cast<int>(std::lround(pico_hz * ESPECTRAL_N / 8000.0)) : -10;
+    EnergiaEspectral energia;
+    for (int k = 0; k <= ESPECTRAL_N / 2; ++k) {
+        const double hz = k * 8000.0 / ESPECTRAL_N;
+        if (hz < 100.0 || hz > 3000.0) continue;
+        const double real = fft[2 * k], imaginaria = fft[2 * k + 1];
+        const double peso = k == 0 || k == ESPECTRAL_N / 2 ? 1.0 : 2.0;
+        const double potencia = peso * (real * real + imaginaria * imaginaria) / ESPECTRAL_N;
+        if (hz >= banda_lo && hz <= banda_hi) energia.dentro += potencia;
+        else energia.fuera += potencia;
+        if (tiene_pico && k >= bin_pico - 2 && k <= bin_pico + 2) energia.pico += potencia;
+    }
+    return energia;
+}

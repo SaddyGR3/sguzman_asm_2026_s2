@@ -15,6 +15,7 @@
 #include "recepcion.h"
 #include "salida_dac.h"
 #include "grabacion.h"
+#include "metricas.h"
 
 enum class ModoFiltro { SIN_FILTRO, FIR, NOTCH, ESPECTRAL };
 constexpr ModoFiltro MODO_INICIAL = ModoFiltro::SIN_FILTRO;
@@ -23,6 +24,8 @@ constexpr gpio_num_t PIN_REPRODUCIR = GPIO_NUM_33;
 constexpr int64_t BOTON_ESTABLE_US = 30000;
 constexpr int64_t BOTON_BLOQUEO_US = 200000;
 static_assert(ESPECTRAL_H == MUESTRAS_BLOQUE, "El avance espectral debe coincidir con el bloque reproducido");
+static_assert(COEFICIENTES_FIR % 2 == 1 && (COEFICIENTES_FIR - 1) / 2 < MUESTRAS_BLOQUE,
+              "El alineamiento FIR requiere retardo entero menor que un bloque");
 
 struct TiempoProceso {
     uint64_t suma_us = 0;
@@ -32,6 +35,8 @@ struct TiempoProceso {
 // Solo la tarea principal lee/cambia el modo y procesa los filtros.
 // La tarea DAC recibe códigos ya convertidos y no accede a esta variable.
 static ModoFiltro modo = MODO_INICIAL;
+// Cambiar la escucha a ESPECTRAL conserva la última selección temporal.
+static ModoFiltro modo_temporal = MODO_INICIAL;
 static bool automatico = false;
 static float banda_nodo1_lo = 100.0f, banda_nodo1_hi = 1200.0f;
 static uint32_t config_nodo1 = 0;
@@ -43,6 +48,7 @@ static int boton_leido = 1, boton_estable = 1;
 static int64_t boton_cambio_us = 0, boton_bloqueado_hasta_us = 0;
 static int reproducir_anterior = 1;
 static float salida[MUESTRAS_BLOQUE];
+static float entrada_reproduccion[MUESTRAS_BLOQUE];
 static float salida_espectral[MUESTRAS_BLOQUE];
 static bool cola_espectral_pendiente = false;
 static char linea_comando[96];
@@ -52,9 +58,8 @@ static bool vista_breve = true;
 static TiempoProceso proc_total, proc_temporal, proc_espectral;
 static uint32_t bloques_proc = 0;
 
-static void registrar_tiempo(TiempoProceso& tiempo, int64_t inicio_us)
+static void registrar_duracion(TiempoProceso& tiempo, uint64_t duracion_us)
 {
-    const uint64_t duracion_us = static_cast<uint64_t>(esp_timer_get_time() - inicio_us);
     tiempo.suma_us += duracion_us;
     if (duracion_us > tiempo.max_us) tiempo.max_us = duracion_us;
 }
@@ -65,11 +70,13 @@ static void reiniciar_tiempos()
     bloques_proc = 0;
 }
 
-static const char* nombre_modo()
+static const char* nombre_modo(ModoFiltro seleccionado)
 {
     static const char* const nombres[] = {"SIN FILTRO", "FIR", "NOTCH", "ESPECTRAL"};
-    return nombres[static_cast<int>(modo)];
+    return nombres[static_cast<int>(seleccionado)];
 }
+
+static const char* nombre_modo() { return nombre_modo(modo); }
 
 static void aplicar_banda_nodo1(float inferior, float superior, uint32_t config_id)
 {
@@ -130,6 +137,7 @@ static void reproducir()
         if (!diagnostico_valido || diagnostico.filtro_n2 == 0) {
             modo_auto = ModoFiltro::SIN_FILTRO;
         }
+        modo_temporal = modo_auto;
         if (modo_anterior != ModoFiltro::ESPECTRAL) modo = modo_auto;
         printf("Auto: grabación tipo %u, filtro %u, pico %.6g -> %s\n",
                diagnostico.tipo_ruido, diagnostico.filtro_n2, diagnostico.pico_hz,
@@ -140,11 +148,29 @@ static void reproducir()
         espectral_reiniciar();
         cola_espectral_pendiente = false;
         reiniciar_tiempos();
+        const auto& filtros = filtros_configuracion();
+        const auto& espectral = espectral_configuracion();
+        ConfiguracionMetricas configuracion;
+        configuracion.modo_temporal = modo_temporal == ModoFiltro::SIN_FILTRO
+            ? "SIN_FILTRO" : nombre_modo(modo_temporal);
+        configuracion.retardo_temporal = modo_temporal == ModoFiltro::FIR ? (COEFICIENTES_FIR - 1) / 2 : 0;
+        configuracion.banda_lo = filtros.banda_inferior_hz;
+        configuracion.banda_hi = filtros.banda_superior_hz;
+        configuracion.pico_hz = grabacion_diagnostico().pico_hz;
+        configuracion.notch_hz = filtros.notch_hz;
+        configuracion.notch_q = filtros.q_notch;
+        configuracion.alfa = espectral.alfa;
+        configuracion.ganancia_minima = espectral.ganancia_minima;
+        metricas_iniciar(configuracion);
     }
 }
 
 static void seleccionar_modo(ModoFiltro nuevo, bool manual = true)
 {
+    if (nuevo != ModoFiltro::ESPECTRAL && nuevo != modo_temporal) {
+        metricas_invalidar();
+        modo_temporal = nuevo;
+    }
     if (manual && automatico) {
         automatico = false;
         printf("Auto: desactivado\n");
@@ -180,6 +206,7 @@ static void imprimir_estado()
             (unsigned long)config_nodo1, cfg.notch_hz, cfg.q_notch);
     printf("Diagnóstico grabación: tipo %u | filtro %u | pico %.6g Hz\n",
         diagnostico.tipo_ruido, diagnostico.filtro_n2, diagnostico.pico_hz);
+    printf("Ruta temporal independiente: %s\n", nombre_modo(modo_temporal));
     const auto& espectral = espectral_configuracion();
     printf("Espectral: resta | alfa %.6g | ganancia minima %.6g | N %d H %d | retardo 64 ms\n",
            espectral.alfa, espectral.ganancia_minima, ESPECTRAL_N, ESPECTRAL_H);
@@ -202,6 +229,11 @@ static void ejecutar_comando(char* linea)
     const char* primero = strtok_r(nullptr, " \t", &resto);
     const char* segundo = strtok_r(nullptr, " \t", &resto);
     const char* extra = strtok_r(nullptr, " \t", &resto);
+
+    if (comando && std::strcmp(comando, "metricas") == 0 && !primero) {
+        metricas_imprimir();
+        return;
+    }
 
     if (comando && std::strcmp(comando, "vista") == 0 && primero && !segundo) {
         if (std::strcmp(primero, "breve") == 0) vista_breve = true;
@@ -261,13 +293,18 @@ static void ejecutar_comando(char* linea)
     double uno, dos;
     if (comando && primero && segundo && !extra &&
         leer_numero(primero, uno) && leer_numero(segundo, dos)) {
+        const auto espectral_anterior = espectral_configuracion();
         if (std::strcmp(comando, "espectral") == 0 && espectral_configurar(uno, dos)) {
             const auto& cfg = espectral_configuracion();
+            if (cfg.alfa != espectral_anterior.alfa || cfg.ganancia_minima != espectral_anterior.ganancia_minima) {
+                metricas_invalidar();
+            }
             printf("Espectral: alfa %.6g | ganancia minima %.6g\n", cfg.alfa, cfg.ganancia_minima);
             return;
         }
         if (std::strcmp(comando, "banda") == 0 &&
             uno >= 100.0 && dos <= 3000.0 && uno < dos) {
+            metricas_invalidar();
             filtros_cambiar_banda(uno, dos);
             banda_es_nodo1 = false;
             printf("Banda: %.6g-%.6g Hz\n", uno, dos);
@@ -276,6 +313,7 @@ static void ejecutar_comando(char* linea)
         }
         if (std::strcmp(comando, "notch") == 0 &&
             uno >= 100.0 && uno <= 3000.0 && dos >= 0.5 && dos <= 20.0) {
+            metricas_invalidar();
             filtros_cambiar_notch(uno, dos);
             printf("Notch: %.6g Hz Q %.6g\n", uno, dos);
             imprimir_notch();
@@ -353,44 +391,55 @@ static void procesar_diag(const uint8_t* datos)
 static void atender_reproduccion()
 {
     if (salida_dac_terminada()) {
+        metricas_finalizar();
+        metricas_imprimir();
         grabacion_finalizar_reproduccion();
         aplicar_banda_pendiente();
     }
     if (grabacion_estado() != EstadoGrabacion::REPRODUCIENDO || !salida_dac_disponible()) return;
     const ModoFiltro modo_bloque = modo;
+    const ModoFiltro temporal_bloque = modo_temporal;
     const int64_t inicio_proc_us = esp_timer_get_time();
     bool ultimo = false;
     if (cola_espectral_pendiente) {
         // Un bloque de ceros completa el solape de las últimas 512 muestras.
         // Se vacían ambas rutas, incluso si se escucha otra salida.
-        std::memset(salida, 0, sizeof(salida));
+        std::memset(entrada_reproduccion, 0, sizeof(entrada_reproduccion));
         cola_espectral_pendiente = false;
         ultimo = true;
     } else {
-        if (!grabacion_leer_bloque(salida, ultimo)) return;
+        if (!grabacion_leer_bloque(entrada_reproduccion, ultimo)) return;
         cola_espectral_pendiente = ultimo;
         ultimo = false;  // El DAC termina después del bloque de vaciado.
     }
     // La ruta espectral recibe la misma entrada decodificada que FIR y notch.
     // Se calcula antes de que la selección temporal sobrescriba 'salida'.
     const int64_t inicio_espectral_us = esp_timer_get_time();
-    espectral_procesar(salida, salida_espectral);
-    registrar_tiempo(proc_espectral, inicio_espectral_us);
+    espectral_procesar(entrada_reproduccion, salida_espectral);
+    const uint64_t espectral_us = static_cast<uint64_t>(esp_timer_get_time() - inicio_espectral_us);
     const int64_t inicio_temporal_us = esp_timer_get_time();
     for (size_t k = 0; k < MUESTRAS_BLOQUE; ++k) {
-        const float x = salida[k];
+        const float x = entrada_reproduccion[k];
         float fir, notch;
         filtros_procesar(x, fir, notch);
-        switch (modo_bloque) {
+        switch (temporal_bloque) {
             case ModoFiltro::SIN_FILTRO:
             case ModoFiltro::ESPECTRAL: salida[k] = x; break;
             case ModoFiltro::FIR: salida[k] = fir; break;
             case ModoFiltro::NOTCH: salida[k] = notch; break;
         }
     }
-    registrar_tiempo(proc_temporal, inicio_temporal_us);
+    const uint64_t temporal_us = static_cast<uint64_t>(esp_timer_get_time() - inicio_temporal_us);
+    const int64_t inicio_metricas_us = esp_timer_get_time();
+    const TiempoMetricas coste = metricas_procesar(entrada_reproduccion, salida, salida_espectral, ultimo);
+    const uint64_t metricas_us = static_cast<uint64_t>(esp_timer_get_time() - inicio_metricas_us);
     salida_dac_input(modo_bloque == ModoFiltro::ESPECTRAL ? salida_espectral : salida, ultimo);
-    registrar_tiempo(proc_total, inicio_proc_us);
+    const uint64_t total_us = static_cast<uint64_t>(esp_timer_get_time() - inicio_proc_us);
+    registrar_duracion(proc_temporal, temporal_us + coste.temporal_us);
+    registrar_duracion(proc_espectral, espectral_us + coste.espectral_us);
+    registrar_duracion(proc_total, total_us);
+    metricas_registrar_tiempos(temporal_us + coste.temporal_us, espectral_us + coste.espectral_us,
+                               total_us, metricas_us);
     ++bloques_proc;
 }
 
