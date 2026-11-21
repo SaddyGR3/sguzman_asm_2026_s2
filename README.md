@@ -26,6 +26,10 @@ Repositorio del grupo para el Proyecto Grupal 1: un sistema distribuido de reduc
 - Avance de la semana 12: **30 oct, 11:59 pm**.
 - Proyecto completo: **6 nov, 11:50 pm**.
 
+## Proyecto 2 y Tarea 2
+
+El [Proyecto Grupal 2](proyecto2/README.md) reúne el enunciado, la propuesta de componentes y la [Tarea 2](proyecto2/tarea2/README.md) con su informe LaTeX y figuras.
+
 ## Tarea 1
 
 La entrega está en [proyecto1/tarea1/](proyecto1/tarea1/) y en el tag `tarea1_prototipo`.
