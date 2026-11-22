@@ -1,5 +1,7 @@
 # Análisis de frenado en MATLAB
 
+**Estado respecto al montaje real:** esta carpeta contiene el avance del compañero con ejemplos simulados y un analizador pensado para un motor alimentado a tensión constante y una velocidad final estable. Las capturas reales de la tarea se hicieron apagando la fuente antes de frenar; ambas curvas terminan en cero. El analizador de esta carpeta también espera una columna `servo_cmd_deg` o `servo_grados`, mientras que los CSV reales contienen `servo_cmd_grados`. Para las cinco capturas reales usar [el script de comparación](../analisis/analizar_capturas.m) y su [guía](../analisis/README.md). El ejemplo ideal sigue siendo útil para mostrar el método teórico; sus parámetros no son mediciones del montaje.
+
 Este avance implementa el procesamiento previsto en [la guía de los puntos extra](../PLAN_PUNTOS_EXTRA.md). Permite ensayar el flujo con datos simulados y luego importar mediciones reales. La entrada es el ángulo ordenado al servo y la salida es la velocidad del disco. Durante este experimento se mantiene constante la alimentación del motor y no se ejecuta un PID.
 
 ## Comenzar con el ejemplo ideal

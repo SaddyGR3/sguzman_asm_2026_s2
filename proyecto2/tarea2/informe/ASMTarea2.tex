@@ -101,7 +101,7 @@ Luis Castro Montenegro (2013083843)
 ]
 \section{Resumen}\label{resumen}
 
-En este trabajo armamos el modelo de un banco de pruebas de frenado con un disco giratorio, pensado como una versión didáctica de un sistema ABS. Revisamos qué tanto sirven las respuestas al impulso y al escalón para entender cómo se comporta el sistema, planteamos usar un ESP32 para medir y controlar y armamos un primer modelo rotacional a partir del balance de torques. También definimos cada cuánto muestrear, cómo programar un PID discreto sin trabar el código con delays y qué pasos seguir para montar y caracterizar el sistema en lazo abierto. En todo momento dejamos claro qué sale del modelo teórico y qué depende de medirlo ya armado en el banco.
+Se estudió un banco didáctico de frenado de disco tipo ABS a lazo abierto. Se revisaron las respuestas al impulso y al escalón, el muestreo y una implementación no bloqueante de PID para una fase posterior. El montaje ensayado usa un motor DC miniatura alimentado por una fuente que indicaba 1 V, un disco MDF de 12 cm, un sensor KY-033, un servomotor SG90 y una ESP32. El motor se apaga antes de aplicar el freno; se compararon tres corridas de giro libre y dos de frenado con un cambio de orden de 90 a 40 grados. Cerca de 1300 RPM, el tiempo hasta bajar de 500 RPM fue 11,4--11,6 s sin freno y 1,168--1,178 s con freno. Se distingue esta observación del modelo teórico y se dejan para la entrega final las figuras de MATLAB y las evidencias audiovisuales.
 
 \textbf{Palabras clave:} modelado de sistemas, frenado ABS, respuesta al
 escalón, PID digital, ESP32, velocidad angular.
@@ -115,11 +115,12 @@ mediante un motor de corriente directa, un disco rotatorio, un actuador
 de fricción y un sensor de velocidad. El análisis de las respuestas
 transitorias es un paso previo al diseño y ajuste de un controlador.
 
-El objetivo de este trabajo es proponer el modelo y la instrumentación
-del banco, justificar su muestreo, plantear la ejecución digital de un
-PID y establecer un procedimiento de caracterización experimental a lazo
-abierto. El montaje previsto utiliza un ESP32, el motor, sensor y
-mecanismo definitivo de frenado se seleccionarán y documentarán antes de las pruebas físicas
+El objetivo es explicar el modelo y la instrumentación del banco,
+justificar el muestreo, mostrar una estructura de PID digital sin
+\texttt{delay()} y caracterizar experimentalmente el frenado a lazo
+abierto. La ESP32 mide las RPM y ordena el SG90; el motor recibe
+alimentación de una fuente externa. El PID es una propuesta para una
+etapa posterior y no intervino en los ensayos de esta tarea.
 
 \section{Importancia de las respuestas al impulso y al
 escalón}\label{importancia-de-las-respuestas-al-impulso-y-al-escaluxf3n}
@@ -209,7 +210,6 @@ Escalón & Cambio súbito y sostenido de la entrada & Transitorio y régimen fin
 \bottomrule
 \end{tabularx}\endgroup\end{center}
 
-agregar después del ejemplo de respuesta al escalón.
 \subsection{Identificación de la constante de tiempo mediante un escalón}
 Para una aproximación de primer orden con velocidad inicial $\omega_0$ y
 velocidad final $\omega_\infty$, la respuesta es
@@ -238,24 +238,24 @@ muestreo debe considerar la dinámica del frenado, la resolución temporal
 del sensor, la cantidad de pulsos por revolución y el tiempo requerido
 para ejecutar el algoritmo.
 
-Como hipótesis inicial de diseño, se propone estudiar una
-frecuencia de muestreo de \(f_s=100\,\mathrm{Hz}\), equivalente a
-\(T_s=10\,\mathrm{ms}\). Este valor no está validado: si el
-sensor entrega pocos pulsos por revolución, una ventana de 10 ms puede
-contener muy pocos pulsos para estimar RPM mediante conteo simple. Se
-evaluará la medición de periodos entre flancos o una ventana de
-observación mayor, según el sensor seleccionado.
+Como hipótesis para el PID futuro se propone ejecutar el control a
+\(f_s=100\,\mathrm{Hz}\), es decir \(T_s=10\,\mathrm{ms}\).
+Esto no significa que haya una nueva lectura física de velocidad cada
+10 ms. El firmware utilizado en los ensayos imprime una fila cada
+100 ms (\(10\,\mathrm{Hz}\)); estima RPM a partir del intervalo entre
+flancos aceptados del KY-033. Con una marca asumida por vuelta, a
+1300 RPM transcurren aproximadamente \(60/1300=0,046\,\mathrm{s}\)
+entre marcas. El valor de RPM puede repetirse en varias filas.
 
-La frecuencia definitiva se justificará con base en el tiempo
-característico medido de la planta y la calidad de la estimación de
-velocidad. Debe evitarse confundir la tasa de ejecución del PID con la
-ventana utilizada para estimar las RPM.
-
-\textbf{Parámetros por completar:} resolución del sensor {[} {]}, rango
-de RPM {[} {]}, tiempo característico medido {[} {]}, frecuencia
-finalmente elegida {[} {]}, justificación experimental {[} {]}.
-
-sustituir o ampliar la justificación de 100 Hz.
+El descenso con freno entre aproximadamente 1300 y 500 RPM duró
+1,17 s y quedó representado por unas doce filas de registro.
+El umbral de rechazo de pulsos de 20 ms descarta transiciones
+demasiado cercanas, pero la oscilación del disco y los pulsos
+rechazados limitan la exactitud. La frecuencia de control de
+100 Hz sigue siendo una propuesta teórica: todavía no se implementó
+ni se verificó un PID sobre este montaje. La frecuencia de ejecución
+del algoritmo y la velocidad de actualización de la estimación de RPM
+son magnitudes distintas.
 \subsection{Justificación cuantitativa del periodo de muestreo}
 El criterio de muestreo se fundamenta en que el periodo digital debe ser suficientemente pequeño frente a la dinámica dominante de la planta \cite{franklin2015}.
 En el modelo de primer orden $G_f(s)=-1/(Js+b)$, la constante de tiempo
@@ -268,8 +268,9 @@ constante de tiempo:
 T_s\leq\frac{\tau}{10}=0.02\,\mathrm{s},\qquad f_s\geq50\,\mathrm{Hz}.
 \end{equation}
 Se propone $f_s=100$ Hz, es decir, $T_s=10$ ms, equivalente a veinte
-actualizaciones durante $\tau$. Esta selección es preliminar y deberá
-revisarse con la dinámica real y el tiempo de ejecución del controlador.
+actualizaciones durante la $\tau$ \emph{hipotética}. Esta selección
+debe revisarse con la dinámica real y el tiempo de ejecución del
+controlador antes de poner el PID en servicio.
 La frecuencia de actualización del PID no equivale necesariamente a la
 resolución de la medición: a 200 RPM, un encoder de 20 pulsos por vuelta
 produce $200(20)/60=66.67$ pulsos/s, o solamente $0.667$ pulsos en
@@ -304,28 +305,50 @@ intervalo de ejecución fijo.
 
 
 \subsection{Ejemplo de implementación no bloqueante en ESP32}
-El siguiente listado es una \emph{plantilla de control}, no un programa
-validado con la planta. La lectura del sensor y la orden del actuador
-requieren integrarse con el hardware seleccionado. Las ganancias son
-provisionales y deben ajustarse; se incluye limitación de salida y una
-protección elemental contra saturación integral.
+El siguiente listado es una \emph{plantilla de control} para los pines
+y componentes reales, no el firmware usado para las mediciones.
+Incluye lectura del periodo entre pulsos del KY-033 y orden al SG90.
+Las ganancias se dejan en cero para evitar presentarlas como
+ajustadas; antes de activar un PID deben obtenerse y validarse.
+Se incluye limitación de salida y protección elemental contra
+saturación integral. La captura experimental se hizo a lazo abierto
+con órdenes manuales.
 \begin{lstlisting}[language=C++,basicstyle=\ttfamily\tiny,breaklines=true,frame=single]
 #include <Arduino.h>
+#include <ESP32Servo.h>
+Servo freno;
+const int PIN_SENSOR = 34, PIN_SERVO = 18;
 const uint32_t TS_US = 10000; // 100 Hz
 uint32_t proximo = 0;
 float kp = 0.0f, ki = 0.0f, kd = 0.0f;
 float integral = 0.0f, errorPrevio = 0.0f;
 float referencia = 0.0f; // rad/s
+volatile uint32_t pulsoPrevio = 0, periodoUs = 0;
+volatile uint32_t ultimoPulso = 0;
 
-float leerVelocidad() {
-  // PENDIENTE: leer sensor y estimar rad/s.
-  return 0.0f;
+void IRAM_ATTR detectarMarca() {
+  uint32_t ahora = micros();
+  if (ultimoPulso && ahora - ultimoPulso <= 20000) return;
+  if (pulsoPrevio) periodoUs = ahora - pulsoPrevio;
+  pulsoPrevio = ultimoPulso = ahora;
+}
+float leerVelocidad() { // Una marca por vuelta
+  noInterrupts();
+  uint32_t p = periodoUs, ultimo = ultimoPulso;
+  interrupts();
+  if (!p || micros() - ultimo > 1000000) return 0.0f;
+  return 2.0f * PI * 1000000.0f / p; // rad/s
 }
 void aplicarFreno(float u) {
-  // PENDIENTE: mapear u en [0,1] al servo.
+  freno.write((int)(90.0f - 50.0f*u)); // 90 a 40 grados
 }
 void setup() {
   Serial.begin(115200);
+  pinMode(PIN_SENSOR, INPUT);
+  freno.attach(PIN_SERVO);
+  freno.write(90);
+  attachInterrupt(digitalPinToInterrupt(PIN_SENSOR),
+                  detectarMarca, FALLING);
   proximo = micros() + TS_US;
 }
 void loop() {
@@ -544,16 +567,17 @@ simplificada}
 Para ver variaciones pequeñas cerca de un punto de operación, dejamos $\tau_m$ fijo y tratamos el torque de frenado como si fuera una entrada limpia. Restando el equilibrio y aplicando Laplace con condiciones iniciales en cero para las desviaciones:
 
 \begin{equation}
-(Js+b)\Delta\Omega(s)=-\Delta T_f(s),
-\qquad
-\boxed{G_f(s)=\frac{\Delta\Omega(s)}{\Delta T_f(s)}=-\frac{1}{Js+b}}.
+\begin{aligned}
+(Js+b)\Delta\Omega(s)&=-\Delta T_f(s),\\
+G_f(s)&=\frac{\Delta\Omega(s)}{\Delta T_f(s)}
+=-\frac{1}{Js+b}.
+\end{aligned}
 \end{equation}
 
 Vale aclarar que esta función de transferencia conecta el torque de frenado con la velocidad angular y no directamente el ángulo del servo con las RPM. Para representar la entrada real del banco se tienen que incluir o identificar cómo se traduce la orden $u_f$ en el torque $\tau_f$, ya que en esa etapa suelen aparecer no linealidades y saturación.
 
 En cambio, si se deja el freno quieto y se toma el torque del motor como entrada, la relación mecánica queda como $\Delta\Omega(s)/\Delta T_m(s)=1/(Js+b)$. 
 
-ampliar la derivación del modelo.
 \subsection{Derivación de la función de transferencia}
 Se linealiza alrededor de un punto de operación, siguiendo el enfoque clásico de modelado por variables de desviación \cite{franklin2015}.
 El balance de torques para el disco es
@@ -643,9 +667,9 @@ estimar}
 \toprule
 \textbf{Magnitud} & \textbf{Relación o método teórico} & \textbf{Estado}\\
 \midrule
-Velocidad angular & $\omega=2\pi\,\mathrm{RPM}/60$ & Fórmula disponible; faltan RPM medidas\\
+Velocidad angular & $\omega=2\pi\,\mathrm{RPM}/60$ & RPM registradas en los CSV de ensayo\\
 \addlinespace[2pt]
-Inercia de un disco macizo homogéneo & $J_d=\tfrac12 mr^2$ & Faltan masa y radio reales; sumar inercia del rotor/acoples\\
+Inercia de un disco macizo homogéneo & $J_d=\tfrac12 mr^2$ & Radio del MDF: 0,06 m; masa e inercia de rotor/acople no medidas\\
 \addlinespace[2pt]
 Constante de tiempo & $\tau=J/b$ & Requiere estimación de $J$ y $b$\\
 \addlinespace[2pt]
@@ -660,10 +684,10 @@ Tiempo de parada con desaceleración constante $a>0$ & $t_{parada}\approx\omega_
 \bottomrule
 \end{tabularx}\endgroup\end{center}
 
-\textbf{ todavía no se conocen la
-masa, el radio, las RPM, el torque ni las características del freno. Los
-resultados cuantitativos se incorporarán tras elegir los componentes o
-realizar mediciones.}
+\textbf{Alcance de los parámetros:} se conocen el radio del disco y las
+RPM estimadas por el sensor. No se midieron masa, corriente, torque
+del motor ni fuerza de contacto. Por ello no se presentan valores
+experimentales de $J$, $b$ o torque de frenado por separado.
 
 \subsection{Respuesta final esperada de la planta sin
 controlador}
@@ -678,23 +702,25 @@ perturbaciones automáticamente.
 
 La forma exacta de la curva va a depender del actuador, de la fricción que haya en el montaje y de si dejamos el motor alimentado o no durante la prueba. Por eso vamos a contrastar lo que midamos en el banco con lo que predice el modelo y anotar bien las diferencias.
 
-\subsection{Procedimiento de validación cuando exista
-hardware}\label{procedimiento-de-validaciuxf3n-cuando-exista-hardware}
+\subsection{Criterios de validación con el montaje real}
+\label{procedimiento-de-validaciuxf3n-cuando-exista-hardware}
 
 \begin{enumerate}
 \def\labelenumi{\arabic{enumi}.}
 \tightlist
 \item
-  Registrar masa, radio, alimentación del motor, tipo de freno y
-  resolución del sensor.
+  Distinguir los datos conocidos (radio 0,06 m, fuente indicando 1 V,
+  orden de servo y RPM estimadas) de masa, torque y alimentación exacta
+  en terminales que no se midieron.
 \item
-  Medir velocidad inicial estable y condiciones del ensayo.
+  Registrar condiciones de cada corrida y conservar las marcas de
+  apagado del motor y de orden del servo.
 \item
-  Aplicar un cambio de frenado conocido y registrar tiempo, orden y RPM.
+  Comparar las referencias libres con las frenadas a velocidades
+  iniciales parecidas.
 \item
-  Graficar \(\omega(t)\) y comparar la forma con el modelo; estimar
-  \(\tau\) solo si la respuesta se aproxima a primer orden y llega a un
-  equilibrio identificable.
+  Graficar \(\omega(t)\) en MATLAB y estimar un modelo local solo en el
+  intervalo previo a la detención, con calidad de ajuste revisada.
 \item
   Si la respuesta es no lineal, presenta parada o saturación,
   documentarlo en vez de forzar el ajuste de primer orden.
@@ -703,250 +729,96 @@ hardware}\label{procedimiento-de-validaciuxf3n-cuando-exista-hardware}
   \textbf{supuestos} y \textbf{medidos}.
 \end{enumerate}
 
-\section{Construcción y prueba de la planta a lazo abierto punto --- extra }
+\section{Construcción de la planta a lazo abierto --- punto extra}
 
-\subsection{Diseño físico
-propuesto}\label{diseuxf1o-fuxedsico-propuesto}
+\subsection{Montaje real ensayado}
 
-La estructura debe mantener el motor y el disco firmemente sujetos a una
-base. El disco se instala en el eje del motor o en un acoplamiento
-mecánico seguro. El mecanismo de frenado se coloca de forma que una
-zapata pueda hacer contacto controlado con la superficie del disco. El
-sensor se ubica para detectar el giro sin interferir con las partes
-móviles.
+Se ensambló un banco de frenado por contacto sobre un disco MDF de
+12 cm de diámetro y 3 mm de espesor. El disco gira mediante un motor
+DC miniatura identificado comercialmente como AD20413; el equipo no
+dispone de una hoja técnica propia de ese motor. Durante las corridas,
+la fuente externa del motor se ajustó o indicaba 1 V. Ese valor no es
+una medición con multímetro en sus terminales bajo carga.
 
-\textbf{Configuración seleccionada:}
+La ESP32 registra el sensor reflectivo KY-033 en GPIO34 y envía
+órdenes al servomotor SG90 por GPIO18. El SG90 y el KY-033 reciben
+alimentación de la placa ESP32; no se documentaron la tensión exacta
+ni la corriente de esas conexiones. La computadora recibe las
+muestras y los eventos por puerto serial. El motor está conectado
+directamente a la fuente externa: el módulo Mini L298N AD70178 está
+disponible, pero no se instaló en estas pruebas.
 
-\begin{itemize}
-\tightlist
-\item
-  Motor DC: \textbf{opción recomendada:} motor DC
-  de 12 V con reductora, velocidad de salida aproximada de 100--300 RPM,
-  con eje compatible con el disco. Verificar corriente de arranque y par
-  antes de seleccionar el driver.
-\item
-  Disco o rueda: {[}material, diámetro y método de sujeción{]}.
-\item
-  Actuador de frenado: {[}servomotor u otra alternativa{]}.
-\item
-  Zapata o superficie de fricción: {[}material{]}.
-\item
-  Sensor de velocidad: \textbf{pendiente de selección}; preferencia:
-  sensor óptico de ranura con disco encoder, o sensor reflectivo con
-  marcas contrastantes, verificando compatibilidad eléctrica con ESP32.
-\item
-  Microcontrolador: \textbf{ESP32 Dev Module (confirmado)}.
-\item
-  Fuente de alimentación: {[}tensión y corriente nominal{]}.
-\item
-  Estructura y protección: {[}materiales utilizados{]}.
-\end{itemize}
+El brazo del SG90 lleva un hule unido a una esponja. La esponja hace
+contacto con la \textbf{cara superior} del disco, no con el borde.
+La posición ordenada de 90 grados mantiene separado el freno; para
+las corridas principales se envió un cambio directo a 40 grados.
+Estos valores son órdenes al servo: no se midieron su posición real,
+la fuerza normal ni el torque de frenado.
 
-\subsection{Materiales y componentes
-recomendados}
-
-\textbf{Estado del grupo:} el \textbf{ESP32 está confirmado}. El motor,
-el sensor y los demás elementos de la planta todavía deben seleccionarse
-o conseguirse. Esta es una \textbf{propuesta de compra}, no una lista de
-piezas ya adquiridas. Los valores son orientativos; se deben verificar
-las fichas técnicas y la compatibilidad mecánica antes de comprar.
-
-\subsection{Lista principal de
-compra}
-
-\begin{center}
-\begingroup\footnotesize\setlength{\tabcolsep}{3pt}\renewcommand{\arraystretch}{1.10}
-\begin{tabularx}{\columnwidth}{@{}p{0.34\columnwidth}Y@{}}
+\begin{center}\begingroup\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabularx}{\columnwidth}{@{}p{0.28\columnwidth}Y@{}}
 \toprule
-\textbf{Componente (cantidad)} & \textbf{Especificación, función y estado}\\
+\textbf{Elemento} & \textbf{Configuración del ensayo}\\
 \midrule
-\textbf{ESP32 Dev Module} (1) & GPIO de 3,3 V. Leer sensor, generar órdenes de control y registrar datos. \textit{Estado: Confirmado}.\\
-\addlinespace[3pt]
-\textbf{Motor DC con reductora de 12 V} (1) & Aproximadamente 100--300 RPM de salida; eje accesible y soporte de montaje; corriente y torque según ficha técnica. Hacer girar la rueda o disco de forma controlada. \textit{Estado: Alta; pendiente}.\\
-\addlinespace[3pt]
-\textbf{Disco liviano y rígido} (1) & Aproximadamente 10--15 cm de diámetro; acrílico, plástico rígido o material similar, balanceado y sin bordes filosos. Superficie de giro y frenado. \textit{Estado: Alta; pendiente}.\\
-\addlinespace[3pt]
-\textbf{Acople o cubo de eje} (1) & Del diámetro exacto del eje del motor, con tornillo de fijación. Sujetar el disco sin deslizamiento. \textit{Estado: Alta; pendiente}.\\
-\addlinespace[3pt]
-\textbf{Servomotor con engranajes metálicos} (1) & Clase MG996R o equivalente, con alimentación independiente apropiada; comprobar fuerza y recorrido. Acercar o retirar la zapata del disco. \textit{Estado: Alta; pendiente}.\\
-\addlinespace[3pt]
-\textbf{Zapata de goma} (1) & Goma o caucho de contacto moderado, adherido a un brazo rígido. Aplicar fricción reproducible al disco. \textit{Estado: Alta; pendiente}.\\
-\addlinespace[3pt]
-\textbf{Sensor de velocidad óptico} (1) & Preferentemente módulo de ranura + disco encoder; alternativa: sensor reflectivo con marcas. Detectar pulsos para estimar RPM. \textit{Estado: Alta; pendiente}.\\
-\addlinespace[3pt]
-\textbf{Disco encoder o marcas de detección} (1) & Número conocido de ranuras o marcas; compatible con el sensor. Convertir cada vuelta en pulsos medibles. \textit{Estado: Alta; pendiente}.\\
-\addlinespace[3pt]
-\textbf{Controlador de motor DC} (1) & Puente H o controlador PWM dimensionado por corriente de arranque del motor; ejemplo TB6612FNG (solo si la corriente lo permite). Controlar o desconectar la alimentación del motor sin conectarlo al GPIO. \textit{Estado: Alta; pendiente}.\\
-\addlinespace[3pt]
-\textbf{Fuente para motor} (1) & 12 V regulados, con corriente suficiente para el motor y su arranque. Alimentar el motor. \textit{Estado: Alta; pendiente}.\\
-\addlinespace[3pt]
-\textbf{Fuente para servo} (1) & 5--6 V regulados, corriente suficiente para picos del servo (orientativamente 2--3 A para servo de alto par, según modelo). Evitar alimentar el servo desde el ESP32. \textit{Estado: Alta; pendiente}.\\
-\addlinespace[3pt]
-\textbf{Cable USB y alimentación del ESP32} (1) & USB de 5 V desde PC o fuente adecuada. Programación, registro serial y alimentación de placa. \textit{Estado: Alta; disponible por verificar}.\\
-\addlinespace[3pt]
-\textbf{Base y soportes} (1) & Madera, MDF, acrílico grueso o piezas impresas 3D. Mantener motor, sensor y servo alineados. \textit{Estado: Alta; pendiente}.\\
-\addlinespace[3pt]
-\textbf{Tornillos, tuercas, escuadras y abrazaderas} (Varios) & Según diámetros y geometría real. Fijar la estructura. \textit{Estado: Alta; pendiente}.\\
-\addlinespace[3pt]
-\textbf{Cables, borneras y conectores} (Varios) & Conexiones firmes; evitar protoboard en la línea de potencia del motor. Cableado de señales y potencia. \textit{Estado: Alta; pendiente}.\\
-\addlinespace[3pt]
-\textbf{Interruptor de corte de motor} (1) & Adecuado para tensión y corriente del motor. Parada accesible durante pruebas. \textit{Estado: Alta; pendiente}.\\
-\addlinespace[3pt]
-\textbf{Protector transparente para el disco} (1) & Pantalla rígida o cubierta que no toque piezas móviles. Reducir riesgo de contacto o desprendimiento. \textit{Estado: Alta; pendiente}.\\
-\addlinespace[3pt]
-\bottomrule
-\end{tabularx}\endgroup
-\end{center}
-
-\subsection{Recomendación de
-selección}
-
-\textbf{Motor:} priorizar un motor DC con reductora de 12 V y salida
-aproximada de 100--300 RPM para un prototipo de mesa. Una reductora
-facilita obtener un giro lento y repetible, pero \textbf{puede
-dificultar el frenado por inercia y la identificación de la planta} por
-la fricción y resistencia interna de la transmisión. Antes de comprar,
-comprobar que el disco pueda desacelerarse visiblemente con la zapata y
-que el motor no se sobrecaliente al frenar. Si se busca una
-desaceleración libre más representativa, considerar un motor DC sin
-reductora con velocidad limitada mediante PWM y disco adecuadamente
-protegido.
-
-\textbf{Sensor:} la primera opción es un \textbf{sensor óptico de ranura
-con disco encoder}; permite contar pulsos con el ESP32 y calcular las
-RPM con un número de ranuras conocido. Si no se puede instalar un disco
-ranurado, usar un \textbf{sensor óptico reflectivo} con marcas
-contrastantes; un sensor Hall con imán también es viable. Verificar si
-el módulo entrega 3,3 V o requiere adaptación de nivel: \textbf{ninguna
-entrada del ESP32 debe recibir directamente 5 V}.
-
-\textbf{Freno:} un \textbf{servo con engranajes metálicos} que mueva una
-zapata de goma resulta sencillo para pruebas a lazo abierto y para el
-PID posterior. La geometría del brazo debe limitar la fuerza para que el
-servo no se atasque. No mantener el motor frenado a rotor bloqueado; el
-motor, el controlador y la fuente deben soportar las condiciones de
-corriente previstas.
-
-\textbf{Driver:} no elegir el controlador únicamente por su nombre
-comercial. Primero consultar la \textbf{corriente de arranque o bloqueo}
-del motor y luego elegir un módulo con margen suficiente. El TB6612FNG
-puede servir para motores pequeños de baja corriente, pero \textbf{no es
-apropiado para cualquier motor de 12 V}.
-
-\subsection{Conexión eléctrica general
-propuesta}
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=0.82\columnwidth,height=0.32\textheight,keepaspectratio]{diagrama_electrico.jpeg}
-\caption{Conexión eléctrica general propuesta.}
-\label{fig:conexion}
-\end{figure}
-
-
-\subsection{Compra por etapas}\label{compra-por-etapas}
-
-\begin{enumerate}
-\def\labelenumi{\arabic{enumi}.}
-\tightlist
-\item
-  \textbf{Primero:} motor + disco + acople + base, para verificar que la
-  mecánica es viable.
-\item
-  \textbf{Segundo:} sensor + encoder + controlador del motor + fuentes,
-  para medir RPM de manera estable.
-\item
-  \textbf{Tercero:} servo + brazo + zapata, para aplicar un escalón de
-  frenado a lazo abierto.
-\item
-  \textbf{Finalmente:} protección, interruptor y conectores definitivos
-  antes de grabar las evidencias.
-\end{enumerate}
-
-\textbf{Dato importante para el informe:} sustituir las recomendaciones
-por \textbf{marca, modelo, tensión, corriente, dimensiones y fotografía
-reales} una vez que el grupo seleccione y monte cada pieza.
-
-\section{Procedimiento de
-construcción}\label{procedimiento-de-construcciuxf3n}
-
-\begin{enumerate}
-\def\labelenumi{\arabic{enumi}.}
-\tightlist
-\item
-  \textbf{Preparar la base:} seleccionar una superficie estable y fijar
-  los soportes del motor.
-\item
-  \textbf{Instalar el motor y el disco:} acoplar el disco al eje y
-  comprobar manualmente que no roce con la estructura.
-\item
-  \textbf{Instalar el freno:} colocar el actuador y la zapata de manera
-  que puedan acercarse y separarse del disco sin trabarse.
-\item
-  \textbf{Instalar el sensor:} ubicar el sensor y el elemento de
-  detección para obtener una señal por cada pulso, marca o evento de
-  giro definido por el diseño.
-\item
-  \textbf{Realizar las conexiones:} conectar motor, actuador, sensor y
-  microcontrolador según las especificaciones eléctricas.
-\item
-  \textbf{Verificar la medición:} girar el disco a baja velocidad y
-  comprobar que el microcontrolador detecta cambios en la velocidad.
-\item
-  \textbf{Probar el frenado a lazo abierto:} iniciar el giro, registrar
-  la velocidad y aplicar una orden de frenado fija o definida
-  manualmente. Comprobar que la velocidad disminuye.
-\item
-  \textbf{Asegurar el montaje:} revisar fijaciones, cables y protección
-  antes de las pruebas y grabaciones.
-\end{enumerate}
-
-\section{Prueba de funcionamiento a lazo
-abierto}\label{prueba-de-funcionamiento-a-lazo-abierto}
-
-\begin{enumerate}
-\def\labelenumi{\arabic{enumi}.}
-\tightlist
-\item
-  Iniciar el motor y llevar el disco a una condición inicial de giro
-  reproducible.
-\item
-  Registrar la velocidad angular antes de aplicar el freno.
-\item
-  Aplicar una acción de frenado definida, manteniéndola durante un
-  intervalo establecido.
-\item
-  Registrar la evolución de la velocidad angular durante el frenado.
-\item
-  Repetir el ensayo bajo condiciones iniciales similares para comprobar
-  la repetibilidad.
-\item
-  Guardar los datos para utilizarlos en la caracterización de la
-  respuesta al escalón.
-\end{enumerate}
-
-En esta prueba no se utiliza el error entre referencia y velocidad
-medida para calcular automáticamente la acción del freno. La entrada de
-frenado se establece de manera independiente, por lo que el ensayo es a
-lazo abierto.
-
-\textbf{Datos que deben registrarse:}
-
-\begin{center}\begingroup\setlength{\tabcolsep}{2pt}\renewcommand{\arraystretch}{1.15}\scriptsize
-\begin{tabularx}{\columnwidth}{@{}YYYY@{}}
-\toprule
-\textbf{Tiempo (s)} & \textbf{Orden de frenado $u$} & \textbf{Velocidad medida (RPM)} & \textbf{Observaciones}\\
-\midrule
-\textemdash{} & \textemdash{} & \textemdash{} & \textemdash{}\\
-\addlinespace[2pt]
-\textemdash{} & \textemdash{} & \textemdash{} & \textemdash{}\\
-\addlinespace[2pt]
-\textemdash{} & \textemdash{} & \textemdash{} & \textemdash{}\\
-\addlinespace[2pt]
-\textemdash{} & \textemdash{} & \textemdash{} & \textemdash{}\\
-\addlinespace[2pt]
+Motor y fuente & DC miniatura AD20413; fuente externa indicando 1 V; apagado desde la fuente con cables conectados.\\
+Disco y acople & MDF, diámetro 12 cm, espesor 3 mm; acople provisional con oscilación visible.\\
+Sensor & KY-033 reflectivo en GPIO34; una marca por vuelta es el supuesto de la conversión a RPM.\\
+Actuador & SG90 en GPIO18; hule y esponja sobre la cara superior del MDF; órdenes de 90 y 40 grados.\\
+Procesamiento & ESP32 y captura serial; filas cada 100 ms y rechazo de flancos separados por 20 ms o menos.\\
 \bottomrule
 \end{tabularx}\endgroup\end{center}
+
+\subsection{Conexión eléctrica y limitaciones}
+
+El motor recibió alimentación directa de la fuente externa,
+sin conexión eléctrica con la ESP32 ni con el puente H disponible.
+El KY-033 entregó su señal a GPIO34 y recibió alimentación de la
+placa ESP32; el SG90 recibió la orden por GPIO18 y también fue
+alimentado desde esa placa. La computadora se comunicó con la
+ESP32 por USB. Para documentar el cableado con detalle aún falta
+una fotografía clara y la identificación de los pines concretos
+de alimentación del servo y del sensor. El esquema eléctrico
+preliminar de diseño se excluye porque muestra un puente H y una
+fuente independiente para el servo que no se utilizaron.
+
+El acople provisional provoca oscilación del disco, especialmente
+visible a velocidades bajas. El sensor rechazó múltiples flancos
+durante las capturas; por ello se interpretan las RPM como
+estimaciones, sin atribuir una precisión física no comprobada.
+Tampoco se midieron masa del disco, momento de inercia, corriente
+ni torque del motor. Estas limitaciones no impiden comparar las
+curvas libres y frenadas obtenidas bajo el mismo montaje.
+
+\textbf{Evidencia visual por incorporar:} fotografías generales y de
+detalle del motor, acople, sensor, brazo y superficie de contacto,
+más la toma física que se integrará en el video único.
+
+\section{Prueba de funcionamiento a lazo abierto}
+\label{prueba-de-funcionamiento-a-lazo-abierto}
+
+En cada ensayo se aceleró el disco con la fuente del motor indicando
+1 V y con el SG90 ordenado a 90 grados. Después se apagó la fuente
+sin retirar los cables y se marcó manualmente el evento
+\texttt{MOTOR\_OFF\_MANUAL}. En las referencias libres se mantuvo
+el servo en 90 grados hasta la detención. En las pruebas de frenado
+se envió posteriormente \texttt{g40}, un cambio directo de orden
+de 90 a 40 grados; el evento \texttt{SERVO\_CMD} registra cuándo
+se envió la orden, no el instante físico exacto de contacto.
+
+El sensor KY-033 entregó pulsos que la ESP32 convirtió a RPM. El
+capturador guardó \texttt{tiempo\_ms}, \texttt{rpm} y
+\texttt{servo\_cmd\_grados} en un CSV, y las marcas de apagado y
+comando en otro. El reloj se inició al obtener la primera RPM
+calculable. La marca de apagado tiene incertidumbre por el tiempo de
+reacción de la persona; la indicación de cero llega después de un
+intervalo sin pulsos y no identifica el instante mecánico exacto
+de parada.
+
+Se conservaron tres referencias libres y dos frenadas comparables.
+Una tercera corrida frenada recibió la orden con demora y a una RPM
+inicial menor, por lo que no se promedió con las dos principales.
+El control PID no intervino: la orden de freno fue elegida
+manualmente y no se calculó a partir del error de velocidad.
 
 \section{Evidencias requeridas}\label{evidencias-requeridas}
 
@@ -994,92 +866,150 @@ Las fotografías y el video deben corresponder al montaje real del grupo.
   conexiones.
 \end{itemize}
 
-\section{Resultado esperado}\label{resultado-esperado}
+\section{Alcance del montaje}
 
-Al finalizar, el grupo debe contar con una planta física ensamblada que
-permita:
-
-\begin{enumerate}
-\def\labelenumi{\arabic{enumi}.}
-\tightlist
-\item
-  Iniciar el giro del disco mediante el motor DC.
-\item
-  Medir y registrar la velocidad angular.
-\item
-  Aplicar y modificar la acción de frenado.
-\item
-  Observar la disminución de velocidad provocada por la fricción.
-\item
-  Repetir las pruebas y guardar datos para el modelado posterior.
-\end{enumerate}
-
-La planta construida servirá como base para la identificación
-experimental del modelo y la implementación del PID en las siguientes
-fases del proyecto.
+El banco permitió iniciar el giro, estimar y registrar RPM, aplicar
+una orden definida al freno y comparar su efecto con el giro libre
+tras apagar el motor. Estos resultados corresponden a lazo abierto:
+no demuestran todavía un sistema ABS con regulación automática ni
+un PID ajustado. La oscilación del disco y el acople provisional
+son limitaciones del prototipo usado para las mediciones.
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
-\section{Caracterización experimental de la planta --- punto
-extra}\label{caracterizaciuxf3n-experimental-de-la-planta-punto-extra}
+\section{Caracterización experimental de la planta --- punto extra}
+\label{caracterizaciuxf3n-experimental-de-la-planta-punto-extra}
 
-La caracterización se realizará cuando el banco esté ensamblado y el
-sensor de velocidad entregue mediciones confiables. Se llevará el disco
-a una condición inicial reproducible, se aplicará un cambio definido en
-la orden de frenado y se registrarán los pares \((t, u, \omega)\). Con
-estos datos se graficará la respuesta al escalón y se examinará si puede
-aproximarse mediante un modelo de primer orden o si requiere describir
-saturaciones y efectos no lineales.
+El cambio de 90 a 40 grados ordenado al SG90 constituye la entrada
+de escalón del ensayo. La salida observada es la velocidad del disco
+estimada por el KY-033. En este protocolo el motor se apaga
+\emph{antes} de aplicar el freno; el apagado y la orden del servo son
+dos eventos distintos. El efecto adicional del freno se interpreta
+comparando la desaceleración con corridas libres a RPM iniciales
+similares. Ninguna de las dos condiciones termina en un equilibrio
+positivo: ambas llegan a cero. Por ello no se estima una ganancia
+estática a partir de velocidades finales.
 
-Para el procesamiento en MATLAB se preparará una rutina que importe los
-datos, convierta RPM a rad/s, grafique la señal y estime parámetros solo
-cuando la forma de la respuesta lo permita. La respuesta al impulso
-solicitada en MATLAB se analizará a partir del modelo identificado,
-aclarando que no constituye una medición directa de un impulso físico
-ideal.
+Los cinco pares de archivos \texttt{datos\_*.csv} y
+\texttt{eventos\_*.csv} usados en la comparación están en la carpeta
+\texttt{proyecto2/tarea2/capturas/} del repositorio. El script
+\texttt{analisis/analizar\_capturas.m} los importa, alinea las curvas
+cerca de 1300 RPM y prepara las gráficas y métricas. Para un
+\emph{modelo local} antes de bajar de 500 RPM, propone la aproximación
+\begin{equation}
+\begin{aligned}
+\dot\omega(t)&=-k\omega(t)-c\,u(t),\\
+u(t)&=\begin{cases}
+0,&\text{giro libre},\\
+1,&\text{orden de freno aplicada}.
+\end{cases}
+\end{aligned}
+\end{equation}
+Aquí $k$ representa la caída libre efectiva y $c$ la desaceleración
+adicional asociada a la orden de freno. No son medidas directas de
+inercia ni torque. La función local desde $u$ hasta la variación de
+velocidad sería $G(s)=-c/(s+k)$, únicamente en el rango ajustado.
+La curva \texttt{impulse(G)} que solicita la tarea debe generarse
+en MATLAB, si se dispone de Control System Toolbox, y describirse
+como respuesta \emph{del modelo}, no como un impulso aplicado al
+disco. La ejecución de MATLAB, sus figuras, parámetros y validación
+quedan pendientes para la versión final.
 
-\textbf{Evidencias por incorporar:} {[}enlace al video único de planta y
-computadora{]}, {[}archivo de datos{]}, {[}figura de respuesta al
-escalón{]}, {[}resultado del análisis de impulso en MATLAB{]},
-{[}parámetros estimados y error de ajuste{]}.
+El ejemplo de MATLAB aportado por otro integrante supone un motor
+alimentado continuamente y un régimen final. Sus parámetros
+simulados no corresponden a estas capturas con motor apagado;
+por eso se mantiene como ilustración teórica separada.
 
 \section{Resultados y discusión}\label{resultados-y-discusiuxf3n}
 
-\subsection{Resultados teóricos}\label{resultados-teuxf3ricos}
+\subsection{Predicción teórica y alcance}
 
-El balance de torques predice que un aumento de torque de frenado,
-manteniendo las demás condiciones, reduce la velocidad angular. Bajo la
-aproximación lineal de primer orden, la respuesta al escalón presenta
-una disminución exponencial hasta un nuevo equilibrio, siempre que este
-exista y que el disco no llegue a detenerse. La validez del modelo
-deberá comprobarse con la planta real.
+El balance de torques predice una disminución de velocidad al aumentar
+el torque de freno. La figura~\ref{fig:escalon_teorico} usa parámetros
+hipotéticos y un torque de motor constante; \textbf{no es la curva
+medida en el prototipo}. En los ensayos reales se apagó la fuente
+del motor y después se ordenó el cambio del SG90. La comparación
+experimental relevante es entre giro libre y giro frenado con
+velocidades similares al comienzo del tramo analizado.
 
-\subsection{Resultados experimentales
-pendientes}\label{resultados-experimentales-pendientes}
+\subsection{Resultados de los CSV reales}
 
-\begin{center}\begingroup\footnotesize\setlength{\tabcolsep}{3pt}
-\begin{tabularx}{\columnwidth}{@{}p{0.42\columnwidth}Y@{}}
+Para las corridas libres se tomó como referencia la primera muestra
+posterior al apagado entre 1250 y 1350 RPM. Para las frenadas se usó
+la mediana de las cinco muestras inmediatamente anteriores a
+\texttt{g40}. El tiempo de cada fila siguiente es relativo a esa
+referencia, que corresponde a aproximadamente 1300 RPM; en las
+frenadas coincide con el instante de la orden al servo.
+
+\begin{center}\begingroup\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrrr@{}}
 \toprule
-\textbf{Ensayo} & \textbf{Datos y evidencias pendientes}\\
+\textbf{Corrida} & \textbf{RPM ref.} &
+\(\boldsymbol{t_{<500}}\) \textbf{(s)} &
+\(\boldsymbol{t_{0}}\) \textbf{(s)}\\
 \midrule
-Giro libre & Velocidad inicial, condiciones de alimentación y registro.\\
-Frenado a lazo abierto & Orden aplicada, velocidad observada y video.\\
-Respuesta al escalón & Curva tiempo--RPM y condiciones del ensayo.\\
-Caracterización MATLAB & Parámetros estimados, gráfica y análisis del impulso.\\
+Libre 1 & 1320 & 11,5 & 20,1\\
+Libre 2 & 1350 & 11,4 & 20,0\\
+Libre 3 & 1348 & 11,6 & 20,0\\
+Freno 1 & 1296 & 1,17 & 2,77\\
+Freno 2 & 1352 & 1,18 & 2,38\\
 \bottomrule
-\end{tabularx}\endgroup\end{center}
+\end{tabular}\endgroup\end{center}
 
-\textbf{No completar con datos simulados como si fueran mediciones
-reales.} En la discusión final se contrastarán las predicciones del
-modelo con los datos obtenidos y se explicarán las diferencias debidas
-al motor, la fricción, el actuador y la resolución del sensor.
+Las tres corridas libres corresponden a las capturas iniciadas a las
+02:22:22, 02:23:29 y 02:24:28; las dos frenadas comparables a
+02:13:46 y 02:15:27 del 22 de noviembre de 2026. El indicador
+\(t_0\) es la primera fila con RPM iguales a cero, no el instante
+exacto de parada física: el firmware espera un intervalo sin
+pulsos antes de mostrar cero.
+
+En el tramo desde cerca de 1300 hasta menos de 500 RPM, el tiempo
+medio fue aproximadamente 11,5 s en giro libre y 1,17 s con
+\texttt{g40}; este último fue unas 9,8 veces menor. La reducción
+fuerte y parecida en dos frenadas apoya que la orden del servo
+produce frenado adicional. No se infiere de esa relación un torque
+medido ni una ganancia estática. Una tercera corrida de frenado
+(02:14:37) registró un comando inválido y la orden válida
+6,388 s después del apagado, ya cerca de 1006 RPM; se conserva,
+pero no se promedia con las dos corridas principales.
+
+\subsection{Incertidumbre y trabajo pendiente}
+
+La fuente indicaba 1 V, pero no se midió tensión en terminales bajo
+carga. El apagado se marcó manualmente. Las RPM dependen de la
+detección óptica de pulsos y el disco osciló por su acople
+provisional; se observaron pulsos rechazados por el filtro de
+20 ms. La ESP32 registró filas cada 100 ms, de modo que los
+tiempos de cruce de un umbral tienen una resolución aproximada
+de una décima de segundo además de los retrasos de detección.
+El instante real de contacto de la esponja no fue medido.
+
+Faltan ejecutar el script de MATLAB con los cinco CSV, revisar el
+ajuste local, generar la figura de respuesta al escalón y la
+respuesta \texttt{impulse} del modelo con el complemento disponible.
+También faltan incorporar fotografías del montaje y el enlace
+al video único que muestre la operación física y el análisis en
+computadora. Estos elementos se añadirán cuando estén listos;
+las cifras de la tabla proceden de los CSV reales y no de una
+simulación.
 
 \section{Conclusiones y recomendaciones}
-La respuesta al impulso permite describir la dinámica de un modelo LTI y la respuesta al escalón facilita estimar su constante de tiempo y su ganancia. Para el banco propuesto, el modelo rotacional predice una disminución de velocidad al aumentar el torque de frenado, pero su validez depende de los efectos reales de fricción, saturación y actuación.
 
-La frecuencia de control propuesta de 100 Hz es preliminar y se justifica con una constante de tiempo hipotética de 0.2 s. No obstante, la resolución del encoder y el método de estimación de RPM pueden exigir una ventana de observación diferente. El controlador PID se plantea mediante una rutina no bloqueante con \texttt{micros()}, limitación de salida y protección integral básica, pendiente de conexión y ajuste experimental.
+El banco a lazo abierto permitió comparar tres desaceleraciones
+libres con dos frenadas bajo condiciones iniciales próximas. El
+cambio ordenado de 90 a 40 grados en el SG90 redujo de forma
+reproducible el tiempo hasta menos de 500 RPM desde cerca de
+1300 RPM. La comparación se limita al montaje y al rango
+observados; el motor ya estaba sin alimentación cuando se aplicó
+el freno y ambos tipos de ensayo terminaron en cero.
 
-Se recomienda seleccionar los componentes a partir de sus fichas técnicas, verificar la seguridad mecánica y eléctrica, medir la respuesta a lazo abierto y contrastarla con la predicción antes de ajustar el PID. Los resultados numéricos ilustrativos no deben confundirse con datos obtenidos del prototipo.
+El modelo de torque de primer orden aporta una explicación teórica,
+pero sus parámetros físicos no se identifican por separado con
+estas mediciones. La frecuencia de control de 100 Hz y el código
+PID del informe son propuestas para una fase posterior; la
+captura experimental utilizada imprime cada 100 ms. La evaluación
+en MATLAB y la evidencia audiovisual siguen pendientes para
+completar los puntos extra de la entrega.
 
 \section{Referencias}
 \begin{thebibliography}{9}
@@ -1089,7 +1019,14 @@ Se recomienda seleccionar los componentes a partir de sus fichas técnicas, veri
 \end{thebibliography}
 
 \section{Anexo A. Evidencias para la entrega}
-\textbf{Pendientes si se realizan los puntos extra:} fotografías del montaje real; enlace a video no listado del funcionamiento a lazo abierto; archivo CSV de mediciones; gráficas experimentales y análisis en MATLAB. No se adjuntan datos de laboratorio que todavía no se han medido.
+\textbf{Datos disponibles:} cinco pares de archivos CSV de corridas
+comparables en \texttt{proyecto2/tarea2/capturas/}; firmware de captura
+y script \texttt{analisis/analizar\_capturas.m} en el repositorio.
+Los identificadores de las corridas se explican en la sección de
+resultados. \textbf{Pendiente de incorporar al PDF final:} fotografías
+del montaje real, enlace al video único no listado, gráficas y
+resultados ejecutados en MATLAB, incluida la respuesta
+\texttt{impulse} del modelo si se dispone del complemento.
 
 
 \end{document}
