@@ -12,7 +12,7 @@ Fuente de requisitos: [Tareas_ASM_Tarea2_v5.pdf](documentos/Tareas_ASM_Tarea2_v5
 | Mini L298N AD70178 | Disponible, sin implementar | No se necesita para aplicar un escalón de **frenado** con el servo mientras el motor mantiene una alimentación fija. |
 | Disco MDF y mecanismo de frenado | Disco comunicado: diámetro 12 mm, espesor 3 mm | Confirmar si el diámetro es 12 mm o 12 cm; confirmar que la zapata realmente toca y frena el disco. |
 | Datos de respuesta al escalón | Pendiente | La muestra recibida mantiene el servo en 90°; su variación de RPM no identifica un cambio de frenado. |
-| Resultados MATLAB y video | Pendiente | El informe contiene una curva teórica, no datos experimentales. |
+| Resultados MATLAB y video | Avance simulado, experimento pendiente | [Scripts y documentación MATLAB](matlab/README.md), con ejemplo ideal ejecutado por el usuario. Faltan mediciones reales, ejecución de `impulse` con el complemento y video. |
 
 ## Decisión de montaje para esta tarea
 
@@ -42,6 +42,8 @@ No añadir la tensión del motor a cada fila si solo fue leída manualmente una 
 
 ## Trabajo MATLAB que puede empezar antes de medir
 
+Ya existe un avance en [matlab/README.md](matlab/README.md). Incluye un ejemplo ideal confirmado en MATLAB, un ejemplo adicional con ruido aún por ejecutar, importación del CSV, ajuste opcional y documentación de límites. La instalación probada no dispone de Control System Toolbox, por lo que genera el impulso analítico y deja pendiente `impulse`. Los resultados experimentales siguen pendientes.
+
 Una persona puede preparar ahora un script que importe el CSV, convierta `tiempo_ms` a segundos relativos a `t0_ms`, convierta RPM a rad/s con `2*pi*rpm/60`, grafique orden del servo y velocidad, y marque los intervalos anterior y posterior al cambio. También puede preparar las funciones de cálculo y las figuras usando datos de ejemplo **claramente identificados como simulados**. No debe llenar el informe con parámetros de ejemplo como si fueran medidos.
 
 Con los datos reales se decidirá si hay un régimen inicial y final suficientes para estimar la ganancia local `K = (omega_final - omega_inicial)/(angulo_final - angulo_inicial)` y una constante de tiempo. Si el comportamiento se aproxima bien por primer orden, se puede construir un modelo local `G(s) = K/(tau*s + 1)` y usar la función `impulse` de MATLAB para mostrar su respuesta impulsiva. Esa respuesta al impulso es **del modelo identificado**, no una medición directa de un impulso mecánico. Si hay retardo, saturación, parada o una respuesta no exponencial, documentar esas limitaciones y no forzar el ajuste.
@@ -65,7 +67,9 @@ La persona de MATLAB puede trabajar de forma independiente y luego ejecutar el s
 - [ ] Calibrar ángulos sin contacto y con frenado efectivo.
 - [ ] Implementar orden directa de servo con marca temporal `t0_ms`.
 - [ ] Capturar al menos tres corridas completas con fuente constante y metadatos.
-- [ ] Preparar y ejecutar script MATLAB con los CSV reales.
+- [x] Preparar los scripts MATLAB y ejecutar el ejemplo ideal simulado.
+- [ ] Ejecutar el ejemplo adicional con ruido en MATLAB.
+- [ ] Ejecutar el análisis con los CSV reales.
 - [ ] Graficar escalón medido, estimar parámetros solo si el ajuste es defendible y mostrar `impulse` del modelo.
 - [ ] Integrar resultados reales en el informe, sustituyendo los marcadores pendientes.
 - [ ] Grabar un solo video con prueba física, explicación y funcionamiento en computadora.

@@ -1,0 +1,5 @@
+# Salidas reproducibles de las demostraciones.
+ejemplo_IDEAL/
+ejemplo_SIMULADO/
+# Mantener originales de ensayos reales. Solo se omite su analisis generado.
+ensayo_*/analisis_experimental/

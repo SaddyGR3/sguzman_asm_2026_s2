@@ -1,0 +1,7 @@
+Verificación numérica independiente en Python con datos simulados
+K esperado 0.6, estimado 0.600114
+tau esperado 0.7 s, estimado 0.698597 s
+RMSE 0.027290 rad/s
+Integral de la respuesta impulsiva 0.600114, ganancia 0.600114
+Se comprobó la fórmula y el objetivo de mínimos cuadrados con otra implementación.
+No se ejecutaron los archivos .m ni se verificó su compatibilidad en MATLAB.
