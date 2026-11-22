@@ -4,6 +4,7 @@
 | --- | --- |
 | [documentos/Tareas_ASM_Tarea2_v5.pdf](documentos/Tareas_ASM_Tarea2_v5.pdf) | Enunciado original de la tarea. |
 | [documentos/Distribucion_Tarea2_ASM.md](documentos/Distribucion_Tarea2_ASM.md) | Reparto propuesto por integrante. |
+| [PLAN_PUNTOS_EXTRA.md](PLAN_PUNTOS_EXTRA.md) | Estado real, protocolo de medición y datos necesarios para MATLAB y los puntos extra 6 y 7. |
 | [documentos/tareaASM.md](documentos/tareaASM.md) | Borrador de diagramas recibido. |
 | [informe/ASMTarea2.tex](informe/ASMTarea2.tex) | Fuente del informe y figuras locales. |
 | [informe/README.md](informe/README.md) | Recursos y compilación. |
