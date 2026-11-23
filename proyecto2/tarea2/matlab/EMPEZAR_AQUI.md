@@ -10,4 +10,4 @@ ejecutar_analisis
 
 El programa imprime qué corridas incluyó, omite las incompletas y guarda gráficas y tablas en `resultados_reales/`. Consultar [README.md](README.md) para escoger solo dos corridas con `opciones.ids`, interpretar el modelo y comprobar `impulse`.
 
-El [ejemplo ideal](ejemplo_ideal.m) del compañero permanece separado; sus valores son hipotéticos y corresponden a un motor que sigue alimentado durante el escalón.
+El [analizador original](analizar_ensayo.m) del compañero ahora procesa también cada CSV real mediante su modo `motor_apagado`; el [ejemplo ideal](ejemplo_ideal.m) permanece disponible para el caso hipotético de motor alimentado durante el escalón.

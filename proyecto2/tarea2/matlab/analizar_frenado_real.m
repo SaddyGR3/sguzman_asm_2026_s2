@@ -2,6 +2,8 @@ function resultado = analizar_frenado_real(carpetaCapturas, opciones)
 % Analiza pares datos_*.csv/eventos_*.csv del banco ESP32, KY-033 y SG90.
 % El motor se apaga antes de ordenar g40; ninguna corrida tiene equilibrio
 % final positivo. El modelo es local, solo antes de bajar de 500 RPM.
+% Cada corrida se importa y valida con analizar_ensayo.m, adaptado del
+% analizador original; aqui se comparan y ajustan las corridas juntas.
 
 if nargin < 2, opciones = struct(); end
 if ~isfolder(carpetaCapturas)
@@ -43,57 +45,10 @@ for i = 1:numel(archivos)
         continue
     end
     try
-        D = readtable(fullfile(carpetaCapturas, nombre));
-        E = readtable(rutaEventos);
-        validar_csv(D, E);
-        tipos = string(E.tipo);
-        off = E.tiempo_ms(tipos == "MOTOR_OFF_MANUAL");
-        if numel(off) ~= 1, error('Se requiere una marca MOTOR_OFF_MANUAL.'); end
-        off = off(1);
-        ordenes = find(tipos == "SERVO_CMD" & E.tiempo_ms > off);
-        c = struct('id', id, 'tipo', '', 'D', D, 'tOff', off, ...
-            'tRef', NaN, 'rpmRef', NaN, 't500', NaN, 'tCero', NaN, ...
-            'reboteCero', false, 'k', NaN, 'c', NaN, 'r2', NaN, ...
-            'xAjuste', [], 'yAjuste', [], 'pred', []);
-
-        if isempty(ordenes)
-            % Referencia libre: primera RPM comparable DESPUES de apagar.
-            if any(D.servo_cmd_grados(D.tiempo_ms >= off) ~= opciones.angulo_libre)
-                error('El servo no permanecio en el angulo libre.');
-            end
-            idx = find(D.tiempo_ms >= off & D.rpm >= opciones.banda_referencia_libre_rpm(1) ...
-                & D.rpm <= opciones.banda_referencia_libre_rpm(2), 1);
-            if isempty(idx), error('No cruza la banda de RPM despues del apagado.'); end
-            c.tipo = 'libre';
-            c.tRef = D.tiempo_ms(idx);
-            c.rpmRef = D.rpm(idx);
-        else
-            % Frenada: una orden directa g40, con RPM previas comparables.
-            if numel(ordenes) ~= 1 || E.valor(ordenes) ~= opciones.angulo_freno
-                error('Se requiere una sola orden g%d despues del apagado.', opciones.angulo_freno);
-            end
-            tCmd = E.tiempo_ms(ordenes);
-            prev = find(D.tiempo_ms < tCmd);
-            prev = prev(max(1, numel(prev)-4):end); % Cinco muestras previas.
-            if numel(prev) < 3 || any(D.servo_cmd_grados(prev) ~= opciones.angulo_libre)
-                error('Faltan RPM previas con el freno libre.');
-            end
-            c.rpmRef = median(D.rpm(prev));
-            if c.rpmRef < opciones.banda_rpm(1) || c.rpmRef > opciones.banda_rpm(2)
-                error('Orden a %.0f RPM, fuera de la banda comparable.', c.rpmRef);
-            end
-            c.tipo = 'frenada';
-            c.tRef = tCmd;
-        end
-
-        idx500 = find(D.tiempo_ms >= c.tRef & D.rpm < opciones.umbral_rpm, 1);
-        if isempty(idx500), error('No hay cruce por debajo de %.0f RPM.', opciones.umbral_rpm); end
-        c.t500 = (D.tiempo_ms(idx500) - c.tRef)/1000;
-        idxCero = find(D.tiempo_ms >= c.tRef & D.rpm == 0, 1);
-        if ~isempty(idxCero)
-            c.tCero = (D.tiempo_ms(idxCero) - c.tRef)/1000;
-            c.reboteCero = any(D.rpm(idxCero+1:end) > 0);
-        end
+        opcionesEnsayo = opciones;
+        opcionesEnsayo.protocolo = 'motor_apagado';
+        opcionesEnsayo.id = id;
+        c = analizar_ensayo(fullfile(carpetaCapturas, nombre), rutaEventos, opcionesEnsayo);
         if strcmp(c.tipo, 'libre')
             libres(end+1) = c; %#ok<AGROW>
         else
@@ -284,23 +239,4 @@ end
 
 function opciones = defecto(opciones, nombre, valor)
 if ~isfield(opciones,nombre), opciones.(nombre) = valor; end
-end
-
-function validar_csv(D,E)
-if ~all(ismember({'tiempo_ms','rpm','servo_cmd_grados'},D.Properties.VariableNames))
-    error('Datos: faltan tiempo_ms, rpm o servo_cmd_grados.');
-end
-if ~all(ismember({'tiempo_ms','tipo','valor'},E.Properties.VariableNames))
-    error('Eventos: faltan tiempo_ms, tipo o valor.');
-end
-if height(D)<15 || any(~isfinite(D.tiempo_ms)) || any(~isfinite(D.rpm)) ...
-        || any(~isfinite(D.servo_cmd_grados)) || any(diff(D.tiempo_ms)<=0)
-    error('Datos: filas insuficientes, valor no finito o tiempo no creciente.');
-end
-if any(D.rpm<0) || any(D.servo_cmd_grados<0 | D.servo_cmd_grados>180)
-    error('Datos: RPM o angulo fuera de rango.');
-end
-if any(~isfinite(E.tiempo_ms)) || any(~isfinite(E.valor))
-    error('Eventos: tiempo o valor no numerico.');
-end
 end

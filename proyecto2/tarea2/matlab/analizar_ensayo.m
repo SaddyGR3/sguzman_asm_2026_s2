@@ -1,10 +1,15 @@
-function resultado = analizar_ensayo(archivoCSV, t0_ms, opciones)
-% Analiza un ensayo de frenado con motor alimentado a tension constante.
-% Entrada experimental en grados ordenados al servo, salida en rad/s.
-% Ejemplo de uso en ejecutar_analisis.m. Requiere MATLAB R2020a o posterior.
+function resultado = analizar_ensayo(archivoCSV, referencia, opciones)
+% Analiza CSV de frenado: protocolo con motor apagado o ejemplo con
+% alimentacion constante. En el primero, referencia es eventos_*.csv;
+% en el segundo, referencia es t0_ms. Requiere MATLAB R2020a o posterior.
 % El ajuste usa fminsearch, incluido en MATLAB, sin Optimization Toolbox.
 
 if nargin < 3, opciones = struct(); end
+if isfield(opciones, 'protocolo') && strcmp(opciones.protocolo, 'motor_apagado')
+    resultado = analizar_motor_apagado(archivoCSV, referencia, opciones);
+    return
+end
+t0_ms = referencia;
 if ~isfield(opciones, 'tipo_datos')
     error('Declare opciones.tipo_datos como experimental o simulado.');
 end
@@ -23,33 +28,7 @@ opciones = valor_defecto(opciones, 'salida', ...
 if ~isscalar(opciones.retardo_s) || ~isfinite(opciones.retardo_s) || opciones.retardo_s < 0
     error('retardo_s debe ser finito y no negativo.');
 end
-if ~isfile(archivoCSV), error('No existe el archivo CSV indicado.'); end
-
-T = readtable(archivoCSV, 'VariableNamingRule', 'preserve');
-nombres = T.Properties.VariableNames;
-if ~all(ismember({'tiempo_ms', 'rpm'}, nombres))
-    error('El CSV debe incluir tiempo_ms y rpm.');
-end
-if ismember('servo_cmd_deg', nombres)
-    u = T.('servo_cmd_deg');
-elseif ismember('servo_grados', nombres)
-    u = T.('servo_grados');
-else
-    error('Falta servo_cmd_deg o servo_grados.');
-end
-ms = T.('tiempo_ms'); rpm = T.('rpm');
-if ~isnumeric(ms) || ~isnumeric(rpm) || ~isnumeric(u)
-    error('Las tres columnas deben ser numericas. Quite mensajes de depuracion.');
-end
-if numel(ms) < 15 || any(~isfinite([ms; rpm; u]))
-    error('Se requieren al menos 15 filas numericas, sin NaN ni Inf.');
-end
-if any(diff(ms) <= 0)
-    error('El tiempo debe crecer estrictamente. Revise reinicios y duplicados.');
-end
-if any(rpm < 0) || any(u < 0 | u > 180)
-    error('Revise RPM negativas o comandos fuera del intervalo 0 a 180 grados.');
-end
+[~, ms, rpm, u] = leer_datos_ensayo(archivoCSV);
 t = (ms - t0_ms) / 1000;
 w = 2*pi*rpm/60;
 if ~any(t < 0) || ~any(t >= 0)
@@ -220,4 +199,113 @@ end
 
 function y = respuesta(t,y0,du,K,tau,L)
 y = y0 + K*du*(1-exp(-max(t-L,0)/tau));
+end
+
+function [T, ms, rpm, u] = leer_datos_ensayo(archivoCSV)
+% Importacion y controles compartidos por las simulaciones y CSV reales.
+if ~isfile(archivoCSV), error('No existe el archivo CSV indicado.'); end
+T = readtable(archivoCSV, 'VariableNamingRule', 'preserve');
+nombres = T.Properties.VariableNames;
+if ~all(ismember({'tiempo_ms', 'rpm'}, nombres))
+    error('El CSV debe incluir tiempo_ms y rpm.');
+end
+if ismember('servo_cmd_grados', nombres)
+    u = T.('servo_cmd_grados');
+elseif ismember('servo_cmd_deg', nombres)
+    u = T.('servo_cmd_deg');
+elseif ismember('servo_grados', nombres)
+    u = T.('servo_grados');
+else
+    error('Falta servo_cmd_grados, servo_cmd_deg o servo_grados.');
+end
+ms = T.('tiempo_ms'); rpm = T.('rpm');
+if ~isnumeric(ms) || ~isnumeric(rpm) || ~isnumeric(u)
+    error('Las tres columnas deben ser numericas. Quite mensajes de depuracion.');
+end
+if numel(ms) < 15 || any(~isfinite([ms; rpm; u]))
+    error('Se requieren al menos 15 filas numericas, sin NaN ni Inf.');
+end
+if any(diff(ms) <= 0)
+    error('El tiempo debe crecer estrictamente. Revise reinicios y duplicados.');
+end
+if any(rpm < 0) || any(u < 0 | u > 180)
+    error('Revise RPM negativas o comandos fuera del intervalo 0 a 180 grados.');
+end
+end
+
+function c = analizar_motor_apagado(archivoCSV, archivoEventos, opciones)
+% Ruta experimental: el apagado de la fuente precede la orden g40.
+% Comparacion y modelo conjunto se calculan en analizar_frenado_real.m.
+opciones = valor_defecto(opciones, 'banda_rpm', [1250 1400]);
+opciones = valor_defecto(opciones, 'banda_referencia_libre_rpm', [1250 1350]);
+opciones = valor_defecto(opciones, 'umbral_rpm', 500);
+opciones = valor_defecto(opciones, 'angulo_libre', 90);
+opciones = valor_defecto(opciones, 'angulo_freno', 40);
+if ~isfile(archivoEventos)
+    error('Falta el CSV de eventos: %s', archivoEventos);
+end
+[D, ~, ~, u] = leer_datos_ensayo(archivoCSV);
+D.servo_cmd_grados = u;
+E = readtable(archivoEventos, 'VariableNamingRule', 'preserve');
+if ~all(ismember({'tiempo_ms','tipo','valor'}, E.Properties.VariableNames))
+    error('Eventos: faltan tiempo_ms, tipo o valor.');
+end
+if ~isnumeric(E.tiempo_ms) || ~isnumeric(E.valor) || ...
+        any(~isfinite(E.tiempo_ms)) || any(~isfinite(E.valor))
+    error('Eventos: tiempo o valor no numerico.');
+end
+tipos = string(E.tipo);
+off = E.tiempo_ms(tipos == "MOTOR_OFF_MANUAL");
+if numel(off) ~= 1, error('Se requiere una marca MOTOR_OFF_MANUAL.'); end
+off = off(1);
+ordenes = find(tipos == "SERVO_CMD" & E.tiempo_ms > off);
+if isfield(opciones, 'id')
+    id = opciones.id;
+else
+    [~, nombre] = fileparts(archivoCSV);
+    id = nombre(7:end);
+end
+c = struct('id', id, 'tipo', '', 'D', D, 'tOff', off, ...
+    'tRef', NaN, 'rpmRef', NaN, 't500', NaN, 'tCero', NaN, ...
+    'reboteCero', false, 'k', NaN, 'c', NaN, 'r2', NaN, ...
+    'xAjuste', [], 'yAjuste', [], 'pred', []);
+
+if isempty(ordenes)
+    % Primera RPM comparable despues de apagar el motor.
+    if any(D.servo_cmd_grados(D.tiempo_ms >= off) ~= opciones.angulo_libre)
+        error('El servo no permanecio en el angulo libre.');
+    end
+    idx = find(D.tiempo_ms >= off & D.rpm >= opciones.banda_referencia_libre_rpm(1) ...
+        & D.rpm <= opciones.banda_referencia_libre_rpm(2), 1);
+    if isempty(idx), error('No cruza la banda de RPM despues del apagado.'); end
+    c.tipo = 'libre';
+    c.tRef = D.tiempo_ms(idx);
+    c.rpmRef = D.rpm(idx);
+else
+    % Una sola orden g40, con RPM previas comparables.
+    if numel(ordenes) ~= 1 || E.valor(ordenes) ~= opciones.angulo_freno
+        error('Se requiere una sola orden g%d despues del apagado.', opciones.angulo_freno);
+    end
+    tCmd = E.tiempo_ms(ordenes);
+    prev = find(D.tiempo_ms < tCmd);
+    prev = prev(max(1, numel(prev)-4):end);
+    if numel(prev) < 3 || any(D.servo_cmd_grados(prev) ~= opciones.angulo_libre)
+        error('Faltan RPM previas con el freno libre.');
+    end
+    c.rpmRef = median(D.rpm(prev));
+    if c.rpmRef < opciones.banda_rpm(1) || c.rpmRef > opciones.banda_rpm(2)
+        error('Orden a %.0f RPM, fuera de la banda comparable.', c.rpmRef);
+    end
+    c.tipo = 'frenada';
+    c.tRef = tCmd;
+end
+
+idx500 = find(D.tiempo_ms >= c.tRef & D.rpm < opciones.umbral_rpm, 1);
+if isempty(idx500), error('No hay cruce por debajo de %.0f RPM.', opciones.umbral_rpm); end
+c.t500 = (D.tiempo_ms(idx500) - c.tRef)/1000;
+idxCero = find(D.tiempo_ms >= c.tRef & D.rpm == 0, 1);
+if ~isempty(idxCero)
+    c.tCero = (D.tiempo_ms(idxCero) - c.tRef)/1000;
+    c.reboteCero = any(D.rpm(idxCero+1:end) > 0);
+end
 end

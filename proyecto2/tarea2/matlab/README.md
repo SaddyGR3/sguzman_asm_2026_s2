@@ -33,7 +33,7 @@ Para demostrar la comparación de la respuesta al escalón en el punto extra 7 d
    opciones.ids = {'1', '2'};
    ```
 
-   Dejar `{}` para analizar todos los pares comparables. El programa incluye por defecto las tres libres y dos frenadas cerca de 1300 RPM; omite la frenada donde `g40` se envió tarde, cerca de 1006 RPM, y el archivo corto sin marca de apagado. En `ejecutar_analisis.m` la banda de inclusión de las frenadas es `[1250 1400]`; las libres se alinean en su primera muestra de `[1250 1350]` tras apagar la fuente, como en la tabla del informe. Ambas bandas se pueden ajustar si cambia la velocidad de referencia.
+   Dejar `{}` para analizar todos los pares comparables presentes en la carpeta. Con los CSV numerados actuales, incluye la libre `1` y la frenada `2`. En `ejecutar_analisis.m` la banda de inclusión de las frenadas es `[1250 1400]`; las libres se alinean en su primera muestra de `[1250 1350]` tras apagar la fuente. Ambas bandas se pueden ajustar si cambia la velocidad de referencia. Los archivos antiguos se omiten si no están en la carpeta o si se indican únicamente los ID nuevos.
 
 4. Revisar los mensajes **Incluida/Omitida** de la ventana de comandos y `resultado.resumen`. No presentar como ensayo válido una corrida omitida. La columna `rpm_despues_del_primer_cero` avisa si el sensor volvió a reportar RPM después del primer cero; ocurre en la frenada `20261122_021527_884972`, así que ese cero no debe describirse como el instante físico exacto de parada. El programa guarda en `matlab/resultados_reales/`:
 
@@ -57,6 +57,6 @@ Si MATLAB no tiene Control System Toolbox, el impulso analítico se genera pero 
 
 ## Ejemplos anteriores del compañero
 
-[ejemplo_ideal.m](ejemplo_ideal.m) y [demo_simulada.m](demo_simulada.m) siguen disponibles para practicar con un motor alimentado continuamente y parámetros **hipotéticos**. [analizar_ensayo.m](analizar_ensayo.m) corresponde a ese protocolo con equilibrio final positivo. Para las capturas físicas de esta tarea usar `ejecutar_analisis.m`, que llama a [analizar_frenado_real.m](analizar_frenado_real.m). No presentar los parámetros de las simulaciones como mediciones del prototipo.
+[ejemplo_ideal.m](ejemplo_ideal.m) y [demo_simulada.m](demo_simulada.m) siguen disponibles para practicar con un motor alimentado continuamente y parámetros **hipotéticos**. El [analizador original](analizar_ensayo.m) se adaptó para leer también los pares reales `datos_*.csv`/`eventos_*.csv`: valida cada corrida, reconoce el apagado de la fuente y la orden `g40`, y calcula sus tiempos de caída. `ejecutar_analisis.m` llama a [analizar_frenado_real.m](analizar_frenado_real.m), que usa ese analizador para cada corrida y después compara ambas condiciones, ajusta el modelo local y ejecuta `impulse(G)`. El cálculo anterior para el ejemplo simulado se conserva. No presentar los parámetros de las simulaciones como mediciones del prototipo.
 
 El análisis todavía debe ejecutarse en MATLAB en la computadora del equipo; esta carpeta se preparó y contrastó con los CSV usando un cálculo independiente, pero MATLAB no está instalado en este entorno.

@@ -11,7 +11,7 @@ if ~isfolder(carpetaCapturas)
 end
 opciones = struct();
 opciones.banda_rpm = [1250 1400]; % Aceptar ordenes g40 cerca de 1300 RPM.
-opciones.banda_referencia_libre_rpm = [1250 1350]; % Reproducir tabla del informe.
+opciones.banda_referencia_libre_rpm = [1250 1350]; % Alinear una RPM libre comparable.
 opciones.umbral_rpm = 500;
 opciones.angulo_libre = 90;
 opciones.angulo_freno = 40;
