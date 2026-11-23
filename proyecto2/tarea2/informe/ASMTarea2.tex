@@ -8,6 +8,7 @@
 \usepackage{graphicx,booktabs,tabularx,array,float,xcolor,hyperref,listings}
 \usepackage{enumitem}
 \usepackage{ragged2e}
+\graphicspath{{imgs/}}
 
 \newcommand{\passthrough}[1]{#1}
 \providecommand{\tightlist}{%
@@ -36,7 +37,9 @@
     breaklines=true,
     breakatwhitespace=true,
     frame=single,
-    columns=fullflexible
+    columns=fullflexible,
+    showstringspaces=false,
+    literate={á}{{\'a}}1
 }
 
 \begin{document}
@@ -101,7 +104,7 @@ Luis Castro Montenegro (2013083843)
 ]
 \section{Resumen}\label{resumen}
 
-Se estudió un banco didáctico de frenado de disco tipo ABS a lazo abierto. Se revisaron las respuestas al impulso y al escalón, el muestreo y una implementación no bloqueante de PID para una fase posterior. El montaje ensayado usa un motor DC miniatura alimentado por una fuente que indicaba 1 V, un disco MDF de 12 cm, un sensor KY-033, un servomotor SG90 y una ESP32. El motor se apaga antes de aplicar el freno; se compararon tres corridas de giro libre y dos de frenado con un cambio de orden de 90 a 40 grados. Cerca de 1300 RPM, el tiempo hasta bajar de 500 RPM fue 11,4--11,6 s sin freno y 1,168--1,178 s con freno. Se distingue esta observación del modelo teórico y se dejan para la entrega final las figuras de MATLAB y las evidencias audiovisuales.
+Se estudió un banco didáctico de frenado de disco tipo ABS a lazo abierto. Se revisaron las respuestas al impulso y al escalón, el muestreo y una implementación no bloqueante de PID para una fase posterior. El montaje ensayado usa un motor DC miniatura alimentado por una fuente que indicaba 1 V, un disco MDF de 12 cm, un sensor KY-033, un servomotor SG90 y una ESP32. El motor se apaga antes de aplicar el freno. En los ensayos documentados en video se comparó una corrida de giro libre con una de frenado, mediante un cambio de orden de 90 a 40 grados. Cerca de 1300 RPM, el tiempo hasta bajar de 500 RPM fue 11,300 s sin freno y 1,317 s con freno. MATLAB produjo las curvas de ambas corridas y la respuesta al impulso de un modelo local. Se distingue esta última de un impulso físico aplicado al disco.
 
 \textbf{Palabras clave:} modelado de sistemas, frenado ABS, respuesta al
 escalón, PID digital, ESP32, velocidad angular.
@@ -125,7 +128,7 @@ etapa posterior y no intervino en los ensayos de esta tarea.
 \section{Importancia de las respuestas al impulso y al
 escalón}\label{importancia-de-las-respuestas-al-impulso-y-al-escaluxf3n}
 
-\subsection{¿Por qué son importantes para modelar
+\subsection{\textquestiondown{}Por qué son importantes para modelar
 sistemas?}\label{por-quuxe9-son-importantes-para-modelar-sistemas}
 
 Según la teoría de sistemas lineales \cite{ogata2010,franklin2015}, la \textbf{respuesta al impulso} describe cómo reacciona un sistema ante
@@ -162,7 +165,7 @@ físicamente realizable, para aproximarlo se podría aplicar una
 pulsación breve y pequeña del freno alrededor de una condición
 de operación y registrar cómo cambia la velocidad.
 
-En el modelo lineal simplificado del apartado 6, si la entrada es un
+En el modelo lineal simplificado de la sección~\ref{modelo_teorico}, si la entrada es un
 torque de frenado positivo, la función de transferencia es
 
 \[
@@ -248,7 +251,7 @@ flancos aceptados del KY-033. Con una marca asumida por vuelta, a
 entre marcas. El valor de RPM puede repetirse en varias filas.
 
 El descenso con freno entre aproximadamente 1300 y 500 RPM duró
-1,17 s y quedó representado por unas doce filas de registro.
+1,317 s y quedó representado por unas trece filas de registro.
 El umbral de rechazo de pulsos de 20 ms descarta transiciones
 demasiado cercanas, pero la oscilación del disco y los pulsos
 rechazados limitan la exactitud. La frecuencia de control de
@@ -404,16 +407,14 @@ una orden de prueba.
 \subsection{Diagrama de bloques}\label{diagrama-de-bloques}
 
 La figura~\ref{fig:arquitectura} muestra cómo va a quedar la arquitectura completa del sistema al final del proyecto. Sin embargo, para las pruebas en lazo abierto de esta etapa, dejamos el controlador PID deshabilitado y mandamos la señal de frenado de forma directa e independiente. 
+
 \begin{figure}[H]
     \centering
-    \includegraphics[
-        width=0.70\columnwidth,
-        height=0.30\textheight,
-        keepaspectratio
-    ]{diagrama_sistema.jpeg}
+    \includegraphics[width=0.94\columnwidth,height=0.43\textheight,keepaspectratio]{diagrama_sistema.jpeg}
     \caption{Arquitectura funcional propuesta.}
     \label{fig:arquitectura}
 \end{figure}
+
 
 Aunque el esquema incluye tanto el lazo cerrado definitivo como esta ruta alternativa de prueba, en esta entrega todavía no usamos la realimentación del sensor para ajustar el freno automáticamente.
 
@@ -522,7 +523,7 @@ Periodo de muestreo & $T_s$ & Tiempo entre adquisiciones consecutivas.\\
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
 \section{Representación matemática y respuesta esperada de la
-planta}
+planta}\label{modelo_teorico}
 
 \subsection{Variables y supuestos}
 
@@ -651,13 +652,17 @@ a \(\omega=0\), porque el sistema real no puede continuar con velocidad
 negativa bajo el mismo supuesto de frenado unidireccional. Si \(b\) es
 despreciable, la aproximación pasa a una desaceleración casi lineal:
 \(\omega(t)\approx\omega_0-(\Delta\tau_f/J)t\), hasta detenerse.
+La figura~\ref{fig:escalon_teorico} ilustra esa respuesta teórica
+con parámetros hipotéticos.
 
-\begin{figure}[!htbp]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.88\columnwidth]{simulacion_escalon_frenado.png}
+\includegraphics[width=\columnwidth]{simulacion_escalon_frenado.png}
 \caption{Respuesta al escalón simulada con parámetros hipotéticos; no corresponde a una medición experimental.}
 \label{fig:escalon_teorico}
 \end{figure}
+
+
 
 \subsection{Valores teóricos que se pueden
 estimar}
@@ -735,8 +740,8 @@ La forma exacta de la curva va a depender del actuador, de la fricción que haya
 
 Se ensambló un banco de frenado por contacto sobre un disco MDF de
 12 cm de diámetro y 3 mm de espesor. El disco gira mediante un motor
-DC miniatura identificado comercialmente como AD20413; el equipo no
-dispone de una hoja técnica propia de ese motor. Durante las corridas,
+DC miniatura cuyo modelo exacto no se pudo identificar; el equipo no
+dispone de su hoja de datos. Durante las corridas,
 la fuente externa del motor se ajustó o indicaba 1 V. Ese valor no es
 una medición con multímetro en sus terminales bajo carga.
 
@@ -760,7 +765,7 @@ la fuerza normal ni el torque de frenado.
 \toprule
 \textbf{Elemento} & \textbf{Configuración del ensayo}\\
 \midrule
-Motor y fuente & DC miniatura AD20413; fuente externa indicando 1 V; apagado desde la fuente con cables conectados.\\
+Motor y fuente & DC miniatura de modelo no identificado; fuente externa indicando 1 V; apagado desde la fuente con cables conectados.\\
 Disco y acople & MDF, diámetro 12 cm, espesor 3 mm; acople provisional con oscilación visible.\\
 Sensor & KY-033 reflectivo en GPIO34; una marca por vuelta es el supuesto de la conversión a RPM.\\
 Actuador & SG90 en GPIO18; hule y esponja sobre la cara superior del MDF; órdenes de 90 y 40 grados.\\
@@ -775,9 +780,10 @@ sin conexión eléctrica con la ESP32 ni con el puente H disponible.
 El KY-033 entregó su señal a GPIO34 y recibió alimentación de la
 placa ESP32; el SG90 recibió la orden por GPIO18 y también fue
 alimentado desde esa placa. La computadora se comunicó con la
-ESP32 por USB. Para documentar el cableado con detalle aún falta
-una fotografía clara y la identificación de los pines concretos
-de alimentación del servo y del sensor. El esquema eléctrico
+ESP32 por USB. Las fotografías muestran la conexión externa del
+motor y la disposición del banco, pero no permiten identificar
+con certeza los pines concretos de alimentación del servo y del
+sensor. El esquema eléctrico
 preliminar de diseño se excluye porque muestra un puente H y una
 fuente independiente para el servo que no se utilizaron.
 
@@ -789,9 +795,9 @@ Tampoco se midieron masa del disco, momento de inercia, corriente
 ni torque del motor. Estas limitaciones no impiden comparar las
 curvas libres y frenadas obtenidas bajo el mismo montaje.
 
-\textbf{Evidencia visual por incorporar:} fotografías generales y de
-detalle del motor, acople, sensor, brazo y superficie de contacto,
-más la toma física que se integrará en el video único.
+El funcionamiento físico y la disposición del banco se documentan
+en las fotografías de la figura~\ref{fig:fotos_montaje} y en los
+videos citados en la sección de evidencias.
 
 \section{Prueba de funcionamiento a lazo abierto}
 \label{prueba-de-funcionamiento-a-lazo-abierto}
@@ -814,33 +820,24 @@ reacción de la persona; la indicación de cero llega después de un
 intervalo sin pulsos y no identifica el instante mecánico exacto
 de parada.
 
-Se conservaron tres referencias libres y dos frenadas comparables.
-Una tercera corrida frenada recibió la orden con demora y a una RPM
-inicial menor, por lo que no se promedió con las dos principales.
+Para el análisis mostrado en video se seleccionaron los pares
+\texttt{datos\_1.csv}/\texttt{eventos\_1.csv} (giro libre) y
+\texttt{datos\_2.csv}/\texttt{eventos\_2.csv} (frenado). Hay
+otras capturas locales de calibración y de pruebas anteriores;
+no se mezclan en las cifras presentadas aquí.
 El control PID no intervino: la orden de freno fue elegida
 manualmente y no se calculó a partir del error de velocidad.
 
-\section{Evidencias requeridas}\label{evidencias-requeridas}
+\section{Evidencia audiovisual}\label{evidencias-requeridas}
 
-\begin{itemize}
-\tightlist
-\item
-  \textbf{Fotografía 1:} vista general del banco ensamblado.
-\item
-  \textbf{Fotografía 2:} detalle del motor y el acoplamiento con el
-  disco.
-\item
-  \textbf{Fotografía 3:} detalle del actuador y la zapata de frenado.
-\item
-  \textbf{Fotografía 4:} ubicación del sensor de velocidad.
-\item
-  \textbf{Fotografía 5:} conexiones del microcontrolador y alimentación.
-\item
-  \textbf{Video:} demostración del disco girando, medición de velocidad
-  y aplicación del freno a lazo abierto.
-\end{itemize}
+El \href{https://youtu.be/hc-JIA8kH4Y}{video de la planta completa}
+documenta el montaje y su funcionamiento a lazo abierto. El
+\href{https://youtu.be/BWD1uK7m35k}{video de caracterización}
+presenta los ensayos de giro libre y frenado y el análisis en MATLAB
+de los pares 1 y 2. Son dos enlaces de evidencia para los puntos
+extra 6 y 7, respectivamente. Las fotografías del montaje se
+presentan en la figura~\ref{fig:fotos_montaje}.
 
-Las fotografías y el video deben corresponder al montaje real del grupo.
 
 \section{Seguridad del montaje}\label{seguridad-del-montaje}
 
@@ -890,15 +887,15 @@ similares. Ninguna de las dos condiciones termina en un equilibrio
 positivo: ambas llegan a cero. Por ello no se estima una ganancia
 estática a partir de velocidades finales.
 
-Los cinco pares de archivos \texttt{datos\_*.csv} y
-\texttt{eventos\_*.csv} usados en la comparación están en la carpeta
-\texttt{proyecto2/tarea2/capturas/} del repositorio. El script
-\texttt{analisis/analizar\_capturas.m} los importa, alinea las curvas
-cerca de 1300 RPM y prepara las gráficas y métricas. Para un
-\emph{modelo local} antes de bajar de 500 RPM, propone la aproximación
+El análisis del video utiliza los pares 1 y 2 en
+\texttt{proyecto2/tarea2/capturas/}. El script
+\texttt{matlab/ejecutar\_analisis.m} llama al analizador de cada
+ensayo y compara la corrida libre con la frenada. Para un
+\emph{modelo local} antes de bajar de 500 RPM, se aproxima la
+velocidad $r(t)$ expresada en RPM mediante
 \begin{equation}
 \begin{aligned}
-\dot\omega(t)&=-k\omega(t)-c\,u(t),\\
+\dot r(t)&=-kr(t)-c\,u(t),\\
 u(t)&=\begin{cases}
 0,&\text{giro libre},\\
 1,&\text{orden de freno aplicada}.
@@ -907,18 +904,18 @@ u(t)&=\begin{cases}
 \end{equation}
 Aquí $k$ representa la caída libre efectiva y $c$ la desaceleración
 adicional asociada a la orden de freno. No son medidas directas de
-inercia ni torque. La función local desde $u$ hasta la variación de
-velocidad sería $G(s)=-c/(s+k)$, únicamente en el rango ajustado.
-La curva \texttt{impulse(G)} que solicita la tarea debe generarse
-en MATLAB, si se dispone de Control System Toolbox, y describirse
-como respuesta \emph{del modelo}, no como un impulso aplicado al
-disco. La ejecución de MATLAB, sus figuras, parámetros y validación
-quedan pendientes para la versión final.
+inercia ni torque. Para \texttt{tf} e \texttt{impulse} se convierte
+la salida a $\omega=2\pi r/60$ en rad/s:
+$G(s)=-(2\pi c/60)/(s+k)$ para la entrada normalizada $u$.
+Esta función describe únicamente el intervalo ajustado. La curva
+\texttt{impulse(G)} generada en MATLAB es una respuesta
+\emph{del modelo}, no un impulso aplicado físicamente al disco.
 
-El ejemplo de MATLAB aportado por otro integrante supone un motor
-alimentado continuamente y un régimen final. Sus parámetros
-simulados no corresponden a estas capturas con motor apagado;
-por eso se mantiene como ilustración teórica separada.
+El analizador de MATLAB aportado por otro integrante se adaptó
+para leer los pares reales y sus eventos de apagado y frenado.
+El ejemplo anterior, con motor alimentado continuamente y régimen
+final, sigue como ilustración teórica; sus parámetros simulados
+no corresponden a estas capturas.
 
 \section{Resultados y discusión}\label{resultados-y-discusiuxf3n}
 
@@ -934,7 +931,7 @@ velocidades similares al comienzo del tramo analizado.
 
 \subsection{Resultados de los CSV reales}
 
-Para las corridas libres se tomó como referencia la primera muestra
+Para la corrida libre se tomó como referencia la primera muestra
 posterior al apagado entre 1250 y 1350 RPM. Para las frenadas se usó
 la mediana de las cinco muestras inmediatamente anteriores a
 \texttt{g40}. El tiempo de cada fila siguiente es relativo a esa
@@ -948,32 +945,61 @@ frenadas coincide con el instante de la orden al servo.
 \(\boldsymbol{t_{<500}}\) \textbf{(s)} &
 \(\boldsymbol{t_{0}}\) \textbf{(s)}\\
 \midrule
-Libre 1 & 1320 & 11,5 & 20,1\\
-Libre 2 & 1350 & 11,4 & 20,0\\
-Libre 3 & 1348 & 11,6 & 20,0\\
-Freno 1 & 1296 & 1,17 & 2,77\\
-Freno 2 & 1352 & 1,18 & 2,38\\
+Libre 1 & 1343,51 & 11,300 & 19,800\\
+Freno 2 & 1368,18 & 1,317 & 2,717\\
 \bottomrule
 \end{tabular}\endgroup\end{center}
 
-Las tres corridas libres corresponden a las capturas iniciadas a las
-02:22:22, 02:23:29 y 02:24:28; las dos frenadas comparables a
-02:13:46 y 02:15:27 del 22 de noviembre de 2026. El indicador
+Los identificadores 1 y 2 corresponden a los archivos numerados
+utilizados en el video. La marca manual de apagado de la fuente
+precede la orden \texttt{g40} por 2,769 s en la corrida frenada.
+El indicador
 \(t_0\) es la primera fila con RPM iguales a cero, no el instante
 exacto de parada física: el firmware espera un intervalo sin
 pulsos antes de mostrar cero.
 
-En el tramo desde cerca de 1300 hasta menos de 500 RPM, el tiempo
-medio fue aproximadamente 11,5 s en giro libre y 1,17 s con
-\texttt{g40}; este último fue unas 9,8 veces menor. La reducción
-fuerte y parecida en dos frenadas apoya que la orden del servo
-produce frenado adicional. No se infiere de esa relación un torque
-medido ni una ganancia estática. Una tercera corrida de frenado
-(02:14:37) registró un comando inválido y la orden válida
-6,388 s después del apagado, ya cerca de 1006 RPM; se conserva,
-pero no se promedia con las dos corridas principales.
+En el tramo desde cerca de 1300 hasta menos de 500 RPM, la
+corrida frenada tardó 1,317 s y la libre 11,300 s: una relación
+de aproximadamente 8,58 a 1. Es una comparación de \emph{dos}
+ensayos con velocidades iniciales próximas, no una estimación
+estadística de repetibilidad. La figura~\ref{fig:comparacion_real}
+muestra ambas curvas sin filtrado adicional. No se infiere de la
+relación un torque medido ni una ganancia estática.
 
-\subsection{Incertidumbre y trabajo pendiente}
+
+
+La figura~\ref{fig:escalon_real} representa la entrada ordenada al
+servo como un escalón de 90 a 40 grados y la RPM medida. La velocidad
+ya venía bajando porque la fuente se apagó antes del comando; el
+instante real de contacto de la esponja no se midió.
+
+
+
+\subsection{Ajuste local y respuesta al impulso de MATLAB}
+
+MATLAB estimó $k=0{,}0866216\;\mathrm{s}^{-1}$ en la caída libre
+y $c=587{,}669\;\mathrm{RPM/s}$ como desaceleración adicional
+efectiva para $u=1$. En rad/s, la transferencia local es
+\begin{equation}
+G(s)=\frac{-61{,}5406}{s+0{,}0866216}.
+\end{equation}
+El ajuste de la frenada hasta antes de 500 RPM obtuvo
+$R^2=0{,}973$. La figura~\ref{fig:ajuste_local} compara las muestras
+usadas con la predicción. Con una sola corrida por condición,
+los parámetros no tienen incertidumbre estimada mediante repeticiones.
+
+
+
+Se ejecutó \texttt{impulse(G)} con Control System Toolbox. La
+figura~\ref{fig:impulse_matlab} inicia en un valor negativo y
+\emph{asciende hacia cero}; por eso su pendiente visual es positiva.
+El signo negativo expresa la reducción de velocidad ante una
+entrada de frenado positiva. No es una medición de la trayectoria
+física después de un impulso ni representa la detención a cero RPM.
+
+
+
+\subsection{Incertidumbre y alcance}
 
 La fuente indicaba 1 V, pero no se midió tensión en terminales bajo
 carga. El apagado se marcó manualmente. Las RPM dependen de la
@@ -984,49 +1010,127 @@ tiempos de cruce de un umbral tienen una resolución aproximada
 de una décima de segundo además de los retrasos de detección.
 El instante real de contacto de la esponja no fue medido.
 
-Faltan ejecutar el script de MATLAB con los cinco CSV, revisar el
-ajuste local, generar la figura de respuesta al escalón y la
-respuesta \texttt{impulse} del modelo con el complemento disponible.
-También faltan incorporar fotografías del montaje y el enlace
-al video único que muestre la operación física y el análisis en
-computadora. Estos elementos se añadirán cuando estén listos;
-las cifras de la tabla proceden de los CSV reales y no de una
-simulación.
+El modelo ajustado describe solo la región de RPM usada; la fricción,
+el retardo del servo, la cuantización de pulsos y la saturación en
+cero impiden extrapolarlo a toda la maniobra. Las cifras de la tabla
+proceden de los CSV reales y no de la simulación teórica.
 
 \section{Conclusiones y recomendaciones}
 
-El banco a lazo abierto permitió comparar tres desaceleraciones
-libres con dos frenadas bajo condiciones iniciales próximas. El
-cambio ordenado de 90 a 40 grados en el SG90 redujo de forma
-reproducible el tiempo hasta menos de 500 RPM desde cerca de
-1300 RPM. La comparación se limita al montaje y al rango
+El banco a lazo abierto permitió comparar una corrida libre con una
+frenada bajo condiciones iniciales próximas. El cambio ordenado de
+90 a 40 grados en el SG90 se asoció con una disminución del tiempo
+hasta menos de 500 RPM, desde 11,300 s en giro libre hasta 1,317 s
+con freno. La comparación se limita al montaje y al rango
 observados; el motor ya estaba sin alimentación cuando se aplicó
-el freno y ambos tipos de ensayo terminaron en cero.
+el freno y ambos tipos de ensayo terminaron en cero. Una sola
+corrida por condición no permite afirmar repetibilidad estadística.
 
 El modelo de torque de primer orden aporta una explicación teórica,
 pero sus parámetros físicos no se identifican por separado con
 estas mediciones. La frecuencia de control de 100 Hz y el código
 PID del informe son propuestas para una fase posterior; la
-captura experimental utilizada imprime cada 100 ms. La evaluación
-en MATLAB y la evidencia audiovisual siguen pendientes para
-completar los puntos extra de la entrega.
+captura experimental utilizada imprime cada 100 ms. Las figuras de
+MATLAB, las fotografías y los enlaces de video aportan las
+evidencias de los puntos extra; la respuesta impulsiva mostrada
+es la del modelo local, no una entrada física aplicada al disco.
 
-\section{Referencias}
 \begin{thebibliography}{9}
 \bibitem{ogata2010} K. Ogata, \emph{Modern Control Engineering}, 5.\textsuperscript{a} ed. Upper Saddle River, NJ: Prentice Hall, 2010.
 \bibitem{franklin2015} G. F. Franklin, J. D. Powell y A. Emami-Naeini, \emph{Feedback Control of Dynamic Systems}, 7.\textsuperscript{a} ed. Boston, MA: Pearson, 2015.
 \bibitem{arduinoMicros} Arduino, ``micros(),'' \emph{Arduino Language Reference}. [En línea]. Disponible: \url{https://docs.arduino.cc/language-reference/en/functions/time/micros/}. [Consultado: 18 nov. 2026].
 \end{thebibliography}
 
-\section{Anexo A. Evidencias para la entrega}
-\textbf{Datos disponibles:} cinco pares de archivos CSV de corridas
-comparables en \texttt{proyecto2/tarea2/capturas/}; firmware de captura
-y script \texttt{analisis/analizar\_capturas.m} en el repositorio.
-Los identificadores de las corridas se explican en la sección de
-resultados. \textbf{Pendiente de incorporar al PDF final:} fotografías
-del montaje real, enlace al video único no listado, gráficas y
-resultados ejecutados en MATLAB, incluida la respuesta
-\texttt{impulse} del modelo si se dispone del complemento.
+\onecolumn
+\section{Anexos}
+\subsection{Datos y videos de evidencia}
+\textbf{Datos analizados:} pares \texttt{datos\_1.csv}/
+\texttt{eventos\_1.csv} y \texttt{datos\_2.csv}/
+\texttt{eventos\_2.csv}; se conservaron localmente fuera de Git.
+El firmware de adquisición, \texttt{matlab/ejecutar\_analisis.m}
+y las cuatro gráficas reproducidas en este informe están en el
+repositorio. \textbf{Videos de evidencia:}
+\url{https://youtu.be/hc-JIA8kH4Y} (planta completa) y
+\url{https://youtu.be/BWD1uK7m35k} (caracterización y MATLAB).
+Los valores numéricos y las figuras corresponden a los pares 1 y 2;
+las fotografías muestran el banco montado durante las pruebas.
 
+\subsection{Firmware utilizado en los ensayos}
+El siguiente programa es el que adquiere los pulsos del KY-033,
+ordena el SG90 y emite las mediciones y los eventos seriales
+utilizados para generar los CSV. Opera a lazo abierto: el PID
+mostrado en la sección~\ref{implementaciuxf3n-digital-del-controlador-pid} es una propuesta y no se ejecutó durante
+estas capturas. El motor recibió alimentación directa de la fuente
+externa y no está controlado por la ESP32.
+
+\lstinputlisting[language=C++,basicstyle=\ttfamily\footnotesize,breaklines=true,frame=single]{../../firmware/freno abs/src/main.cpp}
+
+
+\subsection{Figuras y fotografías}
+Las fotografías y las gráficas experimentales se citan en las secciones correspondientes del informe.
+
+\begin{figure}[H]
+\centering
+\begin{minipage}[t]{0.47\textwidth}
+\centering
+\includegraphics[width=\linewidth,height=0.32\textheight,keepaspectratio]{foto_motor_fuente.jpeg}\\
+\footnotesize (a) Motor conectado a la fuente externa y ESP32 de adquisición.
+\end{minipage}\hfill
+\begin{minipage}[t]{0.47\textwidth}
+\centering
+\includegraphics[width=\linewidth,height=0.32\textheight,keepaspectratio]{foto_disco_frenado.jpeg}\\
+\footnotesize (b) Disco, esponja del SG90 y sensor frente a la marca.
+\end{minipage}
+
+\vspace{7pt}
+\begin{minipage}[t]{0.47\textwidth}
+\centering
+\includegraphics[width=\linewidth,height=0.32\textheight,keepaspectratio]{foto_disco_girando.jpeg}\\
+\footnotesize (c) Disco en movimiento, visible por el desenfoque de la imagen.
+\end{minipage}\hfill
+\begin{minipage}[t]{0.47\textwidth}
+\centering
+\includegraphics[width=\linewidth,height=0.32\textheight,keepaspectratio]{foto_montaje_general.jpeg}\\
+\footnotesize (d) Vista general del banco y ubicación del KY-033 bajo el disco.
+\end{minipage}
+\caption{Fotografías del montaje real. La fuente alimenta el motor;
+la ESP32 registra los pulsos del sensor y ordena el servomotor.}
+\label{fig:fotos_montaje}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{comparacion_real.png}
+\caption{Mediciones reales del giro libre (1) y frenado (2), alineadas
+desde una velocidad cercana a 1300 RPM. La línea en $t=0$ es la
+referencia de RPM para la libre y la orden \texttt{g40} para la frenada.}
+\label{fig:comparacion_real}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{respuesta_escalon_real.png}
+\caption{Entrada de escalón ordenada al SG90 y salida de RPM medida
+en la corrida frenada 2. El escalón corresponde al comando, no a un
+cambio instantáneo verificado de fuerza de contacto.}
+\label{fig:escalon_real}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{ajuste_local.png}
+\caption{Ajuste local de la frenada 2: muestras medidas y modelo
+antes de bajar de 500 RPM. La extrapolación hasta cero no se valida.}
+\label{fig:ajuste_local}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{impulse_matlab.png}
+\caption{Respuesta impulsiva calculada por MATLAB para el modelo
+local $G(s)$. Es negativa y tiende a cero desde abajo; se muestra
+como resultado matemático del ajuste, no como prueba física.}
+\label{fig:impulse_matlab}
+\end{figure}
 
 \end{document}

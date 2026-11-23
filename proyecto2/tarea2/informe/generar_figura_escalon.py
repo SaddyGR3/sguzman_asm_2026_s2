@@ -71,7 +71,8 @@ def main() -> None:
     painter.drawText(QRectF(left, 635, right - left, 25), Qt.AlignmentFlag.AlignCenter,
                      "J = 0.002 kg·m², b = 0.010 N·m·s/rad, Δτf = 0.15 N·m; parámetros hipotéticos")
     painter.end()
-    destination = Path(__file__).with_name("simulacion_escalon_frenado.png")
+    destination = Path(__file__).parent / "imgs" / "simulacion_escalon_frenado.png"
+    destination.parent.mkdir(parents=True, exist_ok=True)
     if not image.save(str(destination)):
         raise RuntimeError(f"No se pudo guardar {destination}")
     print(destination)

@@ -4,7 +4,7 @@ La entrada de estas pruebas es la **orden al SG90** (`90°` libre, `g40` frenado
 
 ## Cuántos CSV se necesitan
 
-Para demostrar la comparación de la respuesta al escalón en el punto extra 7 de la **Tarea 2**, el [enunciado](../documentos/Tareas_ASM_Tarea2_v5.pdf) no fija un mínimo de repeticiones. El análisis funciona con **una corrida libre y una frenada comparables**: son dos archivos por corrida, `datos_*.csv` y `eventos_*.csv`, cuatro CSV en total. Las tres libres y dos frenadas que ya obtuvieron mejoran la evidencia, pero no son una condición del programa. La exigencia de **tres repeticiones por condición y dos velocidades iniciales** pertenece al [Proyecto Grupal 2](../../documentos/Proyectos_ASM_Proyecto_Grupal2_v7.pdf), sección de experimentos finales.
+Para demostrar la comparación de la respuesta al escalón en el punto extra 7 de la **Tarea 2**, el [enunciado](../documentos/Tareas_ASM_Tarea2_v5.pdf) no fija un mínimo de repeticiones. El análisis funciona con **una corrida libre y una frenada comparables**: son dos archivos por corrida, `datos_*.csv` y `eventos_*.csv`, cuatro CSV en total. Los pares 1 y 2 son los usados en el video y el informe. La exigencia de **tres repeticiones por condición y dos velocidades iniciales** pertenece al [Proyecto Grupal 2](../../documentos/Proyectos_ASM_Proyecto_Grupal2_v7.pdf), sección de experimentos finales.
 
 ## Cómo cargar los CSV
 
@@ -53,10 +53,10 @@ El ajuste usa la referencia libre para estimar `k` en `dRPM/dt = -k·RPM` y lueg
 
 El video de ejemplo del profesor muestra dos métodos para calcular RPM. Nuestro firmware usa el **tiempo entre pulsos**, como el segundo método del video, y muestra cero tras un intervalo sin flancos. El video también usa PWM, encoder de muchos pulsos, filtro de 25 Hz y control PI; esos valores y componentes corresponden a otro motor. Nuestros CSV se imprimen cada 100 ms, así que no se copia un filtro de 25 Hz: supera la frecuencia de Nyquist de este registro (5 Hz). Para esta tarea el control sigue abierto, sin PID.
 
-Si MATLAB no tiene Control System Toolbox, el impulso analítico se genera pero `impulse_matlab.png` queda pendiente. El enunciado pide usar `impulse` de MATLAB; se puede ejecutar en LAIMI antes de grabar la parte de computadora del video.
+El equipo ejecutó `impulse(G)` con Control System Toolbox y las capturas 1 y 2; la imagen `impulse_matlab.png` está copiada en `../informe/imgs/`. Si otra computadora no tiene el complemento, el script genera el impulso analítico, pero no la figura de `impulse` de MATLAB.
 
 ## Ejemplos anteriores del compañero
 
 [ejemplo_ideal.m](ejemplo_ideal.m) y [demo_simulada.m](demo_simulada.m) siguen disponibles para practicar con un motor alimentado continuamente y parámetros **hipotéticos**. El [analizador original](analizar_ensayo.m) se adaptó para leer también los pares reales `datos_*.csv`/`eventos_*.csv`: valida cada corrida, reconoce el apagado de la fuente y la orden `g40`, y calcula sus tiempos de caída. `ejecutar_analisis.m` llama a [analizar_frenado_real.m](analizar_frenado_real.m), que usa ese analizador para cada corrida y después compara ambas condiciones, ajusta el modelo local y ejecuta `impulse(G)`. El cálculo anterior para el ejemplo simulado se conserva. No presentar los parámetros de las simulaciones como mediciones del prototipo.
 
-El análisis todavía debe ejecutarse en MATLAB en la computadora del equipo; esta carpeta se preparó y contrastó con los CSV usando un cálculo independiente, pero MATLAB no está instalado en este entorno.
+El análisis ya se ejecutó en MATLAB con los pares 1 y 2. Los resultados locales están en `resultados_reales/`, ignorado por Git; las cuatro figuras que usa el informe están copiadas en `../informe/imgs/`.

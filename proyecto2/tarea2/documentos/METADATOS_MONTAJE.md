@@ -4,7 +4,7 @@
 
 | Elemento | Dato | Alcance de la afirmación |
 | --- | --- | --- |
-| Motor | Motor DC miniatura AD20413, sin hoja técnica propia del lote | Identificado por la página/foto comercial compartida por el equipo. |
+| Motor | Motor DC miniatura; modelo exacto desconocido y hoja de datos no disponible | La foto comercial compartida por el equipo no permite confirmar el modelo del motor instalado. |
 | Alimentación del motor | Fuente ajustada o indicando 1 V durante las corridas | Valor comunicado por el equipo; no se midió con multímetro en los terminales bajo carga. |
 | Apagado | Se apaga la fuente con los cables conectados; el disco sigue girando por inercia | Comunicado por el equipo. |
 | Controlador de motor | Mini L298N AD70178 disponible, no conectado | El motor no está conectado a la ESP32. |
@@ -15,9 +15,13 @@
 | Contacto de freno | Brazo del SG90 con hule unido a una esponja; la esponja toca la cara superior del disco | Descripción comunicada por el equipo; no se midieron fuerza normal ni torque. |
 | Registro | Una muestra cada 100 ms; filtro de pulsos de 20 ms | Según el firmware usado en las capturas. |
 
+## Evidencia de la entrega
+
+El informe usa `datos_1.csv`/`eventos_1.csv` para giro libre y `datos_2.csv`/`eventos_2.csv` para frenado; los CSV están en `../capturas/` y se mantienen fuera de Git. Las cuatro fotografías se guardaron en [informe/imgs/](../informe/imgs/). Los videos entregados son [planta completa](https://youtu.be/hc-JIA8kH4Y) y [caracterización con MATLAB](https://youtu.be/BWD1uK7m35k).
+
 ## Datos físicos todavía útiles para describir el montaje
 
 1. Pines exactos de alimentación del SG90 y del KY-033 y una foto clara del cableado, si están disponibles. El equipo confirmó que ambos reciben alimentación de la placa, sin documentar tensión ni corriente.
-2. Fotos y video del montaje real en operación, si se grabaron antes de devolver la fuente.
+2. Una medición independiente de pulsos por vuelta permitiría confirmar el factor usado en las RPM; ya no se prevén ensayos adicionales para esta entrega.
 
-La masa del disco, la corriente del motor y el torque del servo serían necesarios para calcular parámetros físicos absolutos como inercia o torque. **No son necesarios** para la comparación experimental de las cinco curvas ni para el modelo local ajustado en `analizar_capturas.m`. Si no se midieron, no inventar valores.
+La masa del disco, la corriente del motor y el torque del servo serían necesarios para calcular parámetros físicos absolutos como inercia o torque. **No son necesarios** para la comparación experimental de las corridas 1 y 2 ni para el modelo local ajustado en `matlab/ejecutar_analisis.m`. Si no se midieron, no inventar valores.
