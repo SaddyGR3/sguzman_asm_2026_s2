@@ -17,7 +17,8 @@
 }
 
 \setlist{nosep,leftmargin=*}
-\hypersetup{hidelinks}
+\definecolor{enlaceazul}{RGB}{0,70,155}
+\hypersetup{colorlinks=true,linkcolor=enlaceazul,urlcolor=enlaceazul,citecolor=enlaceazul}
 
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{3pt}
@@ -796,8 +797,11 @@ ni torque del motor. Estas limitaciones no impiden comparar las
 curvas libres y frenadas obtenidas bajo el mismo montaje.
 
 El funcionamiento físico y la disposición del banco se documentan
-en las fotografías de la figura~\ref{fig:fotos_montaje} y en los
-videos citados en la sección de evidencias.
+en las fotografías de la figura~\ref{fig:fotos_montaje} y en el
+siguiente video:
+
+\textbf{Planta completa (punto extra 6):}\\
+\url{https://youtu.be/hc-JIA8kH4Y}
 
 \section{Prueba de funcionamiento a lazo abierto}
 \label{prueba-de-funcionamiento-a-lazo-abierto}
@@ -828,52 +832,6 @@ no se mezclan en las cifras presentadas aquí.
 El control PID no intervino: la orden de freno fue elegida
 manualmente y no se calculó a partir del error de velocidad.
 
-\section{Evidencia audiovisual}\label{evidencias-requeridas}
-
-El \href{https://youtu.be/hc-JIA8kH4Y}{video de la planta completa}
-documenta el montaje y su funcionamiento a lazo abierto. El
-\href{https://youtu.be/BWD1uK7m35k}{video de caracterización}
-presenta los ensayos de giro libre y frenado y el análisis en MATLAB
-de los pares 1 y 2. Son dos enlaces de evidencia para los puntos
-extra 6 y 7, respectivamente. Las fotografías del montaje se
-presentan en la figura~\ref{fig:fotos_montaje}.
-
-
-\section{Seguridad del montaje}\label{seguridad-del-montaje}
-
-\begin{itemize}
-\tightlist
-\item
-  Sujetar firmemente el disco al eje y el motor a la base.
-\item
-  Mantener manos, cabello, ropa y cables alejados de las partes móviles.
-\item
-  Incorporar una protección física alrededor del disco cuando sea
-  posible.
-\item
-  Limitar la velocidad a un nivel seguro.
-\item
-  Disponer de una forma accesible de desconectar la alimentación del
-  motor.
-\item
-  Verificar que la zapata y el actuador no puedan desprenderse durante
-  el giro.
-\item
-  Desenergizar el sistema antes de ajustar el montaje o modificar
-  conexiones.
-\end{itemize}
-
-\section{Alcance del montaje}
-
-El banco permitió iniciar el giro, estimar y registrar RPM, aplicar
-una orden definida al freno y comparar su efecto con el giro libre
-tras apagar el motor. Estos resultados corresponden a lazo abierto:
-no demuestran todavía un sistema ABS con regulación automática ni
-un PID ajustado. La oscilación del disco y el acople provisional
-son limitaciones del prototipo usado para las mediciones.
-
-\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
-
 \section{Caracterización experimental de la planta --- punto extra}
 \label{caracterizaciuxf3n-experimental-de-la-planta-punto-extra}
 
@@ -886,6 +844,9 @@ comparando la desaceleración con corridas libres a RPM iniciales
 similares. Ninguna de las dos condiciones termina en un equilibrio
 positivo: ambas llegan a cero. Por ello no se estima una ganancia
 estática a partir de velocidades finales.
+
+\textbf{Caracterización y MATLAB (punto extra 7):}\\
+\url{https://youtu.be/BWD1uK7m35k}
 
 El análisis del video utiliza los pares 1 y 2 en
 \texttt{proyecto2/tarea2/capturas/}. El script
@@ -1043,15 +1004,13 @@ es la del modelo local, no una entrada física aplicada al disco.
 
 \onecolumn
 \section{Anexos}
-\subsection{Datos y videos de evidencia}
+\subsection{Datos analizados}
 \textbf{Datos analizados:} pares \texttt{datos\_1.csv}/
 \texttt{eventos\_1.csv} y \texttt{datos\_2.csv}/
 \texttt{eventos\_2.csv}; se conservaron localmente fuera de Git.
 El firmware de adquisición, \texttt{matlab/ejecutar\_analisis.m}
 y las cuatro gráficas reproducidas en este informe están en el
-repositorio. \textbf{Videos de evidencia:}
-\url{https://youtu.be/hc-JIA8kH4Y} (planta completa) y
-\url{https://youtu.be/BWD1uK7m35k} (caracterización y MATLAB).
+repositorio.
 Los valores numéricos y las figuras corresponden a los pares 1 y 2;
 las fotografías muestran el banco montado durante las pruebas.
 

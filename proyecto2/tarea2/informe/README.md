@@ -2,7 +2,7 @@
 
 Fuente principal: [ASMTarea2.tex](ASMTarea2.tex). El informe documenta los pares reales `datos_1` (libre) y `datos_2` (frenado) usados en el video. [ASMTarea2.pdf](ASMTarea2.pdf) es la versión compilada. El diagrama de bloques y la simulación teórica aparecen en sus secciones; las fotografías y gráficas experimentales están al final, en anexos de una columna, con referencias desde el texto principal.
 
-El anexo B incorpora directamente el programa real [main.cpp](../../firmware/freno%20abs/src/main.cpp) del ESP32. Al recompilar el `.tex` desde esta carpeta, el archivo debe permanecer en esa ruta relativa.
+El apartado de anexos incorpora directamente el programa real [main.cpp](../../firmware/freno%20abs/src/main.cpp) del ESP32. Al recompilar el `.tex` desde esta carpeta, el archivo debe permanecer en esa ruta relativa. Cada video se enlaza una sola vez, junto al punto extra correspondiente.
 
 Las figuras y fotografías están reunidas en [imgs/](imgs/). Los nombres de las cuatro fotos describen lo que muestra cada una; se conservaron los archivos originales sin editar.
 
