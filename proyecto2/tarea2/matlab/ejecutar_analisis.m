@@ -1,13 +1,20 @@
-% Cambiar estos valores cuando lleguen el CSV y los metadatos reales.
-carpeta = fileparts(mfilename('fullpath'));
-archivo = fullfile(carpeta, 'ensayo_01', 'datos.csv');
-t0_ms = NaN; % Instante exacto de la orden en el mismo reloj del CSV.
+% Punto extra de Tarea 2: motor apagado, giro libre frente a g40.
+% Copiar pares datos_*.csv y eventos_*.csv a ../capturas/ y ejecutar este
+% archivo desde MATLAB. Basta una corrida libre y una frenada comparables.
+carpetaScripts = fileparts(mfilename('fullpath'));
+carpetaCapturas = fullfile(carpetaScripts, '..', 'capturas');
+if ~isfolder(carpetaCapturas)
+    carpetaCapturas = uigetdir(pwd, 'Seleccione la carpeta con los pares de CSV');
+    if isequal(carpetaCapturas, 0)
+        error('No se selecciono una carpeta de capturas.');
+    end
+end
 opciones = struct();
-opciones.tipo_datos = 'experimental';
-opciones.intervalo_inicial_s = [-2 -0.2];
-% La ventana final debe elegirse al observar un regimen estable.
-opciones.intervalo_final_s = []; % Por defecto, ultimo 20 % del tiempo posterior.
-opciones.retardo_s = 0; % Hipotesis inicial. No es un retardo medido.
-opciones.ajustar_modelo = false; % Primero inspeccionar las curvas.
-% Activar el ajuste solo para un escalon sostenido con regimenes estables.
-resultado = analizar_ensayo(archivo,t0_ms,opciones);
+opciones.banda_rpm = [1250 1400]; % Aceptar ordenes g40 cerca de 1300 RPM.
+opciones.banda_referencia_libre_rpm = [1250 1350]; % Reproducir tabla del informe.
+opciones.umbral_rpm = 500;
+opciones.angulo_libre = 90;
+opciones.angulo_freno = 40;
+opciones.ids = {}; % Vacio: todos los pares. El ID es el numero tras datos_/eventos_.
+opciones.salida = fullfile(carpetaScripts, 'resultados_reales');
+resultado = analizar_frenado_real(carpetaCapturas, opciones);

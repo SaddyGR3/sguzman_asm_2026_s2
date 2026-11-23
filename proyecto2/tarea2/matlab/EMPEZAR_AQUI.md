@@ -1,17 +1,13 @@
-# Ejecutar el ejemplo ideal
+# Empezar con los CSV reales
 
-Abrir esta carpeta en MATLAB y ejecutar lo siguiente.
+Colocar en `../capturas/` al menos un par `datos_*.csv`/`eventos_*.csv` de giro libre y un par de frenado `g40`, ambos con RPM iniciales parecidas. Abrir esta carpeta en MATLAB y ejecutar:
+
+El capturador ahora numera los pares automáticamente: `datos_1.csv`/`eventos_1.csv` y `datos_2.csv`/`eventos_2.csv`. Si esos son los únicos ensayos de la carpeta, dejar `opciones.ids = {};` en `ejecutar_analisis.m`; no hay que indicar nombres a MATLAB.
 
 ```matlab
-close all
-clear analizar_ensayo estilo_figura
-ejemplo_ideal
+ejecutar_analisis
 ```
 
-`close all` cierra las figuras de la sesión. Omitirlo para conservar otras gráficas abiertas.
+El programa imprime qué corridas incluyó, omite las incompletas y guarda gráficas y tablas en `resultados_reales/`. Consultar [README.md](README.md) para escoger solo dos corridas con `opciones.ids`, interpretar el modelo y comprobar `impulse`.
 
-El ejemplo crea un CSV simulado, ajusta un modelo y muestra figuras detalladas más un resumen de tres paneles. Los valores son hipotéticos y no describen mediciones de la maqueta. El usuario ya confirmó su ejecución en MATLAB y los parámetros recuperados.
-
-Si aparece la advertencia sobre Control System Toolbox, el ejemplo sigue funcionando con la expresión analítica del impulso. Falta ejecutar `impulse` con ese complemento para completar esa parte del enunciado.
-
-Consultar [README.md](README.md) para el formato de datos, configuración de ensayos reales, supuestos, resultados y pendientes. Después puede probarse `demo_simulada`, cuya ejecución en MATLAB aún debe comprobarse.
+El [ejemplo ideal](ejemplo_ideal.m) del compañero permanece separado; sus valores son hipotéticos y corresponden a un motor que sigue alimentado durante el escalón.

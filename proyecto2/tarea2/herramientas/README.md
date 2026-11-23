@@ -9,6 +9,8 @@ python3 proyecto2/tarea2/herramientas/registrar_ensayo.py /dev/ttyUSB0
 
 En Windows, sustituir `/dev/ttyUSB0` por el puerto correspondiente, por ejemplo `COM3`. Los archivos se crean en `proyecto2/tarea2/capturas/` y el programa imprime sus rutas. Se recomienda iniciar **una captura nueva por corrida**. El capturador reinicia automáticamente el reloj y contador de pulsos de la ESP32 al abrir cada captura; tarda unos dos segundos en dejarla lista.
 
+Los archivos se numeran automáticamente: si no hay capturas numeradas, se guardan `datos_1.csv` y `eventos_1.csv`; la siguiente ejecución guarda `datos_2.csv` y `eventos_2.csv`. El número es el **ID** de la corrida: identifica el par, no indica si fue libre o frenada. Los archivos existentes no se sobrescriben. Las capturas antiguas con fecha en el nombre pueden quedarse en la carpeta, pero MATLAB también las leerá si no se filtran.
+
 | Tecla o comando | Acción |
 | --- | --- |
 | Flecha derecha o arriba | Aumenta el ángulo ordenado en un paso. |

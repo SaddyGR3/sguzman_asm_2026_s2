@@ -26,3 +26,7 @@ __pycache__/
 
 # Capturas de métricas y gráficos generados en la PC
 /proyecto1/herramientas_pc/resultados/
+
+# Capturas locales y figuras generadas para la Tarea 2
+/proyecto2/tarea2/capturas/
+/proyecto2/tarea2/matlab/resultados_reales/

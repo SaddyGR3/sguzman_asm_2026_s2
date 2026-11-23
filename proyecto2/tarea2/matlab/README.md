@@ -1,163 +1,62 @@
-# Análisis de frenado en MATLAB
+# MATLAB para la Tarea 2: capturas reales
 
-**Estado respecto al montaje real:** esta carpeta contiene el avance del compañero con ejemplos simulados y un analizador pensado para un motor alimentado a tensión constante y una velocidad final estable. Las capturas reales de la tarea se hicieron apagando la fuente antes de frenar; ambas curvas terminan en cero. El analizador de esta carpeta también espera una columna `servo_cmd_deg` o `servo_grados`, mientras que los CSV reales contienen `servo_cmd_grados`. Para las cinco capturas reales usar [el script de comparación](../analisis/analizar_capturas.m) y su [guía](../analisis/README.md). El ejemplo ideal sigue siendo útil para mostrar el método teórico; sus parámetros no son mediciones del montaje.
+La entrada de estas pruebas es la **orden al SG90** (`90°` libre, `g40` frenado) y la salida es la **RPM estimada por el KY-033**. El motor recibió alimentación directa de una fuente externa y se apagó antes de aplicar el freno. Por eso ambas condiciones terminan en cero; no se puede obtener una ganancia estática de la diferencia entre velocidades finales.
 
-Este avance implementa el procesamiento previsto en [la guía de los puntos extra](../PLAN_PUNTOS_EXTRA.md). Permite ensayar el flujo con datos simulados y luego importar mediciones reales. La entrada es el ángulo ordenado al servo y la salida es la velocidad del disco. Durante este experimento se mantiene constante la alimentación del motor y no se ejecuta un PID.
+## Cuántos CSV se necesitan
 
-## Comenzar con el ejemplo ideal
+Para demostrar la comparación de la respuesta al escalón en el punto extra 7 de la **Tarea 2**, el [enunciado](../documentos/Tareas_ASM_Tarea2_v5.pdf) no fija un mínimo de repeticiones. El análisis funciona con **una corrida libre y una frenada comparables**: son dos archivos por corrida, `datos_*.csv` y `eventos_*.csv`, cuatro CSV en total. Las tres libres y dos frenadas que ya obtuvieron mejoran la evidencia, pero no son una condición del programa. La exigencia de **tres repeticiones por condición y dos velocidades iniciales** pertenece al [Proyecto Grupal 2](../../documentos/Proyectos_ASM_Proyecto_Grupal2_v7.pdf), sección de experimentos finales.
 
-Abrir esta carpeta como carpeta actual de MATLAB y ejecutar lo siguiente en la ventana de comandos.
+## Cómo cargar los CSV
 
-```matlab
-close all
-clear analizar_ensayo estilo_figura
-ejemplo_ideal
-```
+1. Colocar los pares en `proyecto2/tarea2/capturas/`. Mantener el mismo identificador en ambos nombres. Por ejemplo, una captura anterior:
 
-Si MATLAB está en otra carpeta, abrir `ejemplo_ideal.m` y aceptar el cambio de carpeta al ejecutarlo. Las rutas de los ejemplos se calculan desde la ubicación de los scripts, de modo que no dependen de la ruta de una computadora particular.
+   ```text
+   datos_20261122_021346_890235.csv
+   eventos_20261122_021346_890235.csv
+   ```
 
-El ejemplo supone una orden de 90 a 70 grados, velocidad inicial de 25 rad/s, ganancia de 0,6 (rad/s)/grado y constante de tiempo de 0,7 s. La velocidad final es 13 rad/s. Todos son valores hipotéticos, sin ruido ni retardo. Se supone que bajar el ángulo aumenta el frenado. El mecanismo real debe confirmar ese sentido.
+   No cambiar sus encabezados. `datos_` debe tener `tiempo_ms,rpm,servo_cmd_grados`; `eventos_` debe tener `tiempo_ms,tipo,valor`. Los tiempos de ambos archivos pertenecen al mismo reloj de la ESP32. Las capturas y los resultados generados están excluidos de Git para evitar agregarlos por accidente al commit.
 
-Se generan las gráficas detalladas del analizador y un resumen con tres paneles. MATLAB puede agrupar las figuras en pestañas o mostrarlas en varias ventanas. La repetición de la respuesta impulsiva es intencional, porque el analizador usa el modelo ajustado y el resumen usa los parámetros originales del ejemplo. `close all` cierra las figuras abiertas de la sesión, por lo que debe omitirse si se desea conservar otras figuras.
+   Con el capturador actualizado, los ensayos nuevos se nombran automáticamente `datos_1.csv`/`eventos_1.csv`, luego `datos_2.csv`/`eventos_2.csv`. **ID** significa el texto compartido después de `datos_` y `eventos_`; en esos ejemplos, los ID son `1` y `2`. No hay que escribir ningún ID en los CSV.
 
-![Vista previa del ejemplo ideal](vista_previa_ideal.png)
+2. Abrir MATLAB, seleccionar `proyecto2/tarea2/matlab` como carpeta actual y escribir:
 
-La vista previa se generó con Python usando las mismas ecuaciones. No es una captura de MATLAB. El estilo de los scripts fija fondo claro, texto oscuro y colores de las curvas para evitar problemas de contraste con el tema oscuro.
+   ```matlab
+   ejecutar_analisis
+   ```
 
-## Archivos
+   El programa lee automáticamente todos los pares de esa carpeta. Si se colocaron los CSV en otra ubicación, se puede cambiar `carpetaCapturas` en [ejecutar_analisis.m](ejecutar_analisis.m) o seleccionar la carpeta cuando MATLAB la solicite.
 
-| Archivo | Uso |
-| --- | --- |
-| `ejemplo_ideal.m` | Genera datos ideales, ejecuta el análisis y comprueba la recuperación de los parámetros. Es el primer punto de entrada. |
-| `demo_simulada.m` | Ejemplo adicional con ruido y retardo conocidos. Su ejecución en MATLAB sigue pendiente. |
-| `ejecutar_analisis.m` | Configuración editable para un ensayo experimental. |
-| `analizar_ensayo.m` | Importación, comprobaciones, gráficas, ajuste opcional y exportación. |
-| `estilo_figura.m` | Formato local de las figuras, sin cambiar las preferencias globales de MATLAB. |
-| `metadatos_plantilla.md` | Información que debe acompañar cada corrida. |
-| `verificacion_numerica.txt` | Comprobación matemática independiente hecha en Python. No sustituye la ejecución en MATLAB. |
+3. Si la carpeta contiene solo los dos ensayos nuevos, dejar `opciones.ids = {};` y ejecutar sin configurar nada más. Para usar **solo una libre y una frenada** aunque haya más archivos en la carpeta, editar la línea `opciones.ids` en `ejecutar_analisis.m`. Por ejemplo, con los archivos numerados:
 
-## Dependencias
+   ```matlab
+   opciones.ids = {'1', '2'};
+   ```
 
-Se usan funciones disponibles en MATLAB R2020a o posterior. El ajuste utiliza `fminsearch`, incluido en MATLAB, y no requiere Optimization Toolbox. La ejecución del ejemplo ideal fue confirmada en la instalación del usuario. No se ha comprobado por separado la compatibilidad con todas las versiones desde R2020a.
+   Dejar `{}` para analizar todos los pares comparables. El programa incluye por defecto las tres libres y dos frenadas cerca de 1300 RPM; omite la frenada donde `g40` se envió tarde, cerca de 1006 RPM, y el archivo corto sin marca de apagado. En `ejecutar_analisis.m` la banda de inclusión de las frenadas es `[1250 1400]`; las libres se alinean en su primera muestra de `[1250 1350]` tras apagar la fuente, como en la tabla del informe. Ambas bandas se pueden ajustar si cambia la velocidad de referencia.
 
-La función `impulse` requiere Control System Toolbox. Cuando `tf` e `impulse` no están disponibles, el script genera la respuesta impulsiva mediante su expresión analítica y avisa que falta ejecutar `impulse`. Esa alternativa permite estudiar la curva, pero deja pendiente la función exigida en el enunciado. La instalación probada por el usuario no tenía disponible ese complemento.
+4. Revisar los mensajes **Incluida/Omitida** de la ventana de comandos y `resultado.resumen`. No presentar como ensayo válido una corrida omitida. La columna `rpm_despues_del_primer_cero` avisa si el sensor volvió a reportar RPM después del primer cero; ocurre en la frenada `20261122_021527_884972`, así que ese cero no debe describirse como el instante físico exacto de parada. El programa guarda en `matlab/resultados_reales/`:
 
-## Recibir un ensayo real
+   | Archivo | Qué muestra |
+   | --- | --- |
+   | `resumen_comparacion.csv` | RPM inicial, tiempo a menos de 500 RPM, primer cero indicado y demora entre apagado y `g40`. |
+   | `comparacion_real.png` | Curvas originales libres y frenadas, alineadas cerca de 1300 RPM o en la orden `g40`. |
+   | `respuesta_escalon_real.png` | Arriba, RPM medidas de las frenadas; abajo, la orden 90°→40° representada como escalón en `t=0`. El contacto físico puede ocurrir después de la orden. |
+   | `ajuste_local.png` | Datos y aproximación local del frenado solo antes de 500 RPM. |
+   | `impulso_analitico.png` | Impulso matemático del modelo local. |
+   | `impulse_matlab.png` | Salida de `impulse(G)` cuando existe Control System Toolbox. |
+   | `resumen_modelo.txt`, `resultado.mat` | Parámetros y calidad del ajuste. |
 
-Crear `ensayo_01` junto a los scripts y guardar `datos.csv` y `metadatos.md` en esa carpeta. Repetir con otra carpeta para cada corrida. El CSV debe contener un encabezado y filas numéricas sin mensajes de depuración.
+## Qué significa el modelo
 
-```csv
-tiempo_ms,rpm,servo_cmd_deg
-```
+El ajuste usa la referencia libre para estimar `k` en `dRPM/dt = -k·RPM` y luego el efecto adicional del freno mediante `dRPM/dt = -k·RPM - c·u`, con `u=0` libre y `u=1` después de ordenar `g40`. En rad/s, la transferencia local es `G(s) = -(c·2π/60)/(s+k)`. El programa informa el coeficiente `R²` de cada frenada. **Revisar las gráficas antes de aceptar el modelo**: el acople oscila, hay pulsos rechazados, el servo tiene retardo físico no medido y la parada en cero no es lineal. `impulse(G)` es la respuesta del modelo, no un impulso físico aplicado al disco.
 
-También se acepta el nombre `servo_grados` del firmware existente. El tiempo está en milisegundos, las RPM deben ser no negativas y el ángulo es el comando enviado al servo en grados. No es una medición de la posición real ni del torque.
+El video de ejemplo del profesor muestra dos métodos para calcular RPM. Nuestro firmware usa el **tiempo entre pulsos**, como el segundo método del video, y muestra cero tras un intervalo sin flancos. El video también usa PWM, encoder de muchos pulsos, filtro de 25 Hz y control PI; esos valores y componentes corresponden a otro motor. Nuestros CSV se imprimen cada 100 ms, así que no se copia un filtro de 25 Hz: supera la frecuencia de Nyquist de este registro (5 Hz). Para esta tarea el control sigue abierto, sin PID.
 
-El registro debe cubrir varios segundos antes del cambio y suficiente tiempo después para observar un régimen final. Guardar el instante exacto `t0_ms` con el mismo reloj del CSV, no con la hora de la computadora. Si el microcontrolador se reinicia o su contador vuelve a cero, separar las corridas. El analizador rechaza tiempos repetidos o decrecientes.
+Si MATLAB no tiene Control System Toolbox, el impulso analítico se genera pero `impulse_matlab.png` queda pendiente. El enunciado pide usar `impulse` de MATLAB; se puede ejecutar en LAIMI antes de grabar la parte de computadora del video.
 
-Completar los metadatos con los ángulos, primer contacto, pulsos por vuelta, intervalo de registro, condiciones de alimentación y observaciones del montaje. Distinguir valores medidos y nominales. La guía pide al menos tres corridas comparables y una referencia sin contacto del freno.
+## Ejemplos anteriores del compañero
 
-## Configurar el análisis real
+[ejemplo_ideal.m](ejemplo_ideal.m) y [demo_simulada.m](demo_simulada.m) siguen disponibles para practicar con un motor alimentado continuamente y parámetros **hipotéticos**. [analizar_ensayo.m](analizar_ensayo.m) corresponde a ese protocolo con equilibrio final positivo. Para las capturas físicas de esta tarea usar `ejecutar_analisis.m`, que llama a [analizar_frenado_real.m](analizar_frenado_real.m). No presentar los parámetros de las simulaciones como mediciones del prototipo.
 
-Editar `ejecutar_analisis.m` y cambiar la ruta del CSV y `t0_ms`. El valor inicial `NaN` evita analizar accidentalmente un instante inventado.
-
-```matlab
-archivo = fullfile(carpeta, 'ensayo_01', 'datos.csv');
-t0_ms = 12345; % Solo un ejemplo. Reemplazar con el instante registrado.
-opciones.tipo_datos = 'experimental';
-opciones.intervalo_inicial_s = [-2 -0.2];
-opciones.intervalo_final_s = [];
-opciones.retardo_s = 0;
-opciones.ajustar_modelo = false;
-```
-
-Primero ejecutar con el ajuste desactivado y observar las curvas. El tiempo de las ventanas es relativo a la orden, por lo que cero corresponde a `t0_ms`. La ventana inicial debe preceder a la orden y contener velocidad aproximadamente estable. La final debe estar después del transitorio. Si se deja vacía, se usa el último 20 % del tiempo posterior como propuesta inicial que debe revisarse visualmente.
-
-Cada ventana necesita al menos cinco muestras y el tramo posterior al cambio al menos diez. Si los intervalos no tienen suficientes muestras, ampliar la captura o corregir las ventanas.
-
-Después de revisar las curvas, activar `opciones.ajustar_modelo = true` para intentar el ajuste. `retardo_s` se fija explícitamente y no se estima. Cero es una hipótesis inicial, no una medición del retardo del servo. No se aplica filtrado automático a las RPM para no introducir otra dinámica sin documentarla.
-
-También se puede invocar directamente la función.
-
-```matlab
-resultado = analizar_ensayo(archivo, t0_ms, opciones);
-```
-
-## Modelo e interpretación
-
-Se emplea una aproximación local de primer orden con retardo fijo.
-
-\[
-G(s)=\frac{K e^{-Ls}}{\tau s+1}
-\]
-
-Para un cambio sostenido de orden de magnitud \(\Delta u\), la predicción es
-
-\[
-\omega(t)=\omega_0+K\Delta u\left(1-e^{-\max(t-L,0)/\tau}\right).
-\]
-
-La ganancia expresa cambios de velocidad por grado ordenado al servo. Su signo depende del montaje. En el ejemplo, tanto el ángulo como la velocidad disminuyen y por eso la ganancia es positiva. La constante de tiempo describe la rapidez de la transición y el retardo representa el tiempo previo al comienzo de la respuesta en esta aproximación.
-
-El valor inicial de la ganancia se obtiene de la diferencia entre medias de velocidad dividida por el cambio de orden. Después se ajustan la ganancia y la constante de tiempo minimizando el error cuadrático sobre las muestras posteriores. El retardo se conserva fijo y la constante de tiempo se parametriza mediante una exponencial para que sea positiva.
-
-La respuesta impulsiva para ese modelo es
-
-\[
-h(t)=\frac{K}{\tau}e^{-(t-L)/\tau}\,\mathbf{1}(t-L).
-\]
-
-Se calcula del modelo identificado y no corresponde a un golpe mecánico aplicado al banco. El área unitaria del impulso en la entrada se expresa en grado segundo. La curva tiene unidades de (rad/s)/(grado segundo).
-
-Este modelo no estima masa, inercia ni torque por separado. Incluye de forma aproximada la respuesta del servo, el contacto y el disco bajo las condiciones del ensayo.
-
-## Cuándo no aceptar el ajuste
-
-El analizador rechaza el ajuste cuando no hay cambio suficiente de orden, la orden no es un escalón sostenido, aparecen velocidades cero, el cambio se confunde con el ruido inicial o las ventanas presentan una deriva apreciable. Esas comprobaciones son preliminares y no certifican que la planta sea lineal.
-
-La orden gradual del firmware descrita en la guía produce una rampa y debe complementarse con una orden directa para este experimento. La transición mecánica real del servo seguirá teniendo su propia duración. Si la curva no es aproximadamente exponencial, hay saturación, se pierde contacto o el disco se detiene, revisar el experimento y considerar otro modelo en lugar de forzar este ajuste.
-
-El intervalo de impresión tampoco equivale a información nueva del sensor. Una marca por vuelta limita la actualización real de velocidad. Imprimir más filas puede repetir una misma estimación.
-
-El RMSE informado corresponde a las muestras usadas para ajustar. Un RMSE pequeño no demuestra validez fuera de ese ensayo. La validación con una corrida distinta sigue pendiente y no se automatiza en esta versión.
-
-## Resultados guardados
-
-El CSV original no se modifica. Por defecto se crea `analisis_experimental` o `analisis_simulado` junto al archivo de entrada. La opción `salida` permite elegir otra carpeta.
-
-| Salida | Contenido |
-| --- | --- |
-| `entrada_y_velocidad.png` | Orden, velocidad y modelo cuando existe ajuste. |
-| `datos_convertidos.csv` | Tiempo relativo, orden, RPM y rad/s. |
-| `resumen.txt` y `resultado.mat` | Configuración, estado del ajuste y parámetros si se obtuvieron. |
-| `impulso_analitico.png` | Respuesta impulsiva del modelo ajustado. |
-| `impulse_matlab.png` | Se genera cuando la ejecución de `impulse` termina correctamente. |
-
-El ejemplo ideal añade un resumen de tres paneles. Las salidas se sobrescriben al repetir el análisis en la misma carpeta. Usar una carpeta nueva si se desea conservar otro análisis. Las carpetas generadas por las demostraciones están excluidas de Git.
-
-## Validación realizada
-
-El usuario ejecutó `ejemplo_ideal` en MATLAB y obtuvo los siguientes resultados aproximados.
-
-| Magnitud | Valor esperado | Valor obtenido |
-| --- | --- | --- |
-| Ganancia | 0,6 | 0,6000 |
-| Constante de tiempo | 0,7 s | 0,7000 s |
-| Velocidad final | 13 rad/s | 13,0032 rad/s como media de la ventana final |
-| RMSE de ajuste | Cercano a cero | 0,00013748 rad/s |
-
-La pequeña diferencia en la media final se debe a que la respuesta exponencial todavía se aproxima a su límite. También se confirmó visualmente la corrección de los colores en las figuras. Se reemplazó `range` por `max-min` para evitar una dependencia adicional detectada durante esa ejecución.
-
-La comprobación matemática independiente en Python recuperó parámetros próximos a los usados para un ejemplo con ruido. No equivale a ejecutar `demo_simulada.m`. Todavía faltan pruebas con datos reales, validación independiente y ejecución de `impulse` con el complemento disponible.
-
-## Relación con el video compartido
-
-El texto del video explica medición por conteo y por periodo entre pulsos, conversión a RPM, filtrado y ajuste de un PI. No desarrolla la identificación en MATLAB ni la respuesta al impulso. Sus ganancias, encoder, relación de engranajes y filtro de 25 Hz corresponden a otro montaje. La tarea exige temporización sin `delay`, aunque el ejemplo del video sí lo utiliza.
-
-## Pendientes para el punto extra
-
-- Preparar el escalón y el registro temporal en el firmware junto con el equipo de hardware.
-- Capturar CSV, metadatos y evidencias reales.
-- Revisar la dinámica y determinar si este modelo es apropiado.
-- Comparar la predicción con una corrida que no se usó para ajustar.
-- Ejecutar `impulse` donde esté disponible Control System Toolbox.
-- Incorporar resultados y grabar el video único con prueba física, explicación y análisis en computadora.
+El análisis todavía debe ejecutarse en MATLAB en la computadora del equipo; esta carpeta se preparó y contrastó con los CSV usando un cálculo independiente, pero MATLAB no está instalado en este entorno.

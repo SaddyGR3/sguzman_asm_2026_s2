@@ -2,7 +2,9 @@
 
 Los datos físicos conocidos y pendientes están en [METADATOS_MONTAJE.md](METADATOS_MONTAJE.md).
 
-Abrir MATLAB en la raíz del repositorio y ejecutar:
+La ruta recomendada para cargar las capturas reales está ahora en [matlab/EMPEZAR_AQUI.md](../matlab/EMPEZAR_AQUI.md). Abrir MATLAB en `proyecto2/tarea2/matlab` y ejecutar `ejecutar_analisis`. Acepta una libre y una frenada y detecta los pares de CSV de la carpeta local.
+
+Este script anterior sigue disponible para reproducir la comparación de cinco corridas con sus identificadores fijos. Abrir MATLAB en la raíz del repositorio y ejecutar:
 
 ```matlab
 run('proyecto2/tarea2/analisis/analizar_capturas.m')

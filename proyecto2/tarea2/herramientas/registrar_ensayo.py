@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-from datetime import datetime
 import math
 import os
 from pathlib import Path
@@ -21,6 +20,17 @@ import serial
 
 
 ENCABEZADO = ("tiempo_ms", "rpm", "servo_cmd_grados")
+
+
+def siguiente_numero(carpeta: Path) -> int:
+    """Asigna 1, 2, 3... sin sobrescribir ninguno de los dos CSV."""
+    usados = set()
+    for prefijo in ("datos_", "eventos_"):
+        for ruta in carpeta.glob(f"{prefijo}*.csv"):
+            identificador = ruta.stem[len(prefijo):]
+            if identificador.isdecimal():
+                usados.add(int(identificador))
+    return max(usados, default=0) + 1
 
 
 class Registro:
@@ -167,9 +177,9 @@ def main() -> int:
     args = parser.parse_args()
 
     args.salida.mkdir(parents=True, exist_ok=True)
-    marca = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    ruta_datos = args.salida / f"datos_{marca}.csv"
-    ruta_eventos = args.salida / f"eventos_{marca}.csv"
+    numero = siguiente_numero(args.salida)
+    ruta_datos = args.salida / f"datos_{numero}.csv"
+    ruta_eventos = args.salida / f"eventos_{numero}.csv"
 
     try:
         puerto = serial.Serial(args.puerto, 115200, timeout=0.2)
@@ -185,8 +195,8 @@ def main() -> int:
     enviar(puerto, "r")
 
     terminar = threading.Event()
-    with puerto, ruta_datos.open("w", newline="", encoding="utf-8") as datos, ruta_eventos.open(
-        "w", newline="", encoding="utf-8"
+    with puerto, ruta_datos.open("x", newline="", encoding="utf-8") as datos, ruta_eventos.open(
+        "x", newline="", encoding="utf-8"
     ) as eventos:
         registro = Registro(datos, eventos)
 
@@ -203,7 +213,7 @@ def main() -> int:
 
         lector = threading.Thread(target=recibir, daemon=True)
         lector.start()
-        print(f"Datos: {ruta_datos}\nEventos: {ruta_eventos}")
+        print(f"Ensayo {numero} (ID {numero})\nDatos: {ruta_datos}\nEventos: {ruta_eventos}")
         try:
             teclado_interactivo(puerto, terminar)
         except (KeyboardInterrupt, RuntimeError) as error:
