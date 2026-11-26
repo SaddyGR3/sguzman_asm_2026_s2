@@ -36,3 +36,23 @@ Con el motor apagado y el freno separado del disco, colocar la marca **fuera** d
 El resultado esperado es `N1 = N0`, `N2 - N1 = 5` y `N3 = N2`. `PULSOS` es **acumulado** desde `REINICIO`: una sola lectura como `PULSOS=6` no demuestra una vuelta adicional. Si el contador aumenta con el disco quieto, comprobar primero alimentación y masa del sensor, conexiones y estabilidad de su LED. Si aumenta de más solo durante el giro, fijar mejor el disco/acople y el KY-033, comprobar que haya una sola marca de alto contraste y ajustar su potenciómetro en incrementos pequeños. No asumir un sentido de giro: probar el LED con la marca frente al sensor y luego sin ella, y conservar el ajuste que dé dos estados estables y **un único intervalo de detección por vuelta**. Repetir la prueba tres veces antes de usar las RPM en MATLAB. El firmware actualizado descarta transiciones separadas por **20 ms o menos** y `v` las cuenta en `PULSOS_RECHAZADOS`. Este umbral permite hasta unas 3000 RPM con una marca por vuelta y se eligió según las dos corridas del montaje actual (menos de 1800 RPM estables, picos falsos de 3 a 16 ms). Si se aumenta mucho la velocidad del motor, habrá que revisar el umbral. El filtro no corrige un disco que oscile ni pulsos falsos más separados: comprobar la mecánica y repetir el ensayo.
 
 Después calibrar el contacto con las flechas. Pulsar `c` al observar el primer contacto y `f` en el ángulo de frenado útil elegido. Esas marcas guardan el ángulo en `eventos_*.csv`; también anotar el ángulo sin contacto. Cerrar esa captura y abrir otra para cada ensayo de giro libre o frenado.
+
+## Actualización del diagnóstico del firmware
+
+El capturador ahora crea también `diagnostico_N.csv`, con el mismo número que datos y eventos. Conserva el formato histórico de esos dos archivos y puede capturar firmware antiguo sin líneas de diagnóstico. Los números se eligen sin sobrescribir ninguno de los tres archivos.
+
+Las líneas `#DIAG` incluyen RPM cruda y validada, estado, antigüedad, periodos y contadores de rechazo o pérdida. También incluyen modo, motor ordenado, tiempo de ensayo y campos reservados de referencia y PID. NaN indica que una medición es inválida o que el cálculo todavía no existe. No debe sustituirse automáticamente por cero.
+
+Los comandos escritos, incluidas las marcas `c`, `f`, `m` y `v`, se envían ahora con Enter. Esto permite escribir `fijo47`, `motor_on`, `motor_off` o `cancelar` completos. Las flechas mantienen su efecto inmediato. Para interrumpir una prueba, enviar `cancelar` antes de salir con `q`. La tecla `q` solo cierra la captura.
+
+Las instrucciones anteriores sobre las marcas se conservan como contexto, pero se aplica esta actualización de teclado. El comando `m` sigue siendo una marca manual y no equivale al apagado automático `MOTOR_CMD`.
+
+El analizador MATLAB de la Tarea 2 continúa disponible para sus archivos históricos. Interpretar los eventos automáticos y filtrar la calidad del diagnóstico requiere adaptar explícitamente ese análisis. El nuevo capturador no declara que el protocolo automático ya sea compatible con ese ajuste histórico.
+
+La bitácora está en `proyecto2/firmware/freno abs/BITACORA.md`.
+
+## Diagnóstico PID en observación
+
+El paso 5 agrega ocho columnas al final del diagnóstico, con acción limitada, términos P, I y D, estado y tiempos del cálculo. El capturador admite las 18 columnas anteriores y las 26 actuales. Al leer un diagnóstico anterior conserva sus valores y deja los nuevos campos como no disponibles.
+
+`u_solicitada` es la petición matemática del PID y `pid_u_limitada` su resultado acotado. `u_aplicada` sigue como NaN mientras el PID no gobierne el servo. `GANANCIAS_CERO` identifica el cálculo con parámetros todavía sin ajustar. No interpretar estos valores como una prueba física de seguimiento.

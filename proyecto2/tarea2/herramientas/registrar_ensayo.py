@@ -20,12 +20,23 @@ import serial
 
 
 ENCABEZADO = ("tiempo_ms", "rpm", "servo_cmd_grados")
+ENCABEZADO_DIAGNOSTICO_ANTERIOR = (
+    "tiempo_ms", "rpm_cruda", "rpm_validada", "estado_medicion", "antiguedad_us",
+    "periodo_us", "pulsos_aceptados", "pulsos_rechazados", "saltos_rechazados",
+    "perdidos_cola", "ultimo_periodo_rechazado_us", "modo", "motor_encendido",
+    "tiempo_ensayo_ms", "referencia_rpm", "error_rpm", "u_solicitada", "u_aplicada",
+)
+
+ENCABEZADO_DIAGNOSTICO = ENCABEZADO_DIAGNOSTICO_ANTERIOR + (
+    "pid_u_limitada", "pid_p", "pid_i", "pid_d", "pid_estado", "pid_dt_us",
+    "pid_omitidos", "pid_tiempo_calculo_us",
+)
 
 
 def siguiente_numero(carpeta: Path) -> int:
     """Asigna 1, 2, 3... sin sobrescribir ninguno de los dos CSV."""
     usados = set()
-    for prefijo in ("datos_", "eventos_"):
+    for prefijo in ("datos_", "eventos_", "diagnostico_"):
         for ruta in carpeta.glob(f"{prefijo}*.csv"):
             identificador = ruta.stem[len(prefijo):]
             if identificador.isdecimal():
@@ -34,7 +45,12 @@ def siguiente_numero(carpeta: Path) -> int:
 
 
 class Registro:
-    def __init__(self, datos, eventos):
+    def __init__(self, datos, eventos, diagnostico=None):
+        self.diagnostico = diagnostico
+        self.escritor_diagnostico = csv.writer(diagnostico) if diagnostico else None
+        if self.escritor_diagnostico:
+            self.escritor_diagnostico.writerow(ENCABEZADO_DIAGNOSTICO)
+            diagnostico.flush()
         self.datos = datos
         self.eventos = eventos
         self.escritor_datos = csv.writer(datos)
@@ -51,6 +67,9 @@ class Registro:
         if not linea:
             return
         if linea == ",".join(ENCABEZADO):
+            return
+        if linea.startswith("#DIAG,"):
+            self.procesar_diagnostico(linea)
             return
         if linea.startswith("#EVENT,"):
             partes = linea.split(",", 3)
@@ -90,6 +109,54 @@ class Registro:
         if time.monotonic() - self.ultima_impresion >= 0.25:
             print(f"\rt={tiempo:>7} ms  RPM={rpm:>8.2f}  servo={angulo:>2}°", end="", flush=True)
             self.ultima_impresion = time.monotonic()
+
+    def procesar_diagnostico(self, linea: str) -> None:
+        if not self.escritor_diagnostico:
+            return
+        campos = next(csv.reader([linea]))[1:]
+        try:
+            if len(campos) == len(ENCABEZADO_DIAGNOSTICO_ANTERIOR):
+                campos.extend(["nan", "nan", "nan", "nan", "NO_DISPONIBLE", "", "", ""])
+            elif len(campos) != len(ENCABEZADO_DIAGNOSTICO):
+                raise ValueError("cantidad de columnas")
+            tiempo = int(campos[0])
+            cruda, validada = float(campos[1]), float(campos[2])
+            estado = campos[3]
+            estados = {"SIN_PULSOS", "UNA_MARCA", "RECIENTE", "ANTIGUA",
+                       "SIN_SENAL", "SOSPECHOSA", "DESBORDAMIENTO"}
+            if tiempo < -1 or estado not in estados:
+                raise ValueError("tiempo o estado")
+            if not (math.isnan(cruda) or math.isfinite(cruda) and cruda >= 0):
+                raise ValueError("RPM cruda")
+            if estado == "RECIENTE":
+                if not math.isfinite(validada) or validada <= 0:
+                    raise ValueError("RPM validada")
+            elif not math.isnan(validada):
+                raise ValueError("una lectura invalida debe tener RPM validada NaN")
+            if any(int(campos[i]) < 0 for i in range(4, 11)):
+                raise ValueError("diagnostico negativo")
+            if campos[11] not in {"REPOSO", "PREPARACION", "FIJO", "FINALIZADO", "CANCELADO", "FALLO"}:
+                raise ValueError("modo desconocido")
+            if int(campos[12]) not in (0, 1) or int(campos[13]) < 0:
+                raise ValueError("motor o tiempo de ensayo")
+            if any(not (math.isfinite(float(c)) or math.isnan(float(c))) for c in campos[14:22]):
+                raise ValueError("campos de control")
+            if campos[22] not in {
+                "NO_DISPONIBLE", "INACTIVO", "SIN_CONFIGURAR", "GANANCIAS_CERO",
+                "OBSERVACION", "MEDICION_INVALIDA", "ENTRADA_INVALIDA",
+                "TIEMPO_EXCEDIDO", "ERROR_NUMERICO",
+            }:
+                raise ValueError("estado PID")
+            if any(c != "" and int(c) < 0 for c in campos[23:]):
+                raise ValueError("temporizacion PID")
+            if not (math.isnan(float(campos[18])) or 0 <= float(campos[18]) <= 1):
+                raise ValueError("accion limitada")
+        except (ValueError, OverflowError):
+            print(f"\nDiagnostico ignorado por formato invalido: {linea}")
+            return
+        # NaN conserva que referencia y PID aun no estan calculados.
+        self.escritor_diagnostico.writerow(campos)
+        self.diagnostico.flush()
 
 
 def leer_tecla_posix() -> str | None:
@@ -142,15 +209,13 @@ def teclado_interactivo(puerto: serial.Serial, terminar: threading.Event) -> Non
 
     pendiente = ""
     try:
-        print("Flechas derecha/arriba: +1°; izquierda/abajo: -1°; c/f: marcar contacto; m: fuente apagada; v: pulsos")
-        print("Escriba g75 + Enter para ir a 75°, p5 + Enter para paso de 5°, q para salir")
+        print("Flechas derecha/arriba: +1°; izquierda/abajo: -1°. Los comandos se envian con Enter.")
+        print("g75, p5, c/f/m/v, preparar, fijo47, cancelar, estado + Enter. q sale de la captura.")
         while not terminar.is_set():
             tecla = leer_tecla()
             if tecla is None:
                 continue
             if tecla in ("+", "-") and not pendiente:
-                enviar(puerto, tecla)
-            elif tecla in ("c", "f", "m", "v") and not pendiente:
                 enviar(puerto, tecla)
             elif tecla == "q" and not pendiente:
                 break
@@ -180,6 +245,7 @@ def main() -> int:
     numero = siguiente_numero(args.salida)
     ruta_datos = args.salida / f"datos_{numero}.csv"
     ruta_eventos = args.salida / f"eventos_{numero}.csv"
+    ruta_diagnostico = args.salida / f"diagnostico_{numero}.csv"
 
     try:
         puerto = serial.Serial(args.puerto, 115200, timeout=0.2)
@@ -197,8 +263,8 @@ def main() -> int:
     terminar = threading.Event()
     with puerto, ruta_datos.open("x", newline="", encoding="utf-8") as datos, ruta_eventos.open(
         "x", newline="", encoding="utf-8"
-    ) as eventos:
-        registro = Registro(datos, eventos)
+    ) as eventos, ruta_diagnostico.open("x", newline="", encoding="utf-8") as diagnostico:
+        registro = Registro(datos, eventos, diagnostico)
 
         def recibir() -> None:
             while not terminar.is_set():
@@ -213,7 +279,7 @@ def main() -> int:
 
         lector = threading.Thread(target=recibir, daemon=True)
         lector.start()
-        print(f"Ensayo {numero} (ID {numero})\nDatos: {ruta_datos}\nEventos: {ruta_eventos}")
+        print(f"Ensayo {numero} (ID {numero})\nDatos: {ruta_datos}\nEventos: {ruta_eventos}\nDiagnostico: {ruta_diagnostico}")
         try:
             teclado_interactivo(puerto, terminar)
         except (KeyboardInterrupt, RuntimeError) as error:
