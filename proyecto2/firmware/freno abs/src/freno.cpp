@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <math.h>
 #include <ESP32Servo.h>
 #include "freno.h"
 #include "configuracion.h"
@@ -12,6 +13,7 @@ int posicionActual = anguloLiberado;
 int pasoGrados = 1;
 bool moviendo = false;
 uint32_t tiempoAnteriorServoMs = 0;
+float accionAplicada = NAN;
 }
 
 void iniciar() {
@@ -27,11 +29,33 @@ void fijarAngulo(int nuevoAngulo) {
   }
 
   moviendo = false;
+  accionAplicada = NAN;
   posicionActual = nuevoAngulo;
   const uint32_t instanteUs = micros();
   servo.write(posicionActual);
   Registro::emitirEvento("SERVO_CMD", posicionActual, instanteUs);
 }
+
+int anguloParaAccion(float accion) {
+  if (!isfinite(accion)) return -1;
+  if (accion < 0) accion = 0;
+  if (accion > 1) accion = 1;
+  const float angulo = anguloLiberado - (anguloLiberado - anguloMinimoEnsayo) * accion;
+  return static_cast<int>(angulo + 0.5f);
+}
+
+bool aplicarAccion(float accion) {
+  const int angulo = anguloParaAccion(accion);
+  if (angulo < anguloMinimoEnsayo || angulo > anguloLiberado) return false;
+  moviendo = false;
+  // No volver a escribir ni emitir un evento si no cambia el grado ordenado.
+  if (angulo != posicionActual) fijarAngulo(angulo);
+  accionAplicada = static_cast<float>(anguloLiberado - angulo) /
+                   (anguloLiberado - anguloMinimoEnsayo);
+  return true;
+}
+
+float leerAccionAplicada() { return accionAplicada; }
 
 int leerAngulo() { return posicionActual; }
 int leerPaso() { return pasoGrados; }
@@ -47,6 +71,7 @@ void fijarPaso(int paso) {
 
 void iniciarRampa() {
   moviendo = true;
+  accionAplicada = NAN;
   tiempoAnteriorServoMs = millis();
   Registro::emitirEvento("RAMPA_INICIO", 0, micros());
 }

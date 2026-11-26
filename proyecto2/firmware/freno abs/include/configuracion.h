@@ -41,7 +41,12 @@ constexpr uint32_t factorSaltoDenominador = 10;
 constexpr uint32_t confirmacionesSalto = 3;
 constexpr uint32_t toleranciaConfirmacionPorcentaje = 20;
 
-// Solo observacion. Ganancias sin ajustar y tiempos provisionales.
+// Actuacion deshabilitada hasta validar montaje y ganancias.
+constexpr bool actuacionPIDHabilitada = false;
+constexpr float rpmFinPid = 100.0f;
+constexpr uint32_t confirmacionFinPidMs = 300;
+constexpr uint32_t tiempoExtraFinPidMs = 2000;
+// Ganancias sin ajustar y tiempos provisionales.
 constexpr float pidKp = 0.0f;
 constexpr float pidKi = 0.0f;
 constexpr float pidKd = 0.0f;
@@ -57,6 +62,8 @@ static_assert(anguloMinimoEnsayo >= anguloMinimo &&
               anguloMaximoEnsayo <= anguloMaximo &&
               anguloMinimoEnsayo <= anguloMaximoEnsayo,
               "Rango de ensayo fuera del rango manual");
+static_assert(anguloLiberado == anguloMaximoEnsayo && anguloMinimoEnsayo < anguloLiberado,
+              "Rango de accion del freno inconsistente");
 static_assert(capacidadColaPulsos >= 2, "Cola de pulsos demasiado pequena");
 static_assert(tiempoSinPulsoParaCeroUs >= antiguedadMinimaUs,
               "Antiguedades de medicion inconsistentes");

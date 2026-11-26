@@ -135,7 +135,7 @@ class Registro:
                 raise ValueError("una lectura invalida debe tener RPM validada NaN")
             if any(int(campos[i]) < 0 for i in range(4, 11)):
                 raise ValueError("diagnostico negativo")
-            if campos[11] not in {"REPOSO", "PREPARACION", "FIJO", "FINALIZADO", "CANCELADO", "FALLO"}:
+            if campos[11] not in {"REPOSO", "PREPARACION", "FIJO", "PID", "FINALIZADO", "CANCELADO", "FALLO"}:
                 raise ValueError("modo desconocido")
             if int(campos[12]) not in (0, 1) or int(campos[13]) < 0:
                 raise ValueError("motor o tiempo de ensayo")
@@ -143,12 +143,14 @@ class Registro:
                 raise ValueError("campos de control")
             if campos[22] not in {
                 "NO_DISPONIBLE", "INACTIVO", "SIN_CONFIGURAR", "GANANCIAS_CERO",
-                "OBSERVACION", "MEDICION_INVALIDA", "ENTRADA_INVALIDA",
+                "OBSERVACION", "CONTROLANDO", "MEDICION_INVALIDA", "ENTRADA_INVALIDA",
                 "TIEMPO_EXCEDIDO", "ERROR_NUMERICO",
             }:
                 raise ValueError("estado PID")
             if any(c != "" and int(c) < 0 for c in campos[23:]):
                 raise ValueError("temporizacion PID")
+            if not (math.isnan(float(campos[17])) or 0 <= float(campos[17]) <= 1):
+                raise ValueError("accion aplicada")
             if not (math.isnan(float(campos[18])) or 0 <= float(campos[18]) <= 1):
                 raise ValueError("accion limitada")
         except (ValueError, OverflowError):

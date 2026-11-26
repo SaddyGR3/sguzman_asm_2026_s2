@@ -88,6 +88,32 @@ with tempfile.TemporaryDirectory(prefix="freno_ensayos_") as temporal:
         str(pruebas / "pid_observacion_test.cpp"), "-o", str(prueba_observacion),
     ], check=True)
     salida_observacion = subprocess.check_output([str(prueba_observacion)], text=True)
+    for variante_pid in ("bloqueado", "ganancias_cero", "activo"):
+        carpeta_pid = trabajo / ("actuacion_" + variante_pid)
+        shutil.copytree(observacion / "include", carpeta_pid / "include")
+        shutil.copytree(observacion / "src", carpeta_pid / "src")
+        config_pid = carpeta_pid / "include/configuracion.h"
+        texto_pid = config_pid.read_text()
+        if variante_pid != "bloqueado":
+            texto_pid = texto_pid.replace("actuacionPIDHabilitada = false", "actuacionPIDHabilitada = true")
+        if variante_pid == "ganancias_cero":
+            for ganancia in ("Kp", "Ki", "Kd"):
+                texto_pid = re.sub(r"pid" + ganancia + r" = [^;]+", "pid" + ganancia + " = 0.0f", texto_pid)
+        config_pid.write_text(texto_pid)
+        ejecutable_pid = carpeta_pid / "prueba"
+        subprocess.run([
+            "g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+            "-I", str(pruebas), "-I", str(carpeta_pid / "include"),
+            *map(str, sorted((carpeta_pid / "src").glob("*.cpp"))),
+            str(pruebas / "pid_actuacion_test.cpp"), "-o", str(ejecutable_pid),
+        ], check=True)
+        casos_pid = [variante_pid] if variante_pid != "activo" else [
+            "conversion", "normal", "reloj", "debajo_referencia", "medicion",
+            "tiempo", "sin_confirmacion", "fin_baja",
+        ]
+        for caso in casos_pid:
+            subprocess.run([str(ejecutable_pid), caso], check=True)
+    salida_pid_activo = subprocess.check_output([str(ejecutable_pid), "telemetria"], text=True)
     # Importar el parser sin requerir un puerto ni pyserial en estas pruebas.
     if importlib.util.find_spec("serial") is None:
         sys.modules["serial"] = types.ModuleType("serial")
@@ -154,6 +180,17 @@ with tempfile.TemporaryDirectory(prefix="freno_ensayos_") as temporal:
     ultima = list(csv.DictReader(io.StringIO(diag_pid.getvalue())))[-1]
     assert ultima["pid_estado"] == "NO_DISPONIBLE" and ultima["pid_dt_us"] == ""
     print("PID con ganancias de prueba no mueve el servo. Diagnosticos anteriores compatibles.")
+    da, ea, pa = io.StringIO(), io.StringIO(), io.StringIO()
+    registro_activo = capturador.Registro(da, ea, pa)
+    with redirect_stdout(io.StringIO()):
+        for linea in salida_pid_activo.splitlines():
+            registro_activo.procesar(linea)
+    filas_activas = [f for f in csv.DictReader(io.StringIO(pa.getvalue())) if f["modo"] == "PID"]
+    assert filas_activas and any(float(f["u_aplicada"]) > 0 for f in filas_activas)
+    assert all(f["pid_estado"] == "CONTROLANDO" for f in filas_activas)
+    assert all(0 <= float(f["u_aplicada"]) <= 1 for f in filas_activas)
+    assert "ENSAYO_PID_INICIO" in ea.getvalue()
+    print("Ensayo PID y accion al servo registrados por el capturador.")
     # El mismo capturador sigue leyendo las tres columnas y eventos historicos.
     d, e = io.StringIO(), io.StringIO()
     viejo = capturador.Registro(d, e)

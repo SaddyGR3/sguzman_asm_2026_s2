@@ -106,7 +106,7 @@ int main(int argc, char **argv) {
     assert(!Motor::estaEncendido());
     esperarTexto("COMANDO_BLOQUEADO_ENSAYO");
     comando("pid");
-    esperarTexto("PID_SIN_ACTUACION");
+    esperarTexto("PID_ACTUACION_DESHABILITADA");
     avanzar(999000);
     assert(Ensayos::leerEstado() == Estado::Fijo);
     avanzar(1000);

@@ -21,6 +21,8 @@ uint32_t numeroEnsayo = 0;
 bool esperandoRecuperacion = false;
 uint32_t inicioInvalidaMs = 0;
 uint32_t tiempoEnsayoFinalMs = 0;
+bool confirmandoFin = false;
+uint32_t inicioConfirmacionMs = 0;
 
 
 void cambiarEstado(Estado nuevo) {
@@ -29,13 +31,16 @@ void cambiarEstado(Estado nuevo) {
 }
 
 void terminar(Estado destino, const char *motivo) {
-  if (estado == Estado::Fijo) tiempoEnsayoFinalMs = millis() - inicioEnsayoMs;
+  const bool eraPID = estado == Estado::Pid;
+  if (estado == Estado::Fijo || eraPID) tiempoEnsayoFinalMs = millis() - inicioEnsayoMs;
   esperandoRecuperacion = false;
+  confirmandoFin = false;
   ControlPID::reiniciar();
   if (destino != Estado::Finalizado) Referencia::reiniciar();
   Motor::establecerEncendido(false);
   // La orden directa tambien detiene cualquier rampa pendiente.
-  Freno::fijarAngulo(anguloLiberado);
+  if (eraPID) Freno::aplicarAccion(0);
+  else Freno::fijarAngulo(anguloLiberado);
   Registro::emitirEvento(motivo, static_cast<int>(numeroEnsayo), micros());
   cambiarEstado(destino);
 }
@@ -46,6 +51,7 @@ const char *nombreEstado() {
     case Estado::Reposo: return "REPOSO";
     case Estado::Preparacion: return "PREPARACION";
     case Estado::Fijo: return "FIJO";
+    case Estado::Pid: return "PID";
     case Estado::Finalizado: return "FINALIZADO";
     case Estado::Cancelado: return "CANCELADO";
     case Estado::Fallo: return "FALLO";
@@ -57,7 +63,7 @@ const char *nombreEstado() {
 Estado leerEstado() { return estado; }
 
 bool estaActivo() {
-  return estado == Estado::Preparacion || estado == Estado::Fijo;
+  return estado == Estado::Preparacion || estado == Estado::Fijo || estado == Estado::Pid;
 }
 
 void informarEstado() {
@@ -112,7 +118,8 @@ void preparar() {
   cambiarEstado(Estado::Preparacion);
 }
 
-void iniciarFijo(int angulo) {
+namespace {
+void iniciarEnsayo(Estado modo, int angulo) {
   if (estado != Estado::Preparacion) {
     Registro::emitirEvento("REQUIERE_PREPARAR", 0, micros());
     return;
@@ -146,12 +153,34 @@ void iniciarFijo(int angulo) {
   }
   esperandoRecuperacion = false;
   tiempoEnsayoFinalMs = 0;
-  Registro::emitirEvento("ENSAYO_FIJO_INICIO", static_cast<int>(numeroEnsayo), micros());
+  Registro::emitirEvento(modo == Estado::Pid ? "ENSAYO_PID_INICIO" : "ENSAYO_FIJO_INICIO", static_cast<int>(numeroEnsayo), micros());
   Registro::emitirEvento("ENSAYO_DURACION_MS", static_cast<int>(duracionMs), micros());
   Registro::emitirEvento("RPM_INICIAL_X100", static_cast<int>(lectura.rpm * 100.0f + 0.5f), micros());
   Registro::emitirEvento("REFERENCIA_LINEAL_MS", static_cast<int>(duracionMs), micros());
   Freno::fijarAngulo(angulo);
-  cambiarEstado(Estado::Fijo);
+  if (modo == Estado::Pid) Freno::aplicarAccion(0);
+  confirmandoFin = false;
+  cambiarEstado(modo);
+}
+
+}
+
+void iniciarFijo(int angulo) { iniciarEnsayo(Estado::Fijo, angulo); }
+
+void iniciarPID() {
+  if (!actuacionPIDHabilitada) {
+    Registro::emitirEvento("PID_ACTUACION_DESHABILITADA", 0, micros());
+    return;
+  }
+  if (!ControlPID::listoParaActuar()) {
+    Registro::emitirEvento("PID_GANANCIAS_NO_CONFIGURADAS", 0, micros());
+    return;
+  }
+  iniciarEnsayo(Estado::Pid, anguloLiberado);
+}
+
+void fallarControl(const char *motivo) {
+  if (estado == Estado::Pid) terminar(Estado::Fallo, motivo);
 }
 
 void cancelar() {
@@ -160,7 +189,7 @@ void cancelar() {
 }
 
 uint32_t leerTiempoEnsayoMs() {
-  return estado == Estado::Fijo ? millis() - inicioEnsayoMs : tiempoEnsayoFinalMs;
+  return (estado == Estado::Fijo || estado == Estado::Pid) ? millis() - inicioEnsayoMs : tiempoEnsayoFinalMs;
 }
 
 void actualizar() {
@@ -184,6 +213,17 @@ void actualizar() {
   } else if (estado == Estado::Fijo && ahora - inicioEnsayoMs >= duracionMs) {
     // Es un final por tiempo. No certifica que el disco este detenido.
     terminar(Estado::Finalizado, "ENSAYO_FIN_DURACION");
+  } else if (estado == Estado::Pid && ahora - inicioEnsayoMs >= duracionMs) {
+    const Medicion::Lectura l = Medicion::leerLectura();
+    if (l.valida && l.rpm <= rpmFinPid) {
+      if (!confirmandoFin) { confirmandoFin = true; inicioConfirmacionMs = ahora; }
+      else if (ahora - inicioConfirmacionMs >= confirmacionFinPidMs) {
+        terminar(Estado::Finalizado, "ENSAYO_PID_FIN_BAJA_RPM");
+        return;
+      }
+    } else confirmandoFin = false;
+    if (ahora - inicioEnsayoMs - duracionMs >= tiempoExtraFinPidMs)
+      terminar(Estado::Fallo, "PID_FIN_NO_CONFIRMADO");
   }
 }
 }

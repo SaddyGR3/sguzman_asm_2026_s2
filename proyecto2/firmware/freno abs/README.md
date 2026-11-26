@@ -2,7 +2,7 @@
 
 ## Avance del plan
 
-Los pasos 1 a 5 organizan el firmware, agregan ensayos fijos, diagnostico, referencia lineal y calculo PID en observacion. El PID no gobierna el servo. El control manual y el CSV historico se conservan.
+Los pasos 1 a 6 incluyen ensayos fijos y PID con referencia lineal, diagnostico y conversion de la accion al servo. La actuacion PID y el control del motor estan deshabilitados por defecto y las ganancias siguen en cero. El control manual y el CSV historico se conservan.
 
 | Archivo | Responsabilidad |
 |---|---|
@@ -12,7 +12,7 @@ Los pasos 1 a 5 organizan el firmware, agregan ensayos fijos, diagnostico, refer
 | `src/freno.cpp` | Servo, posicion, paso y movimiento gradual. |
 | `src/motor.cpp` | Unica salida de encendido y apagado del driver. |
 | `src/pid.cpp` | Calculo independiente de P, I y D y sus limites. |
-| `src/control_pid.cpp` | Observacion del PID durante el ensayo fijo, sin actuacion. |
+| `src/control_pid.cpp` | Observacion durante FIJO y actuacion durante PID. |
 | `src/referencia.cpp` | Generacion independiente de la referencia lineal. |
 | `src/ensayos.cpp` | Estados, preparacion, ensayo fijo, finalizacion y cancelacion. |
 | `src/comandos.cpp` | Recepcion e interpretacion de comandos. |
@@ -37,7 +37,7 @@ Enviar cada comando seguido de nueva linea a 115200 baudios.
 | `motor_on` y `motor_off` | Solicitar encendido o apagado si el driver esta habilitado. |
 | `?` | Imprimir ayuda. |
 
-El rango manual sigue siendo 0 a 90 grados para conservar la calibracion anterior. No se debe recorrer completo con el freno cargado sin conocer sus limites. Los limites del futuro control automatico, provisionalmente 90 y 47 grados, se incorporaran por separado.
+El rango manual sigue siendo 0 a 90 grados para conservar la calibracion anterior. No se debe recorrer completo con el freno cargado sin conocer sus limites. El control automatico usa por separado los limites provisionales de 90 y 47 grados.
 
 ## Driver del motor pendiente de confirmar
 
@@ -73,7 +73,7 @@ El control del motor sigue deshabilitado por defecto hasta confirmar el driver. 
 | `fijo90` | Desde preparacion, apaga el motor y observa giro sin freno. |
 | `estado` | Consulta el estado mediante una linea `#ESTADO`. |
 | `cancelar` | Apaga el motor, libera el freno y deja el ensayo cancelado. |
-| `pid` | Informa que la actuacion del PID sigue pendiente. No inicia un lazo cerrado. |
+| `pid` | Inicia lazo cerrado desde preparacion si la actuacion y las ganancias estan habilitadas. |
 
 El estado inicial es `REPOSO`. Una preparacion aceptada pasa a `PREPARACION`. El inicio fijo pasa a `FIJO`. La duracion cumplida produce `FINALIZADO`, una cancelacion produce `CANCELADO` y un fallo de preparacion produce `FALLO`. Se puede preparar de nuevo desde los estados terminales.
 
@@ -127,13 +127,13 @@ Como criterio provisional, una subida de RPM de mas de 1,8 veces la ultima valid
 
 La antiguedad permitida es tres veces el ultimo periodo, con minimo de 250 ms y maximo de un segundo. No recibir un pulso nuevo en cada vuelta del programa es normal. La lectura solo es utilizable si `valida` es verdadera. `rpm` vale NaN cuando no lo es. `rpmUltimaValida` permite investigar el ultimo valor aceptado sin confundirlo con una medicion actual.
 
-El CSV antiguo sigue mostrando la ultima RPM aceptada y un cero de presentacion tras el silencio. El PID no debe consumir esa representacion. Para ello usara la lectura validada. Despues de un silencio prolongado, el primer pulso vuelve a anclar y el siguiente permite calcular otra velocidad.
+El CSV antiguo sigue mostrando la ultima RPM aceptada y un cero de presentacion tras el silencio. El PID no debe consumir esa representacion. Para ello usa la lectura validada. Despues de un silencio prolongado, el primer pulso vuelve a anclar y el siguiente permite calcular otra velocidad.
 
 ## Diagnostico en archivos
 
 El firmware emite `#DIAG` a intervalos de 100 ms, incluso antes de tener una primera RPM. El capturador actualizado guarda un tercer archivo `diagnostico_N.csv` junto a `datos_N.csv` y `eventos_N.csv`. Un firmware anterior que no emita diagnostico puede seguir capturandose. El tercer archivo quedara solo con su encabezado.
 
-El diagnostico incluye tiempo, RPM cruda y validada, estado de medicion, antiguedad, periodo, contadores de aceptados y rechazados, saltos rechazados, perdidas de cola, ultimo periodo rechazado, modo, motor ordenado y tiempo de ensayo. La referencia y el error se rellenan desde el paso 4 cuando estan disponibles. La peticion del PID se registra desde el paso 5 en observacion. La accion aplicada por PID sigue como NaN porque no controla el servo.
+El diagnostico incluye tiempo, RPM cruda y validada, estado de medicion, antiguedad, periodo, contadores de aceptados y rechazados, saltos rechazados, perdidas de cola, ultimo periodo rechazado, modo, motor ordenado y tiempo de ensayo. La referencia y el error se rellenan desde el paso 4 cuando estan disponibles. La peticion del PID se registra desde el paso 5 en observacion. La accion enviada al servo se registra en PID desde el paso 6. En modo fijo o manual permanece NaN.
 
 Antes de la primera RPM el tiempo de diagnostico vale -1. Los eventos de cambio de calidad usan `ESTADO_MEDICION`, con codigos de cero a seis en el orden de la tabla de estados anterior. El registro conserva contadores y el ultimo periodo rechazado, no una traza exhaustiva de todos los pulsos individuales.
 
@@ -151,7 +151,7 @@ El detalle breve de cambios y verificaciones esta en [BITACORA.md](BITACORA.md).
 
 ## Referencia lineal del paso 4
 
-El generador esta separado del sensor, del servo y del futuro PID en `referencia.h` y `referencia.cpp`. Recibe RPM inicial, duracion e instante inicial en milisegundos. Calcula la velocidad deseada en cada consulta, sin modificar un actuador.
+El generador esta separado del sensor, del servo y del PID en `referencia.h` y `referencia.cpp`. Recibe RPM inicial, duracion e instante inicial en milisegundos. Calcula la velocidad deseada en cada consulta, sin modificar un actuador.
 
 $$
 r(t)=\omega_0\max\left(0,1-\frac{t}{T}\right).
@@ -165,7 +165,7 @@ Por ejemplo, `tiempo6000` configura seis segundos. Si el ensayo empieza a 1500 R
 
 Durante el ensayo fijo el servo mantiene su angulo. La referencia no lo corrige. Sirve para comparar la respuesta a lazo abierto con una curva deseada y preparar la integracion posterior del PID.
 
-`diagnostico_N.csv` ahora incluye `referencia_rpm` y `error_rpm`. Se usa velocidad medida menos referencia. Si la lectura no es valida, el error permanece NaN aunque la referencia siga definida. Desde el paso 5, `u_solicitada` registra el calculo de observacion cuando es valido. `u_aplicada` sigue como NaN porque no se aplica esa accion.
+`diagnostico_N.csv` ahora incluye `referencia_rpm` y `error_rpm`. Se usa velocidad medida menos referencia. Si la lectura no es valida, el error permanece NaN aunque la referencia siga definida. Desde el paso 5, `u_solicitada` registra el calculo de observacion cuando es valido. `u_aplicada` permanece NaN en FIJO. En PID registra la orden normalizada enviada al servo.
 
 `REFERENCIA_LINEAL_MS` registra el tipo de curva y su duracion. `RPM_INICIAL_X100` conserva la velocidad inicial con la escala documentada. El instante inicial coincide con `ENSAYO_FIJO_INICIO`. La telemetria sigue su intervalo de 100 ms, por lo que no siempre contiene una fila exactamente en ese instante. Los eventos permiten reconstruir el punto inicial.
 
@@ -175,7 +175,7 @@ Las pruebas incluyen distintas velocidades iniciales, monotonia, extremos, perma
 
 ## Calculo PID del paso 5
 
-`pid.h` y `pid.cpp` contienen un controlador sin dependencias del sensor, del servo, de Serial ni de Arduino. Recibe referencia, una medicion validada con su instante real y el instante actual. `control_pid.cpp` lo ejecuta en observacion durante `FIJO`. No escribe al servo ni al motor.
+`pid.h` y `pid.cpp` contienen un controlador sin dependencias del sensor, del servo, de Serial ni de Arduino. Recibe referencia, una medicion validada con su instante real y el instante actual. `control_pid.cpp` lo ejecuta en observacion durante `FIJO` y conecta su salida al servo durante `PID`. El calculo independiente no escribe al servo ni al motor.
 
 Las ganancias `pidKp`, `pidKi` y `pidKd` son cero por defecto. No estan ajustadas. El diagnostico muestra `GANANCIAS_CERO` para no confundir ese resultado con un controlador sintonizado. Los valores distintos de cero usados en pruebas son hipoteticos y solo existen en copias temporales de prueba.
 
@@ -193,7 +193,7 @@ El periodo provisional es 20000 microsegundos, equivalente a 20 ms o 50 Hz. No e
 
 La primera ejecucion calcula P con I y D inicializadas a cero. Despues usa el tiempo real transcurrido para integrar. Una ejecucion tardia no provoca rafagas de calculos para recuperar todos los periodos pendientes. Los intervalos omitidos quedan contados.
 
-Si transcurren mas de 100 ms entre calculos, la salida se invalida con `TIEMPO_EXCEDIDO`, se registra el intervalo y se reinicia la memoria interna. Una nueva ejecucion valida reancla el calculo en observacion. Antes de aplicar este controlador al servo se debera definir su tratamiento como fallo del ensayo y verificar tiempos fisicos.
+Si transcurren mas de 100 ms entre calculos, la salida se invalida con `TIEMPO_EXCEDIDO`, se registra el intervalo y se reinicia la memoria interna. Una nueva ejecucion valida reancla el calculo en observacion. En modo PID este retraso termina el ensayo con fallo y libera el freno. Los tiempos fisicos siguen pendientes de verificar.
 
 Las mediciones invalidas, referencias invalidas, marcas temporales incoherentes y errores numericos invalidan el resultado y limpian la memoria. Una medicion invalida no se convierte en cero RPM ni se usa para integrar o derivar. Los contadores de periodos omitidos se conservan hasta reiniciar el ensayo.
 
@@ -203,10 +203,29 @@ Las mediciones invalidas, referencias invalidas, marcas temporales incoherentes 
 
 Se agregan al final del diagnostico `pid_u_limitada`, `pid_p`, `pid_i`, `pid_d`, `pid_estado`, `pid_dt_us`, `pid_omitidos` y `pid_tiempo_calculo_us`. Las columnas anteriores conservan sus nombres y posicion.
 
-`u_solicitada` representa la suma matematica P mas I mas D. `pid_u_limitada` representa esa peticion limitada entre cero y uno, incluyendo la regla de liberacion. `u_aplicada` permanece NaN porque el servo sigue la orden fija. No presentar `pid_u_limitada` como frenado realmente aplicado por PID.
+`u_solicitada` representa la suma matematica P mas I mas D. `pid_u_limitada` representa esa peticion limitada entre cero y uno, incluyendo la regla de liberacion. `u_aplicada` permanece NaN durante FIJO y contiene la orden al servo durante PID. No presentar `pid_u_limitada` como frenado realmente aplicado por PID.
 
 El capturador admite tanto las 18 columnas de diagnostico anteriores como las 26 actuales. Para registros anteriores deja explicita la ausencia de datos PID con `NO_DISPONIBLE`, NaN y tiempos vacios. Los CSV historicos de datos y eventos conservan su lectura.
 
-El estado `OBSERVACION` indica calculo valido con alguna ganancia no nula. Otros estados distinguen inactividad, falta de configuracion, medicion invalida, referencia invalida, tiempo excedido y error numerico. Al cancelar, terminar, preparar, reiniciar medicion o iniciar otro ensayo, se reinicia la memoria del controlador.
+El estado `OBSERVACION` indica calculo valido con alguna ganancia no nula durante FIJO. `CONTROLANDO` identifica el calculo en modo PID. Otros estados distinguen inactividad, falta de configuracion, medicion invalida, referencia invalida, tiempo excedido y error numerico. Al cancelar, terminar, preparar, reiniciar medicion o iniciar otro ensayo, se reinicia la memoria del controlador.
 
 Las pruebas comprueban P, acumulacion integral, saturacion, recuperacion, derivada filtrada sin golpe de referencia, muestras repetidas, datos invalidos, reloj, retrasos y errores numericos. Incluyen una simulacion didactica que verifica el sentido de la correccion y un ensayo con ganancias no nulas donde se comprueba que el calculo no mueve el servo. Esa simulacion no identifica la maqueta ni obtiene sus ganancias finales.
+
+
+## Integracion del paso 6
+
+`pid` inicia un ensayo de lazo cerrado despues de `preparar` y de obtener una medicion inicial valida. Se apaga el motor y se captura una sola vez la RPM inicial para la referencia lineal. `tiempo6000`, enviado antes de preparar, configura un descenso de seis segundos tanto para FIJO como para PID.
+
+El inicio exige `controlMotorHabilitado` y `actuacionPIDHabilitada`, ademas de una configuracion PID valida con alguna ganancia positiva. Ambos permisos siguen en falso y las tres ganancias en cero. Cambiarlos requiere verificar el montaje y elegir ganancias justificadas. Los valores de las pruebas automaticas solo existen en copias temporales.
+
+La conexion comunicada por el usuario usa GPIO25 hacia IN1 del AD70178 e IN2 a tierra. Se conserva HIGH como orden provisional de encendido. Quedan pendientes la comprobacion electrica, la alimentacion compatible, el arranque y el comportamiento real de apagado. Confirmar esos resultados antes de habilitar el motor.
+
+La accion limitada vale entre cero y uno. Cero ordena 90 grados y uno ordena 47 grados. Se usa interpolacion lineal y redondeo al grado mas cercano. Por ejemplo, 0,5 ordena 69 grados. Esto relaciona dos ordenes y no supone una relacion lineal entre angulo y torque de frenado.
+
+`u_solicitada` es la suma P mas I mas D. `pid_u_limitada` contiene el resultado limitado antes del redondeo. `u_aplicada` expresa la orden normalizada correspondiente al angulo entero enviado. No es una medicion de posicion ni de torque. En modo manual o fijo se deja NaN. El servo solo recibe una nueva orden si cambia el angulo entero y el control automatico detiene cualquier rampa manual pendiente.
+
+Si una medicion deja de ser valida se libera inmediatamente el freno y se reinicia la memoria PID. La recuperacion permite continuar mientras no se cumpla el fallo persistente de 1500 ms. Los errores numericos, entradas invalidas y retrasos mayores de 100 ms terminan el ensayo, apagan el motor y liberan el freno. `cancelar` hace lo mismo con estado de cancelacion. Los comandos manuales que interfieren permanecen bloqueados durante PID.
+
+Al terminar la referencia no se declara exito por tiempo. Se mantiene la referencia en cero y se buscan RPM validadas de 100 o menos durante 300 ms continuos. Si no se confirma en dos segundos adicionales, termina con `PID_FIN_NO_CONFIRMADO`. Estos tres valores son provisionales. La confirmacion es de baja velocidad estimada y no certifica parada exacta. El silencio del sensor sigue siendo una medicion invalida y puede producir fallo aunque el disco se haya detenido realmente.
+
+Las pruebas simuladas verifican conversion, limites, permisos, ganancias nulas, control del servo, liberacion por debajo de referencia, fallos, cancelacion, final de ensayo y desbordamiento del reloj. Tambien comprueban captura de modo PID y accion aplicada. Falta verificar sin contacto y despues con la maqueta. La etapa 7 incluye ajuste y comparacion experimental.

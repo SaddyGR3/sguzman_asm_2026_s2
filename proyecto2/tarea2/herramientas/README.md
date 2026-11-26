@@ -56,3 +56,10 @@ La bitácora está en `proyecto2/firmware/freno abs/BITACORA.md`.
 El paso 5 agrega ocho columnas al final del diagnóstico, con acción limitada, términos P, I y D, estado y tiempos del cálculo. El capturador admite las 18 columnas anteriores y las 26 actuales. Al leer un diagnóstico anterior conserva sus valores y deja los nuevos campos como no disponibles.
 
 `u_solicitada` es la petición matemática del PID y `pid_u_limitada` su resultado acotado. `u_aplicada` sigue como NaN mientras el PID no gobierne el servo. `GANANCIAS_CERO` identifica el cálculo con parámetros todavía sin ajustar. No interpretar estos valores como una prueba física de seguimiento.
+
+
+## Capturas del modo PID
+
+El capturador admite el modo `PID` y el estado `CONTROLANDO`. Conserva las 26 columnas del diagnóstico y la compatibilidad con registros anteriores. `u_aplicada` puede contener un valor entre cero y uno cuando el firmware ordena el servo desde PID. Representa la orden normalizada después del redondeo angular y no una medición de torque o posición. En FIJO y manual permanece NaN.
+
+Los comandos completos `preparar`, `pid`, `estado` y `cancelar` se envían con Enter. El firmware conserva bloqueada la actuación PID por defecto hasta verificar el montaje y configurar ganancias. El analizador MATLAB histórico todavía necesita adaptación al protocolo de ensayos automáticos.

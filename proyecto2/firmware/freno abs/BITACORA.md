@@ -72,6 +72,16 @@ Queda identificado el producto comercial. Siguen pendientes la conexión del mó
 
 La fuente histórica indicaba 1 V, por debajo del mínimo publicado para el driver. Se debe revisar la alimentación junto con el motor real antes de conectarlo. GPIO25 permanece deshabilitado.
 
+## 25 de noviembre de 2026 — Paso 6
+
+Se integró el modo PID con la preparación, apagado del motor, referencia lineal y servo. La acción limitada se convierte al rango provisional de 90 a 47 grados y se registra la orden normalizada después del redondeo. Esa orden no mide torque ni posición real.
+
+La medición inválida libera el freno mientras se espera recuperación. Los fallos persistentes, errores numéricos y retrasos excesivos terminan el ensayo. Cancelar apaga el motor, libera el freno y limpia el controlador. El final exige confirmación provisional de baja velocidad después de completar la referencia y tiene un tiempo adicional máximo.
+
+Se conserva deshabilitada la actuación PID y el control del motor. Las ganancias siguen en cero. El usuario confirmó IN1 como señal de control e IN2 a tierra en el AD70178. La compatibilidad eléctrica y el comportamiento físico siguen pendientes.
+
+Pasaron las pruebas nativas de integración, conversión, permisos, órdenes bloqueadas, liberación, recuperación, cancelación, fallos, final de ensayo, relojes y capturador. La compilación para ESP32 pasó. No se cargó firmware a la placa.
+
 ## Próximo avance
 
-Paso 6 del plan. Conectar la acción limitada con el servo usando el rango calibrado, integrar el modo de lazo cerrado y comprobarlo físicamente. Antes de activarlo deben confirmarse el driver, la medición, los límites y el tratamiento de fallos del controlador.
+Verificar primero los pasos anteriores en la maqueta y las órdenes del servo sin presión de frenado. Después continuar con la etapa 7 para elegir ganancias, confirmar tiempos y umbrales, y comparar frenado fijo contra PID con repeticiones.

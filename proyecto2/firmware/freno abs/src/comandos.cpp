@@ -55,7 +55,7 @@ void procesarComando(const char *comando) {
     return;
   }
   if (strcmp(comando, "pid") == 0) {
-    Registro::emitirEvento("PID_SIN_ACTUACION", 0, micros());
+    Ensayos::iniciarPID();
     return;
   }
   if (Ensayos::estaActivo() && strcmp(comando, "?") != 0 &&

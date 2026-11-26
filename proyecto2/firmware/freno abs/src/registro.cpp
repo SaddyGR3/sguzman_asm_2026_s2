@@ -22,7 +22,7 @@ uint32_t tiempoRelativoMs(uint32_t ahoraUs, uint32_t inicioUs) {
 
 void imprimirAyuda() {
   Serial.println("#HELP,+/-: paso; pN: paso 1..10; gN: angulo directo 0..90; c/f: contacto; m: marca manual de fuente apagada; v: pulsos y rechazados; r: reiniciar reloj; 0: rampa; s: detener; 90: volver; motor_on/motor_off: motor si esta habilitado");
-  Serial.println("#HELP,preparar: liberar y encender; fijoN: apagar motor y frenar a N grados; tiempoN: duracion en ms; estado: consultar; cancelar: apagar y liberar; pid: actuacion pendiente");
+  Serial.println("#HELP,preparar: liberar y encender; fijoN: apagar motor y frenar a N grados; tiempoN: duracion en ms; estado: consultar; cancelar: apagar y liberar; pid: iniciar ensayo con controlador");
 }
 
 void anunciarInicio() {
@@ -96,7 +96,7 @@ void registrarMedicion() {
   Serial.print(','); Serial.print(error, 2);
   const PID::Resultado &pid = ControlPID::leer();
   Serial.print(','); Serial.print(pid.solicitada, 4);
-  Serial.print(",nan"); // No se aplica ninguna accion calculada al servo.
+  Serial.print(','); Serial.print(Freno::leerAccionAplicada(), 4);
   Serial.print(','); Serial.print(pid.limitada, 4);
   Serial.print(','); Serial.print(pid.p, 4);
   Serial.print(','); Serial.print(pid.i, 4);
