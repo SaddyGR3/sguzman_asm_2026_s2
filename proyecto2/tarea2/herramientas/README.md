@@ -63,3 +63,7 @@ El paso 5 agrega ocho columnas al final del diagnóstico, con acción limitada, 
 El capturador admite el modo `PID` y el estado `CONTROLANDO`. Conserva las 26 columnas del diagnóstico y la compatibilidad con registros anteriores. `u_aplicada` puede contener un valor entre cero y uno cuando el firmware ordena el servo desde PID. Representa la orden normalizada después del redondeo angular y no una medición de torque o posición. En FIJO y manual permanece NaN.
 
 Los comandos completos `preparar`, `pid`, `estado` y `cancelar` se envían con Enter. El firmware conserva bloqueada la actuación PID por defecto hasta verificar el montaje y configurar ganancias. El analizador MATLAB histórico todavía necesita adaptación al protocolo de ensayos automáticos.
+
+## Interfaz gráfica de diagnóstico
+
+El panel nuevo ofrece gráficas en vivo, controles y captura automática de datos. Se inicia con `python3 panel_frenado.py` desde esta carpeta. Tiene modo ESP32 y modo de planta ficticia, que usa el cálculo PID y la conversión angular del firmware sin cargar una placa. La guía completa y la primera prueba sin maqueta están en [panel/README.md](panel/README.md).

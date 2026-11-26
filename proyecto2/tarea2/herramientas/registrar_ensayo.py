@@ -16,7 +16,6 @@ import sys
 import threading
 import time
 
-import serial
 
 
 ENCABEZADO = ("tiempo_ms", "rpm", "servo_cmd_grados")
@@ -45,7 +44,8 @@ def siguiente_numero(carpeta: Path) -> int:
 
 
 class Registro:
-    def __init__(self, datos, eventos, diagnostico=None):
+    def __init__(self, datos, eventos, diagnostico=None, silencioso=False):
+        self.silencioso = silencioso
         self.diagnostico = diagnostico
         self.escritor_diagnostico = csv.writer(diagnostico) if diagnostico else None
         if self.escritor_diagnostico:
@@ -61,6 +61,10 @@ class Registro:
         self.eventos.flush()
         self.ultimo_tiempo = -1
         self.ultima_impresion = 0.0
+
+    def imprimir(self, *args, **kwargs):
+        if not self.silencioso:
+            print(*args, **kwargs)
 
     def procesar(self, linea: str) -> None:
         linea = linea.strip()
@@ -78,36 +82,38 @@ class Registro:
                     tiempo = int(partes[1])
                     valor = int(partes[3])
                 except ValueError:
-                    print(f"Evento ilegible: {linea}")
+                    self.imprimir(f"Evento ilegible: {linea}")
                     return
+                if partes[2] == "REINICIO":
+                    self.ultimo_tiempo = -1
                 self.escritor_eventos.writerow((tiempo, partes[2], valor))
                 self.eventos.flush()
-                print(f"\nEvento {partes[2]}: t={tiempo} ms, valor={valor}")
+                self.imprimir(f"\nEvento {partes[2]}: t={tiempo} ms, valor={valor}")
             return
         if linea.startswith("#"):
-            print(f"\n{linea}")
+            self.imprimir(f"\n{linea}")
             return
 
         partes = next(csv.reader([linea]))
         if len(partes) != 3:
-            print(f"\nFila ignorada: {linea}")
+            self.imprimir(f"\nFila ignorada: {linea}")
             return
         try:
             tiempo = int(partes[0])
             rpm = float(partes[1])
             angulo = int(partes[2])
         except ValueError:
-            print(f"\nFila ignorada: {linea}")
+            self.imprimir(f"\nFila ignorada: {linea}")
             return
         if tiempo < self.ultimo_tiempo or tiempo < 0 or not math.isfinite(rpm) or rpm < 0 or not 0 <= angulo <= 90:
-            print(f"\nFila fuera de rango: {linea}")
+            self.imprimir(f"\nFila fuera de rango: {linea}")
             return
 
         self.escritor_datos.writerow((tiempo, partes[1], angulo))
         self.datos.flush()
         self.ultimo_tiempo = tiempo
         if time.monotonic() - self.ultima_impresion >= 0.25:
-            print(f"\rt={tiempo:>7} ms  RPM={rpm:>8.2f}  servo={angulo:>2}°", end="", flush=True)
+            self.imprimir(f"\rt={tiempo:>7} ms  RPM={rpm:>8.2f}  servo={angulo:>2}°", end="", flush=True)
             self.ultima_impresion = time.monotonic()
 
     def procesar_diagnostico(self, linea: str) -> None:
@@ -154,7 +160,7 @@ class Registro:
             if not (math.isnan(float(campos[18])) or 0 <= float(campos[18]) <= 1):
                 raise ValueError("accion limitada")
         except (ValueError, OverflowError):
-            print(f"\nDiagnostico ignorado por formato invalido: {linea}")
+            self.imprimir(f"\nDiagnostico ignorado por formato invalido: {linea}")
             return
         # NaN conserva que referencia y PID aun no estan calculados.
         self.escritor_diagnostico.writerow(campos)
@@ -238,6 +244,7 @@ def teclado_interactivo(puerto: serial.Serial, terminar: threading.Event) -> Non
 
 
 def main() -> int:
+    import serial
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("puerto", help="Ejemplo: /dev/ttyUSB0 o COM3")
     parser.add_argument("--salida", type=Path, default=Path(__file__).resolve().parents[1] / "capturas")

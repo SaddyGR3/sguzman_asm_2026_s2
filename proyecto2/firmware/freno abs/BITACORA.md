@@ -85,3 +85,20 @@ Pasaron las pruebas nativas de integración, conversión, permisos, órdenes blo
 ## Próximo avance
 
 Verificar primero los pasos anteriores en la maqueta y las órdenes del servo sin presión de frenado. Después continuar con la etapa 7 para elegir ganancias, confirmar tiempos y umbrales, y comparar frenado fijo contra PID con repeticiones.
+
+## 25 de noviembre de 2026 — Panel de diagnóstico en la PC
+
+Se agregó una interfaz local con gráficas de velocidad cruda y validada, referencia, error, acción solicitada y limitada, orden al servo, ángulo y términos P, I y D. Incluye controles de ensayo, consulta, cancelación, calibración manual y eventos. La vista puede pausarse sin detener la captura.
+
+El modo ESP32 reutiliza la validación del capturador y conserva el protocolo y los CSV. La recepción serial ocurre fuera de la interfaz. Se guarda una carpeta por conexión con datos, eventos, diagnóstico, texto serial y metadatos. El cierre de la ventana no cancela el ensayo físico.
+
+El modo simulado compila en la PC los archivos reales de PID y conversión angular, con una planta ficticia y medición ideal. No emula toda la ESP32 ni su sensor. Sus parámetros y capturas quedan separados de los reales y no modifican el firmware.
+
+Se verificaron pruebas automatizadas de simulación nativa, límites, pico sintético, captura, sesiones, comandos, servidor local y lectura serial fragmentada. Pasaron también las pruebas existentes del firmware y capturador. Se comprobó la interfaz en el navegador. Falta verificar la conexión serial física y el montaje. No se cargó firmware a una placa.
+
+
+## 25 de noviembre de 2026 — Giro libre desde el panel
+
+Se agregó el botón Giro libre · sin freno, que utiliza `fijo90`. Después de preparar apaga el motor y mantiene el servo en la posición liberada. La referencia y el cálculo PID quedan como observación y no gobiernan el frenado. No cambia el protocolo ni requiere cargar otro firmware.
+
+Se documentó que terminar por duración no demuestra parada y que la captura continúa. Se agregó una prueba que verifica motor apagado, ángulo liberado y desaceleración por rozamiento idéntica con ganancias nulas y con Kp de uno. La posición liberada y el efecto del driver siguen pendientes de comprobación física.
