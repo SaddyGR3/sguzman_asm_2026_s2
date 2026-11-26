@@ -56,9 +56,26 @@ with tempfile.TemporaryDirectory(prefix="freno_ensayos_") as temporal:
         *map(str, sorted((copia / "src").glob("*.cpp"))),
         str(pruebas / "medicion_test.cpp"), "-o", str(ejecutable),
     ], check=True)
-    for caso in ["inicial", "cortos", "salto", "sostenido", "desaceleracion",
+    for caso in ["sensor", "inicial", "una_marca_timeout", "una_marca_wrap", "cortos", "salto", "sostenido", "desaceleracion",
                  "antiguedad", "cola", "silencio_wrap", "fallo", "reinicio", "referencia_cancelacion"]:
         subprocess.run([str(ejecutable), caso], check=True)
+    prueba_detector = trabajo / "detector"
+    subprocess.run([
+        "g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+        "-I", str(copia / "include"), str(pruebas / "detector_marca_test.cpp"),
+        "-o", str(prueba_detector),
+    ], check=True)
+    subprocess.run([str(prueba_detector)], check=True)
+    secuencia = trabajo / "secuencia"
+    subprocess.run([
+        "g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+        "-I", str(pruebas), "-I", str(copia / "include"),
+        *map(str, sorted((copia / "src").glob("*.cpp"))),
+        str(pruebas / "secuencia_test.cpp"), "-o", str(secuencia),
+    ], check=True)
+    for caso in ("normal", "libre", "reloj", "cancelar_preparacion", "cancelar_descenso",
+                 "sin_armar", "armar_en_descenso", "sin_senal", "timeout_descenso", "pico", "bloqueos"):
+        subprocess.run([str(secuencia), caso], check=True)
     prueba_referencia = trabajo / "referencia"
     subprocess.run([
         "g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
@@ -113,6 +130,14 @@ with tempfile.TemporaryDirectory(prefix="freno_ensayos_") as temporal:
         ]
         for caso in casos_pid:
             subprocess.run([str(ejecutable_pid), caso], check=True)
+    secuencia_pid = trabajo / "secuencia_pid"
+    subprocess.run([
+        "g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+        "-I", str(pruebas), "-I", str(carpeta_pid / "include"),
+        *map(str, sorted((carpeta_pid / "src").glob("*.cpp"))),
+        str(pruebas / "secuencia_test.cpp"), "-o", str(secuencia_pid),
+    ], check=True)
+    subprocess.run([str(secuencia_pid), "pid"], check=True)
     salida_pid_activo = subprocess.check_output([str(ejecutable_pid), "telemetria"], text=True)
     # Importar el parser sin requerir un puerto ni pyserial en estas pruebas.
     if importlib.util.find_spec("serial") is None:

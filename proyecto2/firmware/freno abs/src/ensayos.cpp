@@ -23,6 +23,10 @@ uint32_t inicioInvalidaMs = 0;
 uint32_t tiempoEnsayoFinalMs = 0;
 bool confirmandoFin = false;
 uint32_t inicioConfirmacionMs = 0;
+bool preparacionAutomatica = false, ensayoArmado = false;
+Estado modoArmado = Estado::Fijo;
+int anguloArmado = anguloLiberado;
+uint32_t inicioDescensoMs = 0, muestraAlApagarUs = 0;
 
 
 void cambiarEstado(Estado nuevo) {
@@ -35,6 +39,7 @@ void terminar(Estado destino, const char *motivo) {
   if (estado == Estado::Fijo || eraPID) tiempoEnsayoFinalMs = millis() - inicioEnsayoMs;
   esperandoRecuperacion = false;
   confirmandoFin = false;
+  preparacionAutomatica = ensayoArmado = false;
   ControlPID::reiniciar();
   if (destino != Estado::Finalizado) Referencia::reiniciar();
   Motor::establecerEncendido(false);
@@ -50,6 +55,7 @@ const char *nombreEstado() {
   switch (estado) {
     case Estado::Reposo: return "REPOSO";
     case Estado::Preparacion: return "PREPARACION";
+    case Estado::DescensoLibre: return "DESCENSO_LIBRE";
     case Estado::Fijo: return "FIJO";
     case Estado::Pid: return "PID";
     case Estado::Finalizado: return "FINALIZADO";
@@ -63,7 +69,8 @@ const char *nombreEstado() {
 Estado leerEstado() { return estado; }
 
 bool estaActivo() {
-  return estado == Estado::Preparacion || estado == Estado::Fijo || estado == Estado::Pid;
+  return estado == Estado::Preparacion || estado == Estado::DescensoLibre ||
+         estado == Estado::Fijo || estado == Estado::Pid;
 }
 
 void informarEstado() {
@@ -76,6 +83,7 @@ void iniciar() {
   estado = Estado::Reposo;
   duracionMs = duracionEnsayoFijoMs;
   numeroEnsayo = 0;
+  preparacionAutomatica = ensayoArmado = false;
   Referencia::reiniciar();
   informarEstado();
 }
@@ -94,7 +102,8 @@ void configurarDuracion(int nuevaDuracionMs) {
   Registro::emitirEvento("ENSAYO_DURACION_MS", nuevaDuracionMs, micros());
 }
 
-void preparar() {
+namespace {
+void prepararBase(bool automatico) {
   if (estaActivo()) {
     Registro::emitirEvento("ENSAYO_OCUPADO", 0, micros());
     return;
@@ -113,18 +122,33 @@ void preparar() {
     return;
   }
   inicioPreparacionMs = millis();
+  preparacionAutomatica = automatico;
+  ensayoArmado = false;
+  if (automatico) {
+    Registro::emitirEvento("AUTO_CORTE_OBJETIVO_RPM", static_cast<int>(rpmApagadoAutomatico), micros());
+    Registro::emitirEvento("AUTO_INICIO_OBJETIVO_RPM", static_cast<int>(rpmInicioAutomatico), micros());
+  }
   esperandoRecuperacion = false;
   tiempoEnsayoFinalMs = 0;
   cambiarEstado(Estado::Preparacion);
 }
 
+}
+void preparar() { prepararBase(false); }
+void prepararAutomatico() { prepararBase(true); }
+
 namespace {
-void iniciarEnsayo(Estado modo, int angulo) {
-  if (estado != Estado::Preparacion) {
+void iniciarEnsayo(Estado modo, int angulo, bool automatico = false) {
+  if ((automatico && estado != Estado::DescensoLibre) ||
+      (!automatico && estado != Estado::Preparacion)) {
     Registro::emitirEvento("REQUIERE_PREPARAR", 0, micros());
     return;
   }
-  if (millis() - inicioPreparacionMs >= tiempoMaximoPreparacionMs) {
+  if (preparacionAutomatica && !automatico) {
+    Registro::emitirEvento("AUTO_REQUIERE_ARMAR", 0, micros());
+    return;
+  }
+  if (!automatico && millis() - inicioPreparacionMs >= tiempoMaximoPreparacionMs) {
     terminar(Estado::Fallo, "FALLO_TIEMPO_PREPARACION");
     return;
   }
@@ -140,10 +164,12 @@ void iniciarEnsayo(Estado modo, int angulo) {
     Registro::emitirEvento("MEDICION_INICIO_INVALIDA", 0, micros());
     return;
   }
-  if (!Motor::establecerEncendido(false)) {
+  if (Motor::estaEncendido() && !Motor::establecerEncendido(false)) {
     terminar(Estado::Fallo, "FALLO_MOTOR");
     return;
   }
+  ensayoArmado = false;
+  preparacionAutomatica = false;
   ++numeroEnsayo;
   inicioEnsayoMs = millis();
   ControlPID::reiniciar();
@@ -163,6 +189,44 @@ void iniciarEnsayo(Estado modo, int angulo) {
   cambiarEstado(modo);
 }
 
+}
+
+namespace {
+void armarAutomatico(Estado modo, int angulo) {
+  if (angulo < anguloMinimoEnsayo || angulo > anguloMaximoEnsayo) {
+    Registro::emitirEvento("ANGULO_ENSAYO_INVALIDO", angulo, micros());
+    return;
+  }
+  if (!estaActivo()) prepararAutomatico();
+  if (!preparacionAutomatica || ensayoArmado ||
+      (estado != Estado::Preparacion && estado != Estado::DescensoLibre)) {
+    Registro::emitirEvento("ENSAYO_OCUPADO", 0, micros());
+    return;
+  }
+  if (estado == Estado::DescensoLibre) {
+    const Medicion::Lectura l = Medicion::leerLectura();
+    if (!l.valida || l.rpm <= rpmInicioAutomatico) {
+      Registro::emitirEvento("AUTO_ORDEN_TARDIA", 0, micros());
+      return;
+    }
+  }
+  modoArmado = modo;
+  anguloArmado = angulo;
+  ensayoArmado = true;
+  Registro::emitirEvento(modo == Estado::Pid ? "AUTO_PID_ARMADO" : "AUTO_FIJO_ARMADO", angulo, micros());
+}
+}
+void armarFijoAutomatico(int angulo) { armarAutomatico(Estado::Fijo, angulo); }
+void armarPIDAutomatico() {
+  if (!actuacionPIDHabilitada) {
+    Registro::emitirEvento("PID_ACTUACION_DESHABILITADA", 0, micros());
+    return;
+  }
+  if (!ControlPID::listoParaActuar()) {
+    Registro::emitirEvento("PID_GANANCIAS_NO_CONFIGURADAS", 0, micros());
+    return;
+  }
+  armarAutomatico(Estado::Pid, anguloLiberado);
 }
 
 void iniciarFijo(int angulo) { iniciarEnsayo(Estado::Fijo, angulo); }
@@ -207,7 +271,43 @@ void actualizar() {
       return;
     }
   }
-  if (estado == Estado::Preparacion &&
+  if (preparacionAutomatica &&
+      (estado == Estado::Preparacion || estado == Estado::DescensoLibre)) {
+    if (estado == Estado::Preparacion && ahora - inicioPreparacionMs >= tiempoMaximoPreparacionMs) {
+      terminar(Estado::Fallo, "FALLO_TIEMPO_PREPARACION");
+      return;
+    }
+    if (estado == Estado::DescensoLibre && ahora - inicioDescensoMs >= tiempoMaximoDescensoMs) {
+      terminar(Estado::Fallo, "FALLO_TIEMPO_DESCENSO");
+      return;
+    }
+    const Medicion::Lectura l = Medicion::leerLectura();
+    const bool reciente = l.valida && isfinite(l.rpm) &&
+        l.antiguedadUs <= antiguedadMaximaInicioUs &&
+        l.pulsosAceptados - pulsosAlPreparar >= 2;
+    if (estado == Estado::Preparacion && reciente && l.rpm >= rpmApagadoAutomatico) {
+      if (!Motor::establecerEncendido(false)) {
+        terminar(Estado::Fallo, "FALLO_MOTOR");
+        return;
+      }
+      inicioDescensoMs = ahora;
+      muestraAlApagarUs = l.instanteUs;
+      Registro::emitirEvento("AUTO_MOTOR_OFF_RPM_X100", static_cast<int>(l.rpm * 100 + 0.5f), micros());
+      cambiarEstado(Estado::DescensoLibre);
+    } else if (estado == Estado::DescensoLibre && reciente &&
+               l.instanteUs != muestraAlApagarUs && l.rpm <= rpmInicioAutomatico) {
+      if (!ensayoArmado) {
+        terminar(Estado::Fallo, "AUTO_SIN_ENSAYO_ARMADO");
+        return;
+      }
+      Registro::emitirEvento("AUTO_INICIO_RPM_X100", static_cast<int>(l.rpm * 100 + 0.5f), micros());
+      iniciarEnsayo(modoArmado, anguloArmado, true);
+      return;
+    }
+  }
+  if (estado == Estado::DescensoLibre && ahora - inicioDescensoMs >= tiempoMaximoDescensoMs) {
+    terminar(Estado::Fallo, "FALLO_TIEMPO_DESCENSO");
+  } else if (estado == Estado::Preparacion &&
       ahora - inicioPreparacionMs >= tiempoMaximoPreparacionMs) {
     terminar(Estado::Fallo, "FALLO_TIEMPO_PREPARACION");
   } else if (estado == Estado::Fijo && ahora - inicioEnsayoMs >= duracionMs) {

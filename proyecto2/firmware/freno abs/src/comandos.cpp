@@ -41,8 +41,36 @@ void procesarComando(const char *comando) {
     Ensayos::informarEstado();
     return;
   }
+  if (strcmp(comando, "sensor_on") == 0 || strcmp(comando, "sensor_off") == 0) {
+    if (Ensayos::estaActivo() || Motor::estaEncendido()) {
+      Registro::emitirEvento("SENSOR_REQUIERE_REPOSO", 0, micros());
+    } else {
+      Medicion::configurarDiagnostico(strcmp(comando, "sensor_on") == 0);
+    }
+    return;
+  }
+  if (Medicion::diagnosticoActivo() &&
+      (strcmp(comando, "preparar") == 0 || strcmp(comando, "motor_on") == 0)) {
+    Registro::emitirEvento("SENSOR_DIAGNOSTICO_ACTIVO", 0, micros());
+    return;
+  }
   if (strcmp(comando, "motor_off") == 0 && Ensayos::estaActivo()) {
     Ensayos::cancelar();
+    return;
+  }
+  if (strcmp(comando, "auto_preparar") == 0 || strcmp(comando, "auto_pid") == 0 ||
+      strncmp(comando, "auto_fijo", 9) == 0) {
+    if (Medicion::diagnosticoActivo()) {
+      Registro::emitirEvento("SENSOR_DIAGNOSTICO_ACTIVO", 0, micros());
+      return;
+    }
+    if (strcmp(comando, "auto_preparar") == 0) Ensayos::prepararAutomatico();
+    else if (strcmp(comando, "auto_pid") == 0) Ensayos::armarPIDAutomatico();
+    else {
+      int angulo;
+      if (leerEntero(comando + 9, angulo)) Ensayos::armarFijoAutomatico(angulo);
+      else Registro::emitirEvento("COMANDO_INVALIDO", 0, micros());
+    }
     return;
   }
   if (strncmp(comando, "fijo", 4) == 0) {

@@ -21,6 +21,9 @@ uint32_t tiempoRelativoMs(uint32_t ahoraUs, uint32_t inicioUs) {
 }
 
 void imprimirAyuda() {
+  Serial.println("#HELP,auto_fijoN/auto_pid: armar ciclo desde reposo; auto_preparar: acelerar; corte 1400 RPM y ensayo al bajar a 1300 RPM");
+  Serial.println("#HELP,Sensor CHANGE con marcas completas; un conteo por ciclo; minimos 100 us provisionales");
+  Serial.println("#HELP,sensor_on/sensor_off: observar cambios GPIO34 y conteos de marcas completas");
   Serial.println("#HELP,+/-: paso; pN: paso 1..10; gN: angulo directo 0..90; c/f: contacto; m: marca manual de fuente apagada; v: pulsos y rechazados; r: reiniciar reloj; 0: rampa; s: detener; 90: volver; motor_on/motor_off: motor si esta habilitado");
   Serial.println("#HELP,preparar: liberar y encender; fijoN: apagar motor y frenar a N grados; tiempoN: duracion en ms; estado: consultar; cancelar: apagar y liberar; pid: iniciar ensayo con controlador");
 }

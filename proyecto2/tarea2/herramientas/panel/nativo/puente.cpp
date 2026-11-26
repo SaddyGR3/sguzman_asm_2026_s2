@@ -1,4 +1,5 @@
 #include "pid.h"
+#include "configuracion.h"
 #include "freno.h"
 #include "registro.h"
 namespace {
@@ -18,7 +19,7 @@ struct Salida {
 };
 bool configurar(float kp, float ki, float kd) {
  reloj = 0;
- Freno::fijarAngulo(90);
+ Freno::fijarAngulo(Configuracion::anguloLiberado);
  return controlador.configurar({kp,ki,kd,0.1f,20000,100000});
 }
 void reiniciar() { controlador.reiniciar(); }
@@ -28,5 +29,9 @@ Salida calcular(float referencia, float rpm, uint32_t ahora, bool valida) {
  const auto &r = controlador.leer();
  return {r.error,r.p,r.i,r.d,r.solicitada,r.limitada,r.dtUs,r.omitidos,r.disponible};
 }
+float corteAutomatico() { return Configuracion::rpmApagadoAutomatico; }
+float inicioAutomatico() { return Configuracion::rpmInicioAutomatico; }
+uint32_t limitePreparacion() { return Configuracion::tiempoMaximoPreparacionMs; }
+uint32_t limiteDescenso() { return Configuracion::tiempoMaximoDescensoMs; }
 int convertir(float accion) { return Freno::anguloParaAccion(accion); }
 }

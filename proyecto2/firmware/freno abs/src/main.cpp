@@ -24,4 +24,5 @@ void loop() {
   ControlPID::actualizar();
   Freno::actualizarRampa();
   Registro::registrarMedicion();
+  Medicion::registrarDiagnostico();
 }

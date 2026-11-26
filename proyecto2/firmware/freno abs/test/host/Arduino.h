@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 #define IRAM_ATTR
-constexpr int HIGH=1, LOW=0, INPUT=1, OUTPUT=2, FALLING=3;
+constexpr int HIGH=1, LOW=0, INPUT=1, OUTPUT=2, FALLING=3, CHANGE=4;
 using std::min;
 using std::max;
 extern uint64_t relojUs;
@@ -18,7 +18,10 @@ inline uint32_t millis(){return static_cast<uint32_t>(relojUs/1000U);}
 inline void noInterrupts(){}
 inline void interrupts(){}
 inline int digitalPinToInterrupt(int p){return p;}
-inline void attachInterrupt(int,void(*f)(),int){interrupcion=f;}
+inline int &nivelSensorPrueba(){static int nivel=HIGH;return nivel;}
+inline int &modoInterrupcionPrueba(){static int modo=FALLING;return modo;}
+inline int digitalRead(int){return nivelSensorPrueba();}
+inline void attachInterrupt(int,void(*f)(),int modo){interrupcion=f;modoInterrupcionPrueba()=modo;}
 inline void pinMode(int p,int v){gpio.push_back("modo "+std::to_string(p)+" "+std::to_string(v));}
 inline void digitalWrite(int p,int v){gpio.push_back("nivel "+std::to_string(p)+" "+std::to_string(v));}
 struct Puerto {
@@ -32,3 +35,11 @@ struct Puerto {
  void println(){salida+='\n';}
 };
 extern Puerto Serial;
+
+// Una marca completa de 200 us, terminando en el tiempo del caso de prueba.
+// Entrega ambos flancos porque el detector de produccion usa CHANGE.
+inline void emitirMarcaPrueba(){
+ const uint64_t final=relojUs;
+ relojUs=final-200; nivelSensorPrueba()=LOW; interrupcion();
+ relojUs=final; nivelSensorPrueba()=HIGH; interrupcion();
+}

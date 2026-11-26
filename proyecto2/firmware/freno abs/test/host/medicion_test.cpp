@@ -14,7 +14,7 @@ std::vector<int> posiciones;
 Puerto Serial;
 void setup(); void loop();
 void avanzar(uint64_t us) { relojUs += us; loop(); }
-void pulso(uint64_t us) { relojUs += us; interrupcion(); loop(); }
+void pulso(uint64_t us) { relojUs += us; emitirMarcaPrueba(); loop(); }
 void comando(const std::string &s) { Serial.entrada = s+"\n"; loop(); }
 void normal() { pulso(50000); pulso(50000); assert(Medicion::leerLectura().valida); }
 int main(int argc, char **argv) {
@@ -22,10 +22,64 @@ int main(int argc, char **argv) {
   const std::string caso=argv[1];
   setup(); loop();
   using M = Medicion::Estado;
-  if(caso=="inicial") {
+  if(caso=="sensor") {
+    auto isrOriginal=interrupcion;
+    comando("sensor_on");
+    assert(Medicion::diagnosticoActivo() && modoInterrupcionPrueba()==CHANGE);
+    assert(interrupcion==isrOriginal);
+    // Completar una marca. La entrada no cuenta, la salida confirma una sola.
+    relojUs=50000; nivelSensorPrueba()=LOW; interrupcion(); loop();
+    assert(Medicion::leerLectura().pulsosAceptados==0);
+    relojUs=50200; nivelSensorPrueba()=HIGH; interrupcion(); loop();
+    assert(Medicion::leerLectura().pulsosAceptados==1);
+    // Llamada repetida del mismo nivel. No inventa otra marca.
+    relojUs=75000; interrupcion(); loop();
+    assert(Medicion::leerLectura().pulsosAceptados==1);
+    assert(Serial.salida.find("#SENSOR,1,50000,50000,0,0,0")!=std::string::npos);
+    assert(Serial.salida.find("#SENSOR,2,50200,200,1,1,0")!=std::string::npos);
+    comando("preparar"); assert(!Motor::estaEncendido());
+    assert(Serial.salida.find("SENSOR_DIAGNOSTICO_ACTIVO")!=std::string::npos);
+    for(int i=0;i<140;i++){relojUs+=10;interrupcion();}
+    loop(); assert(Serial.salida.find("#SENSOR_LOST,")!=std::string::npos);
+    comando("sensor_off");
+    assert(interrupcion==isrOriginal);
+    assert(!Medicion::diagnosticoActivo() && modoInterrupcionPrueba()==CHANGE);
+    pulso(50000); assert(Medicion::leerLectura().pulsosAceptados==2);
+  } else if(caso=="inicial") {
     auto l=Medicion::leerLectura(); assert(l.estado==M::SinPulsos && std::isnan(l.rpm));
     pulso(50000); l=Medicion::leerLectura(); assert(l.estado==M::UnaMarca && !l.valida);
     pulso(50000); l=Medicion::leerLectura(); assert(l.valida && l.rpm==1200.0f);
+  } else if(caso=="una_marca_timeout") {
+    pulso(50000);
+    auto l=Medicion::leerLectura();
+    assert(l.estado==M::UnaMarca && l.pulsosAceptados==1 && !l.valida);
+    avanzar(1000001);
+    l=Medicion::leerLectura();
+    assert(l.estado==M::SinSenal && l.pulsosAceptados==1 && std::isnan(l.rpm));
+    avanzar(2000000);
+    assert(Medicion::leerLectura().estado==M::SinSenal);
+    // Giros manuales aislados no alternan entre una RPM inventada y UNA_MARCA.
+    for(int i=0;i<4;++i){
+      pulso(2000000);
+      l=Medicion::leerLectura();
+      assert(l.estado==M::UnaMarca && !l.disponible && !l.valida);
+      avanzar(1000001);
+      assert(Medicion::leerLectura().estado==M::SinSenal);
+    }
+    // Tras reanclar, la segunda marca cercana permite calcular velocidad.
+    pulso(50000);
+    assert(Medicion::leerLectura().estado==M::UnaMarca);
+    pulso(50000);
+    l=Medicion::leerLectura();
+    assert(l.valida && l.rpm==1200 && l.pulsosAceptados==7);
+  } else if(caso=="una_marca_wrap") {
+    relojUs=(static_cast<uint64_t>(UINT32_MAX)-500ULL)*1000ULL;
+    pulso(50000);
+    assert(Medicion::leerLectura().estado==M::UnaMarca);
+    avanzar(1000001);
+    assert(Medicion::leerLectura().estado==M::SinSenal);
+    avanzar(static_cast<uint64_t>(UINT32_MAX)+1000);
+    assert(Medicion::leerLectura().estado==M::SinSenal);
   } else if(caso=="cortos") {
     normal(); pulso(3000);
     auto l=Medicion::leerLectura();
@@ -56,7 +110,7 @@ int main(int argc, char **argv) {
     pulso(50000); assert(Medicion::leerLectura().valida);
   } else if(caso=="cola") {
     normal();
-    for(int i=0;i<50;i++){relojUs+=1000;interrupcion();}
+    for(int i=0;i<50;i++){relojUs+=1000;emitirMarcaPrueba();}
     loop();auto l=Medicion::leerLectura();
     assert(l.estado==M::Desbordamiento && l.perdidosCola>0 && !l.valida);
     pulso(50000); assert(!Medicion::leerLectura().valida);
@@ -67,11 +121,11 @@ int main(int argc, char **argv) {
     pulso(50000);assert(!Medicion::leerLectura().valida);
     pulso(50000);assert(Medicion::leerLectura().valida);
   } else if(caso=="fallo") {
-    comando("preparar");normal();comando("fijo47");
+    comando("preparar");normal();comando("fijo30");
     assert(Ensayos::leerEstado()==Ensayos::Estado::Fijo);
     avanzar(251000);avanzar(1500000);
     assert(Ensayos::leerEstado()==Ensayos::Estado::Fallo);
-    assert(!Motor::estaEncendido() && Freno::leerAngulo()==90);
+    assert(!Motor::estaEncendido() && Freno::leerAngulo()==45);
     assert(Serial.salida.find("FALLO_MEDICION")!=std::string::npos);
     assert(Serial.salida.find("ENSAYO_FIN_DURACION")==std::string::npos);
   } else if(caso=="reinicio") {
@@ -81,7 +135,7 @@ int main(int argc, char **argv) {
   } else if(caso=="referencia_registro") {
     comando("tiempo6000");comando("preparar");normal();
     assert(!Referencia::disponible());
-    comando("fijo47");
+    comando("fijo30");
     assert(Referencia::evaluar(millis())==1200);
     comando("tiempo3000");  // No puede alterar la curva activa.
     for(int i=0;i<40;i++) pulso(50000);
@@ -96,7 +150,7 @@ int main(int argc, char **argv) {
     std::cout<<Serial.salida;
     return 0;
   } else if(caso=="referencia_dato_invalido") {
-    comando("tiempo6000");comando("preparar");normal();comando("fijo47");
+    comando("tiempo6000");comando("preparar");normal();comando("fijo30");
     pulso(25000);avanzar(100000);
     assert(!Medicion::leerLectura().valida && Referencia::disponible());
     std::cout<<Serial.salida;
@@ -104,12 +158,12 @@ int main(int argc, char **argv) {
     assert(!Referencia::disponible());
     return 0;
   } else if(caso=="referencia_cancelacion") {
-    comando("tiempo6000");comando("preparar");normal();comando("fijo47");
+    comando("tiempo6000");comando("preparar");normal();comando("fijo30");
     assert(Referencia::disponible());
     comando("r");assert(Referencia::disponible()); // Bloqueado durante ensayo.
     comando("cancelar");assert(!Referencia::disponible());
     comando("preparar");assert(!Referencia::disponible());
-    pulso(100000);pulso(100000);comando("fijo47");
+    pulso(100000);pulso(100000);comando("fijo30");
     assert(Referencia::evaluar(millis())==600);
     avanzar(301000);avanzar(1500000);
     assert(Ensayos::leerEstado()==Ensayos::Estado::Fallo);

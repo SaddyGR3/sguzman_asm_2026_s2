@@ -21,6 +21,9 @@ struct Lectura {
 };
 void iniciar();
 void actualizar();
+bool diagnosticoActivo();
+void configurarDiagnostico(bool activo);
+void registrarDiagnostico();
 void reiniciar();
 Lectura leerLectura();
 const char *nombreEstado(Estado estado);

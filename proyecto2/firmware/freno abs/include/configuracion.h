@@ -6,19 +6,29 @@ constexpr int pinServo = 18;
 constexpr int pinSensor = 34;
 constexpr int pinMotor = 25;
 constexpr int marcasPorVuelta = 1;
+constexpr int nivelMarcaSensor = LOW;
+// Valores provisionales para rechazar transiciones breves. Validar en maqueta.
+constexpr uint32_t minimoZonaLibreUs = 100;
+constexpr uint32_t minimoMarcaUs = 100;
 
 // Se conserva el rango manual de calibracion del firmware anterior.
 // El futuro control automatico usara limites calibrados independientes.
 constexpr int anguloMinimo = 0;
 constexpr int anguloMaximo = 90;
-constexpr int anguloLiberado = 90;
-// Rango provisional para ensayos automaticos. No limita la calibracion manual.
-constexpr int anguloMinimoEnsayo = 47;
-constexpr int anguloMaximoEnsayo = 90;
+constexpr int anguloLiberado = 45;
+// Rango provisional observado en maqueta. No limita la calibracion manual.
+// 45 liberado, 35 contacto leve, 33 roce, 30 frena, 25 fuerte, 15 maximo.
+constexpr int anguloMinimoEnsayo = 15;
+constexpr int anguloMaximoEnsayo = 45;
 constexpr uint32_t duracionEnsayoFijoMs = 10000;
 constexpr uint32_t duracionMinimaEnsayoMs = 100;
 constexpr uint32_t duracionMaximaEnsayoMs = 30000;
-constexpr uint32_t tiempoMaximoPreparacionMs = 30000;
+constexpr uint32_t tiempoMaximoPreparacionMs = 60000;
+constexpr float rpmApagadoAutomatico = 1400.0f;
+constexpr float rpmInicioAutomatico = 1300.0f;
+constexpr uint32_t tiempoMaximoDescensoMs = 15000;
+static_assert(rpmApagadoAutomatico > rpmInicioAutomatico && rpmInicioAutomatico > 0,
+              "Umbrales automaticos inconsistentes");
 // Antiguedad maxima para iniciar un ensayo.
 constexpr uint32_t antiguedadMaximaInicioUs = 250000;
 constexpr uint32_t velocidadNormal = 11;
@@ -54,9 +64,9 @@ constexpr float pidTauDerivadaS = 0.1f;
 constexpr uint32_t periodoPidUs = 20000;
 constexpr uint32_t intervaloMaximoPidUs = 100000;
 
-// Activar solo despues de confirmar entrada del driver, polaridad y
-// condicion de apagado. Deshabilitado no configura ni escribe GPIO25.
-constexpr bool controlMotorHabilitado = false;
+// Control habilitado para probar el driver con IN1 en GPIO25 e IN2 a GND.
+// HIGH enciende y LOW apaga. Comprobar el funcionamiento en la maqueta.
+constexpr bool controlMotorHabilitado = true;
 constexpr uint8_t nivelMotorEncendido = HIGH;
 static_assert(anguloMinimoEnsayo >= anguloMinimo &&
               anguloMaximoEnsayo <= anguloMaximo &&

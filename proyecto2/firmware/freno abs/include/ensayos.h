@@ -5,6 +5,7 @@ namespace Ensayos {
 enum class Estado {
   Reposo,
   Preparacion,
+  DescensoLibre,
   Fijo,
   Pid,
   Finalizado,
@@ -14,6 +15,9 @@ enum class Estado {
 
 void iniciar();
 void preparar();
+void prepararAutomatico();
+void armarFijoAutomatico(int angulo);
+void armarPIDAutomatico();
 void iniciarFijo(int angulo);
 void iniciarPID();
 void fallarControl(const char *motivo);

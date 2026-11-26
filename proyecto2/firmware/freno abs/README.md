@@ -25,7 +25,7 @@ Enviar cada comando seguido de nueva linea a 115200 baudios.
 | Comando | Accion |
 |---|---|
 | `gN` | Orden directa entre 0 y 90 grados. |
-| `90` | Regresar directamente a la posicion liberada documentada. |
+| `90` | Orden manual explícita de 90 grados. La liberación automática usa 45 grados. |
 | `+` y `-` | Cambiar posicion segun el paso. |
 | `pN` | Elegir paso entre 1 y 10 grados. |
 | `0` | Iniciar movimiento gradual hacia cero. |
@@ -37,7 +37,7 @@ Enviar cada comando seguido de nueva linea a 115200 baudios.
 | `motor_on` y `motor_off` | Solicitar encendido o apagado si el driver esta habilitado. |
 | `?` | Imprimir ayuda. |
 
-El rango manual sigue siendo 0 a 90 grados para conservar la calibracion anterior. No se debe recorrer completo con el freno cargado sin conocer sus limites. El control automatico usa por separado los limites provisionales de 90 y 47 grados.
+El rango manual sigue siendo 0 a 90 grados para conservar la calibracion anterior. No se debe recorrer completo con el freno cargado sin conocer sus limites. El control automatico usa por separado los limites provisionales de 45 y 15 grados.
 
 ## Driver del motor pendiente de confirmar
 
@@ -69,15 +69,15 @@ El control del motor sigue deshabilitado por defecto hasta confirmar el driver. 
 |---|---|
 | `preparar` | Libera el freno y ordena encender el motor. |
 | `tiempo5000` | Configura cinco segundos de ensayo fijo antes de preparar. |
-| `fijo47` | Desde preparacion, apaga el motor e inicia frenado fijo a 47 grados. |
-| `fijo90` | Desde preparacion, apaga el motor y observa giro sin freno. |
+| `fijo30` | Desde preparacion, apaga el motor e inicia frenado fijo a 30 grados. |
+| `fijo45` | Desde preparacion, apaga el motor y observa giro sin freno. |
 | `estado` | Consulta el estado mediante una linea `#ESTADO`. |
 | `cancelar` | Apaga el motor, libera el freno y deja el ensayo cancelado. |
 | `pid` | Inicia lazo cerrado desde preparacion si la actuacion y las ganancias estan habilitadas. |
 
 El estado inicial es `REPOSO`. Una preparacion aceptada pasa a `PREPARACION`. El inicio fijo pasa a `FIJO`. La duracion cumplida produce `FINALIZADO`, una cancelacion produce `CANCELADO` y un fallo de preparacion produce `FALLO`. Se puede preparar de nuevo desde los estados terminales.
 
-Los limites provisionales estan en `configuracion.h`. El ensayo fijo dura diez segundos por defecto, admite entre 100 y 30000 ms y permite angulos entre 47 y 90 grados. La preparacion vence a los treinta segundos para no dejar el motor encendido esperando indefinidamente. Estos valores son configuracion inicial y no provienen de una calibracion final.
+Los limites provisionales estan en `configuracion.h`. El ensayo fijo dura diez segundos por defecto, admite entre 100 y 30000 ms y permite angulos entre 15 y 45 grados. La preparacion vence a los sesenta segundos para no dejar el motor encendido esperando indefinidamente. Estos valores son configuracion inicial y no provienen de una calibracion final.
 
 Para comenzar se exige una RPM positiva, calculable y reciente, con antiguedad maxima de 250 ms y al menos dos pulsos nuevos desde la preparacion. Una lectura rechazada permite reintentar mientras no venza la preparacion. El inicio tambien requiere que la lectura validada del paso 3 sea reciente y no sospechosa.
 
@@ -220,7 +220,7 @@ El inicio exige `controlMotorHabilitado` y `actuacionPIDHabilitada`, ademas de u
 
 La conexion comunicada por el usuario usa GPIO25 hacia IN1 del AD70178 e IN2 a tierra. Se conserva HIGH como orden provisional de encendido. Quedan pendientes la comprobacion electrica, la alimentacion compatible, el arranque y el comportamiento real de apagado. Confirmar esos resultados antes de habilitar el motor.
 
-La accion limitada vale entre cero y uno. Cero ordena 90 grados y uno ordena 47 grados. Se usa interpolacion lineal y redondeo al grado mas cercano. Por ejemplo, 0,5 ordena 69 grados. Esto relaciona dos ordenes y no supone una relacion lineal entre angulo y torque de frenado.
+La accion limitada vale entre cero y uno. Cero ordena 45 grados y uno ordena 15 grados. Se usa interpolacion lineal y redondeo al grado mas cercano. Por ejemplo, 0,5 ordena 30 grados. Esto relaciona dos ordenes y no supone una relacion lineal entre angulo y torque de frenado.
 
 `u_solicitada` es la suma P mas I mas D. `pid_u_limitada` contiene el resultado limitado antes del redondeo. `u_aplicada` expresa la orden normalizada correspondiente al angulo entero enviado. No es una medicion de posicion ni de torque. En modo manual o fijo se deja NaN. El servo solo recibe una nueva orden si cambia el angulo entero y el control automatico detiene cualquier rampa manual pendiente.
 
@@ -229,3 +229,35 @@ Si una medicion deja de ser valida se libera inmediatamente el freno y se reinic
 Al terminar la referencia no se declara exito por tiempo. Se mantiene la referencia en cero y se buscan RPM validadas de 100 o menos durante 300 ms continuos. Si no se confirma en dos segundos adicionales, termina con `PID_FIN_NO_CONFIRMADO`. Estos tres valores son provisionales. La confirmacion es de baja velocidad estimada y no certifica parada exacta. El silencio del sensor sigue siendo una medicion invalida y puede producir fallo aunque el disco se haya detenido realmente.
 
 Las pruebas simuladas verifican conversion, limites, permisos, ganancias nulas, control del servo, liberacion por debajo de referencia, fallos, cancelacion, final de ensayo y desbordamiento del reloj. Tambien comprueban captura de modo PID y accion aplicada. Falta verificar sin contacto y despues con la maqueta. La etapa 7 incluye ajuste y comparacion experimental.
+
+## Detección de marcas completas
+
+La interrupción usa `CHANGE` para observar ambos estados del sensor. Eso no equivale a contar ambos bordes. `DetectorMarca` requiere una zona libre estable seguida de una zona activa estable y solo produce un conteo al completarla. Se mantienen un pulso por vuelta y el intervalo mínimo de 20 ms entre marcas aceptadas. Las RPM usan el instante de entrada a cada zona activa completa.
+
+En `configuracion.h`, `nivelMarcaSensor` define el nivel activo y `minimoZonaLibreUs` y `minimoMarcaUs` son los mínimos de duración. Los valores iniciales de 100 microsegundos son provisionales. Las notificaciones repetidas del mismo nivel no cuentan, las zonas activas breves se descartan y una zona libre demasiado breve no rearma el detector. Al iniciar dentro de una zona activa se descarta el fragmento inicial.
+
+`sensor_on` registra las llamadas a esa misma ISR y sus contadores sin cambiar su modo. `sensor_off` detiene el registro. Los dos comandos requieren reposo y motor ordenado apagado. El diagnóstico se observa con la terminal Python y conserva los niveles y tiempos en `sensor_1.csv`.
+
+Las pruebas incluyen ruido breve, marcas anchas, repetición de niveles, 100 marcas de 200 microsegundos a unas 1800 RPM y desbordamiento del reloj. Falta comprobar la señal y conteo en la maqueta. No se certifica inmunidad a perturbaciones sostenidas ni se conoce todavía el ancho mínimo real de la marca.
+
+Una sola marca produce temporalmente `UNA_MARCA`. Si no llega otra durante un segundo, cambia a `SIN_SENAL`. La primera marca tras esa pausa vuelve a anclar la medición y necesita otra próxima para obtener RPM. El contador de marcas permanece acumulado. Con este límite de espera, los giros manuales separados por más de un segundo sirven para verificar conteo, pero no velocidad.
+
+### Calibración provisional vigente
+
+El rango automático es de 45 grados liberado a 15 grados de freno máximo provisional. El disco queda libre a 40 grados y se eligen 45 para dejar margen. Las observaciones manuales son contacto leve a 35, roce a 33, frenado a 30 y frenado fuerte a 25. El ensayo fijo inicia con un valor sugerido de 30 grados. No se interpreta esta relación como torque medido. La calibración manual sigue permitiendo órdenes de 0 a 90 grados. Hay que validar el rango en funcionamiento antes de ajustar el PID.
+
+## Secuencia automática por velocidad
+
+El panel permite iniciar un ciclo completo sin cronometrar clics. Desde reposo, elige la duración y el ángulo y pulsa Iniciar ciclo fijo. El botón envía primero la duración y después `auto_fijoN`. Se puede pulsar Ciclo libre para usar `auto_fijo45`, que conserva el freno liberado.
+
+El firmware prepara con servo a 45 grados y motor encendido. Al recibir una velocidad válida y reciente igual o superior a 1400 RPM, apaga el motor y entra en DESCENSO_LIBRE. Mantiene el freno liberado. La primera medición nueva válida igual o inferior a 1300 RPM inicia el ensayo y la referencia. El valor inicial de la referencia es la RPM realmente medida, que puede quedar ligeramente por debajo del umbral por el muestreo. No se interpola un instante exacto de cruce.
+
+`auto_preparar` permite preparar antes de elegir el tipo de ensayo. En ese caso se debe armar con `auto_fijoN` o `auto_pid` durante la aceleración o mientras el descenso todavía supera 1300 RPM. Si se cruza sin una prueba armada, termina con AUTO_SIN_ENSAYO_ARMADO y no inicia un ensayo tardío. Una prueba ya armada no cambia de ángulo por una segunda orden.
+
+Los comandos anteriores `preparar`, `fijoN` y `pid` siguen disponibles para ensayos manuales. Un ensayo automático no admite iniciar por esos comandos manuales. `motor_on` y `motor_off` conservan el control manual fuera de ensayos.
+
+La preparación tiene un máximo de 60 segundos y el descenso libre uno de 15 segundos. Las mediciones inválidas no activan los umbrales. La pérdida persistente de medición, la cancelación y los tiempos máximos apagan el motor, liberan el freno y eliminan la prueba pendiente. El PID físico sigue deshabilitado hasta configurar ganancias y activarlo explícitamente. `auto_pid` respeta ese bloqueo antes de encender el motor.
+
+Los eventos AUTO_CORTE_OBJETIVO_RPM y AUTO_INICIO_OBJETIVO_RPM guardan los umbrales. AUTO_FIJO_ARMADO guarda el ángulo. MOTOR_CMD y AUTO_MOTOR_OFF_RPM_X100 identifican el corte y su velocidad. AUTO_INICIO_RPM_X100 y ENSAYO_FIJO_INICIO identifican el inicio del freno. RPM_INICIAL_X100 y REFERENCIA_LINEAL_MS permiten reconstruir la referencia. Los campos X100 están expresados en RPM multiplicadas por cien. Los formatos de los CSV existentes se conservan.
+
+Los umbrales y tiempos están en configuracion.h. La simulación lee esos valores del código compilado y reproduce el ciclo con su planta ficticia. Esto no valida la respuesta física. Para completar el ciclo simulado, su objetivo de aceleración debe ser superior al umbral de apagado.

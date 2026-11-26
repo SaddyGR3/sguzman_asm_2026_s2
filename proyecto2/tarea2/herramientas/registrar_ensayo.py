@@ -141,7 +141,7 @@ class Registro:
                 raise ValueError("una lectura invalida debe tener RPM validada NaN")
             if any(int(campos[i]) < 0 for i in range(4, 11)):
                 raise ValueError("diagnostico negativo")
-            if campos[11] not in {"REPOSO", "PREPARACION", "FIJO", "PID", "FINALIZADO", "CANCELADO", "FALLO"}:
+            if campos[11] not in {"REPOSO", "PREPARACION", "DESCENSO_LIBRE", "FIJO", "PID", "FINALIZADO", "CANCELADO", "FALLO"}:
                 raise ValueError("modo desconocido")
             if int(campos[12]) not in (0, 1) or int(campos[13]) < 0:
                 raise ValueError("motor o tiempo de ensayo")

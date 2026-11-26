@@ -25,14 +25,14 @@ void avanzar(uint64_t us) {
 }
 void pulso(uint64_t demoraUs) {
   relojUs += demoraUs;
-  interrupcion();
+  emitirMarcaPrueba();
   loop();
 }
 void prepararMedicion() {
   comando("preparar");
   assert(Ensayos::leerEstado() == Estado::Preparacion);
   assert(Motor::estaEncendido());
-  assert(Freno::leerAngulo() == 90);
+  assert(Freno::leerAngulo() == 45);
   pulso(50000);
   pulso(50000);
 }
@@ -54,7 +54,7 @@ void verificarNivelMotor(bool encendido) {
 void verificarParada(Estado estado) {
   assert(Ensayos::leerEstado() == estado);
   assert(!Motor::estaEncendido());
-  assert(Freno::leerAngulo() == 90);
+  assert(Freno::leerAngulo() == 45);
   verificarNivelMotor(false);
 }
 
@@ -66,19 +66,19 @@ int main(int argc, char **argv) {
   setup();
   assert(Ensayos::leerEstado() == Estado::Reposo);
   assert(!Motor::estaEncendido());
-  assert(Freno::leerAngulo() == 90);
+  assert(Freno::leerAngulo() == 45);
   esperarTexto("tiempo_ms,rpm,servo_cmd_grados\n");
   verificarNivelMotor(false);
 
   if (caso == "deshabilitado") {
     comando("preparar");
     assert(Ensayos::leerEstado() == Estado::Reposo);
-    comando("fijo47");
+    comando("fijo30");
     comando("motor_on");
     esperarTexto("MOTOR_NO_HABILITADO");
     for (const auto &linea : gpio) assert(linea.find("25 ") == std::string::npos);
-    comando("g47");
-    assert(Freno::leerAngulo() == 47);
+    comando("g30");
+    assert(Freno::leerAngulo() == 30);
     comando("cancelar");
     verificarParada(Estado::Cancelado);
   } else if (caso == "normal" || caso == "micros_wrap" || caso == "millis_wrap") {
@@ -86,14 +86,14 @@ int main(int argc, char **argv) {
     prepararMedicion();
     verificarNivelMotor(true);
     const auto antes = Serial.salida.size();
-    comando("fijo47");
+    comando("fijo30");
     assert(Ensayos::leerEstado() == Estado::Fijo);
     assert(!Motor::estaEncendido());
-    assert(Freno::leerAngulo() == 47);
+    assert(Freno::leerAngulo() == 30);
     verificarNivelMotor(false);
     const auto inicio = Serial.salida.substr(antes);
     assert(inicio.find("MOTOR_CMD,0") < inicio.find("ENSAYO_FIJO_INICIO"));
-    assert(inicio.find("ENSAYO_FIJO_INICIO") < inicio.find("SERVO_CMD,47"));
+    assert(inicio.find("ENSAYO_FIJO_INICIO") < inicio.find("SERVO_CMD,30"));
     esperarTexto("RPM_INICIAL_X100,120000");
     comando("g90");
     comando("r");
@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
     comando("p5");
     comando("preparar");
     assert(Ensayos::leerEstado() == Estado::Fijo);
-    assert(Freno::leerAngulo() == 47);
+    assert(Freno::leerAngulo() == 30);
     assert(!Motor::estaEncendido());
     esperarTexto("COMANDO_BLOQUEADO_ENSAYO");
     comando("pid");
@@ -123,14 +123,14 @@ int main(int argc, char **argv) {
     comando("motor_off");
     verificarParada(Estado::Cancelado);
     prepararMedicion();
-    comando("fijo47");
+    comando("fijo30");
     comando("cancelar");
     verificarParada(Estado::Cancelado);
     avanzar(12000000);
     verificarParada(Estado::Cancelado);
     assert(Serial.salida.find("ENSAYO_FIN_DURACION") == std::string::npos);
   } else if (caso == "validacion") {
-    comando("fijo47");
+    comando("fijo30");
     esperarTexto("REQUIERE_PREPARAR");
     comando("tiempo0");
     comando("tiempo-1");
@@ -139,36 +139,36 @@ int main(int argc, char **argv) {
     comando("tiempoX");
     esperarTexto("COMANDO_INVALIDO");
     comando("preparar");
-    comando("fijo47");
+    comando("fijo30");
     esperarTexto("MEDICION_INICIO_INVALIDA");
     assert(Motor::estaEncendido());
     pulso(50000);
-    comando("fijo47");
+    comando("fijo30");
     assert(Ensayos::leerEstado() == Estado::Preparacion);
     pulso(50000);
     comando("fijo46");
-    comando("fijo91");
+    comando("fijo14");
     esperarTexto("ANGULO_ENSAYO_INVALIDO");
     avanzar(251000);
-    comando("fijo47");
+    comando("fijo30");
     assert(Ensayos::leerEstado() == Estado::Preparacion);
     comando("cancelar");
     // No se pueden reutilizar los pulsos de una preparacion anterior.
     comando("preparar");
-    comando("fijo47");
+    comando("fijo30");
     assert(Ensayos::leerEstado() == Estado::Preparacion);
     pulso(50000);
-    comando("fijo47");
+    comando("fijo30");
     assert(Ensayos::leerEstado() == Estado::Preparacion);
     pulso(50000);
     pulso(50000);
     pulso(50000);
-    comando("fijo90");
+    comando("fijo45");
     assert(Ensayos::leerEstado() == Estado::Fijo);
   } else if (caso == "timeout" || caso == "timeout_inicio") {
     prepararMedicion();
     relojUs += Configuracion::tiempoMaximoPreparacionMs * 1000ULL;
-    if (caso == "timeout_inicio") comando("fijo47");
+    if (caso == "timeout_inicio") comando("fijo30");
     else loop();
     verificarParada(Estado::Fallo);
     esperarTexto("FALLO_TIEMPO_PREPARACION");

@@ -67,3 +67,7 @@ Los comandos completos `preparar`, `pid`, `estado` y `cancelar` se envían con E
 ## Interfaz gráfica de diagnóstico
 
 El panel nuevo ofrece gráficas en vivo, controles y captura automática de datos. Se inicia con `python3 panel_frenado.py` desde esta carpeta. Tiene modo ESP32 y modo de planta ficticia, que usa el cálculo PID y la conversión angular del firmware sin cargar una placa. La guía completa y la primera prueba sin maqueta están en [panel/README.md](panel/README.md).
+
+## Dos modos de interfaz
+
+`python3 panel_frenado.py --modo panel` abre la interfaz gráfica. `python3 panel_frenado.py --modo terminal --simular` abre una pantalla de terminal con métricas, minigráficas, eventos y comandos. Para la placa, usar `--modo terminal --puerto-serial /dev/ttyUSB0` con el puerto real. Los dos modos comparten protocolo y captura. La guía completa está en [TERMINAL.md](TERMINAL.md).

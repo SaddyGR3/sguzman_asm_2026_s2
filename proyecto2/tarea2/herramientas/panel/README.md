@@ -13,27 +13,47 @@ Se abrirá la dirección `http://127.0.0.1:8765`. Mantén el proceso Python abie
 
 ## Primera prueba sin maqueta
 
-1. Deja seleccionado Simulación y los valores iniciales. Son 1200 RPM, seis segundos, Kp de 0,005 y Ki y Kd en cero. Son valores didácticos.
-2. Pulsa Iniciar simulación. Se compilan temporalmente el cálculo PID y la conversión angular del firmware. Esto no modifica archivos ni ganancias de la ESP32.
-3. Pulsa Preparar. La velocidad virtual sube hacia 1200 RPM. Espera unos dos segundos para verla estabilizarse.
-4. Pulsa Iniciar PID. La referencia desciende y el controlador cambia el ángulo para seguirla. La referencia inicial parte de la velocidad virtual de ese instante.
-5. Observa referencia y velocidad, error, acción y ángulo. La orden normalizada no es un torque medido.
-6. Puedes pulsar Simular pico para mostrar una lectura cruda de 14000 RPM, marcada como sospechosa, sin usarla como velocidad válida. Este diagnóstico es sintético y no prueba el rechazo físico del KY-033.
-7. Pausar vista detiene el dibujo y los valores mostrados. La captura, los comandos y la simulación continúan. Reanudar recupera la vista actual. Puedes ocultar la señal cruda para ver mejor el seguimiento cuando un pico amplía la escala.
-8. Pulsa Cancelar para liberar. Puedes preparar otra corrida y usar Iniciar fijo para comparar visualmente. Si cambias la duración durante la conexión, envíala antes de Preparar.
-9. Desconecta para cerrar los archivos. Para cambiar las ganancias simuladas desconecta y vuelve a iniciar. Se crea otra carpeta, sin sobrescribir la anterior.
+1. Deja seleccionado Simulación. El objetivo predeterminado es 1500 RPM, la duración seis segundos, Kp 0,005 y Ki y Kd cero. Son valores didácticos.
+2. Pulsa Iniciar simulación. Se compilan temporalmente el cálculo PID y la conversión angular. No modifica la ESP32.
+3. Elige ángulo y duración y pulsa Iniciar ciclo fijo. Desde reposo, el botón envía la duración y arma todo el ciclo. También puedes elegir Ciclo libre o Iniciar ciclo PID en simulación.
+4. La velocidad sube hasta el corte de 1400 RPM. El motor se apaga y el modo cambia a DESCENSO_LIBRE con el freno liberado a 45 grados.
+5. Al bajar a 1300 RPM empieza el ensayo. Se captura la velocidad medida de ese instante, comienza la referencia y se aplica el ángulo fijo o el controlador elegido.
+6. Puedes pulsar Simular pico para introducir una lectura sintética inválida. Los umbrales no se ejecutan por ese dato sospechoso.
+7. Pausar vista solo detiene el dibujo. Cancelar detiene el ciclo y libera el freno. Desconectar cierra la captura y no envía cancelación.
+8. Preparar es opcional. Si se utiliza, hay que armar el ciclo fijo, libre o PID antes de cruzar 1300 RPM durante el descenso. Para cambiar la duración, envíala antes de Preparar.
+9. El objetivo simulado debe superar 1400 RPM. Una simulación configurada por debajo no puede completar este ciclo. Las ganancias solo afectan a la simulación y no habilitan el PID físico.
 
 El botón Guardar gráfica descarga una imagen PNG de la gráfica de velocidad con la fuente identificada. Las curvas completas y los otros datos quedan en CSV. Pasar el puntero sobre las gráficas permite consultar valores.
 
+## Elegir la figura de referencia
+
+El selector Figura de referencia ofrece Lineal, Exponencial normalizada y Coseno suave en la simulación. Elegirla antes de Iniciar simulación la configura desde el comienzo. Con una simulación ya conectada, elegir otra y pulsar Aplicar figura antes de Preparar o después de terminar o cancelar. El texto Figura activa muestra la selección realmente aceptada.
+
+La selección se bloquea durante PREPARACION, DESCENSO_LIBRE, FIJO y PID. La figura usada para dibujar la referencia es la misma que recibe el cálculo PID. La velocidad inicial se captura al iniciar el ensayo y la duración sigue siendo la configurada. Las tres curvas llegan a cero en T y permanecen allí.
+
+Con x igual a t dividido entre T, durante el intervalo de cero a T se usan estas expresiones.
+
+| Figura | Referencia |
+|---|---|
+| Lineal | $r=\omega_0(1-x)$ |
+| Exponencial normalizada | $r=\omega_0(e^{-3x}-e^{-3})/(1-e^{-3})$ |
+| Coseno suave | $r=\omega_0[1+\cos(\pi x)]/2$ |
+
+El factor tres de la exponencial fija la forma del dibujo elegido y no es una ganancia PID. Las curvas se generan en la PC para la simulación. El firmware físico todavía solo genera la lineal, por lo que en modo ESP32 el selector queda bloqueado en Lineal y el servidor rechaza enviarle opciones no soportadas.
+
+Los metadatos conservan la figura inicial y el significado de los códigos. El evento `REFERENCIA_TIPO` identifica cada selección aceptada y se repite al iniciar cada ensayo. Cero corresponde a lineal, uno a exponencial y dos a coseno. Las modificaciones entre ensayos se reconstruyen desde eventos sin cambiar las columnas de los CSV.
+
+Que una figura se pueda seleccionar no demuestra que la planta pueda seguirla. El inicio suave del coseno puede desacelerar menos que el rozamiento natural, lo que el freno unilateral no puede corregir. Comparar con el giro libre y conservar los fallos y errores observados.
+
 ## Giro libre sin freno
 
-Después de Preparar y esperar que se estabilice la velocidad, pulsa Giro libre · sin freno. Se apaga el motor y se mantiene la orden del servo en 90 grados, la posición liberada. Así puedes observar la desaceleración natural sin que el PID gobierne el freno. No necesitas poner las ganancias en cero.
+Pulsa Ciclo libre · sin freno. Desde reposo inicia la preparación, apaga el motor al alcanzar 1400 RPM y comienza la referencia al bajar a 1300 RPM, manteniendo el servo a 45 grados. Así puedes observar la desaceleración natural sin que el PID gobierne el freno. No necesitas poner las ganancias en cero.
 
-El botón usa el comando existente `fijo90`, tanto en simulación como con ESP32. El protocolo lo registra como `FIJO`. Los cálculos PID que aparezcan son únicamente de observación. Cambiar las ganancias no altera el giro libre. La referencia azul queda como comparación y no como una curva que este ensayo intente seguir.
+El botón usa el comando automático `auto_fijo45`, tanto en simulación como con ESP32. El protocolo lo registra como `FIJO`. Los cálculos PID que aparezcan son únicamente de observación. Cambiar las ganancias no altera el giro libre. La referencia azul queda como comparación y no como una curva que este ensayo intente seguir.
 
 Al cumplirse la duración configurada aparece `FINALIZADO` por tiempo. Esto no significa que el disco se haya detenido. El motor permanece apagado, el freno liberado y la captura continúa mostrando la velocidad. Para apreciar una caída lenta, cambia la ventana gráfica a Últimos 60 s o Hasta 300 s.
 
-En el modelo ficticio, sin freno la velocidad cae aproximadamente de forma exponencial. La maqueta puede responder de otra manera por rozamiento y por el comportamiento eléctrico del driver al apagar el motor. Confirma que 90 grados libera realmente el mecanismo antes de usarlo físicamente.
+En el modelo ficticio, sin freno la velocidad cae aproximadamente de forma exponencial. La maqueta puede responder de otra manera por rozamiento y por el comportamiento eléctrico del driver al apagar el motor. Confirma que 45 grados libera realmente el mecanismo antes de usarlo físicamente.
 
 ## Qué se está simulando
 
@@ -43,7 +63,7 @@ $$
 \frac{d\omega}{dt}=-0.05\omega-300u_a.
 $$
 
-La acción mecánica ficticia tiene un retardo de primer orden de 0,12 s. El ángulo ordenado se convierte mediante el código real de `freno.cpp`, entre 90 y 47 grados. El controlador compila directamente `pid.cpp` y usa su integral, derivada filtrada y límites. Las pequeñas cabeceras nativas sustituyen únicamente las llamadas físicas necesarias para ejecutarlo en la PC.
+La acción mecánica ficticia tiene un retardo de primer orden de 0,12 s. El ángulo ordenado se convierte mediante el código real de `freno.cpp`, entre 45 y 15 grados. El controlador compila directamente `pid.cpp` y usa su integral, derivada filtrada y límites. Las pequeñas cabeceras nativas sustituyen únicamente las llamadas físicas necesarias para ejecutarlo en la PC.
 
 La preparación representa una aceleración ficticia hacia la RPM elegida. Durante el ensayo el motor virtual se apaga. La medición de velocidad es ideal y continua a 50 Hz, con publicación nominal a 10 Hz. Los contadores de pulsos son sintéticos. No se emulan interrupciones del sensor, la cola de pulsos, todos los estados del firmware, ruido aleatorio ni el circuito eléctrico. El final de baja velocidad usa umbrales provisionales similares al firmware y puede fallar si la medición llega a cero antes de confirmar el criterio. El silencio no demuestra una parada física.
 
@@ -65,7 +85,7 @@ Cierra PlatformIO Serial Monitor y cualquier programa que tenga abierto el puert
 
 Los comandos se escriben en el puerto y el firmware conserva la decisión final sobre si los acepta. Un mensaje de orden enviada no es confirmación de movimiento. Revisa los eventos y el modo informado. Si la actuación PID o el motor siguen deshabilitados en el firmware, la interfaz mostrará los rechazos correspondientes.
 
-Los controles manuales conservan el recorrido histórico de 0 a 90 grados. Ese rango no garantiza un recorrido mecánico seguro. Los ensayos fijos de la interfaz usan 47 a 90 grados. El límite físico necesita calibración.
+Los controles manuales conservan el recorrido histórico de 0 a 90 grados. Ese rango no garantiza un recorrido mecánico seguro. Los ensayos fijos de la interfaz usan 15 a 45 grados. El límite físico necesita calibración.
 
 Cerrar el navegador o desconectar no envía cancelación a la placa. Usa Cancelar y comprueba su evento y estado antes de desconectar. Si falla el enlace, la interfaz no puede asegurar que la orden de cancelación llegue. El firmware mantiene su lógica local de ensayo y fallos.
 
@@ -96,3 +116,15 @@ python3 -m unittest discover -s pruebas -v
 ```
 
 Las pruebas comprueban el controlador nativo, conversión, pico sintético, captura, comandos, separación de sesiones, protección de operaciones del servidor, lectura fragmentada del puerto y cierre de la conexión. Usan puertos y servidor locales simulados. La conexión serial física y el funcionamiento de la maqueta siguen pendientes.
+
+## Alternativa de terminal
+
+El mismo programa tiene un modo de terminal con datos, eventos, comandos y minigráficas. Se inicia con `--modo terminal --simular` o `--modo terminal --puerto-serial` seguido del puerto real. El modo panel sigue siendo el predeterminado. Consultar `proyecto2/tarea2/herramientas/TERMINAL.md` para instrucciones. Utilizar una sola interfaz a la vez sobre el puerto serial de la placa.
+
+### Calibración provisional vigente
+
+El rango automático es de 45 grados liberado a 15 grados de freno máximo provisional. El disco queda libre a 40 grados y se eligen 45 para dejar margen. Las observaciones manuales son contacto leve a 35, roce a 33, frenado a 30 y frenado fuerte a 25. El ensayo fijo inicia con un valor sugerido de 30 grados. No se interpreta esta relación como torque medido. La calibración manual sigue permitiendo órdenes de 0 a 90 grados. Hay que validar el rango en funcionamiento antes de ajustar el PID.
+
+### Cero estimado sin pulsos
+
+Tras un segundo sin nuevas marcas, el estado SIN_SENAL se representa como cero estimado en la tarjeta y en la gráfica. Se identifica explícitamente como estimación. El último valor crudo deja de prolongarse al caducar. Las mediciones originales, los CSV y el PID mantienen la velocidad inválida, sin sustituirla por cero. La falta de comunicación con la ESP32 o el desbordamiento de la cola no generan por sí solos una estimación de parada.
