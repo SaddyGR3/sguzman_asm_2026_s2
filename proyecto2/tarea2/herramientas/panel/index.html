@@ -22,7 +22,7 @@
 <div class="row space"><button data-command="auto_preparar" disabled>Preparar</button><button data-command="auto_pid" class="primary" disabled>Iniciar ciclo PID</button></div>
 <button data-command="auto_fijo45" class="space" style="width:100%" disabled>Ciclo libre · sin freno</button>
 <p class="help">Ciclo automático de comparación sin freno. Acelera, apaga a 1400 RPM e inicia la referencia al bajar a 1300 RPM, manteniendo 45°.</p>
-<label for="fixed">Ángulo de frenado fijo · grados</label><div class="row"><input id="fixed" type="number" min="15" max="45" value="30"><button id="startFixed" disabled>Iniciar ciclo fijo</button></div>
+<label for="fixed">Ángulo de frenado fijo · grados</label><div class="row"><input id="fixed" type="number" min="25" max="45" value="30"><button id="startFixed" disabled>Iniciar ciclo fijo</button></div>
 <button data-command="cancelar" class="danger space" style="width:100%" disabled>Cancelar y liberar freno</button>
 <div class="row space"><button data-command="estado" disabled>Consultar estado</button><button id="spike" disabled>Simular pico</button></div>
 <p class="help">Elige duración y ángulo antes de iniciar. El botón envía la duración elegida automáticamente desde reposo. Iniciar ciclo fijo arranca desde reposo, apaga el motor a 1400 RPM y frena al bajar a 1300 RPM. También puedes Preparar y armar el ciclo durante la aceleración. Cancelar permanece disponible.</p>
@@ -117,9 +117,11 @@ function curveControls(s){
  const connected=!!s?.activo;
  const real=(connected?s.fuente:$('source').value)==='ESP32';
  const running=connected&&['PREPARACION','DESCENSO_LIBRE','FIJO','PID'].includes(s.ultimo.modo);
- $('curve').disabled=real||running;
- $('applyCurve').disabled=!connected||real||running;
- if(real){$('curve').value='lineal';$('curveStatus').textContent='ESP32 · solo lineal en el firmware actual.'}
+ $('curve').disabled=running;
+ $('curve').querySelector('option[value=coseno]').disabled=real;
+ if(real&&$('curve').value==='coseno')$('curve').value='lineal';
+ $('applyCurve').disabled=!connected||running;
+ if(real){$('curveStatus').textContent='ESP32 · figura activa '+(curveNames[s.curva]||'sin confirmar')+'. Pulsa Aplicar figura.'}
  else if(connected){$('curveStatus').textContent='Figura activa · '+(curveNames[s.curva]||'—')+(running?' · selección bloqueada durante el ensayo.':'')}
  else{$('curveStatus').textContent='Elige la figura antes de conectar o aplícala entre ensayos.'}
 }

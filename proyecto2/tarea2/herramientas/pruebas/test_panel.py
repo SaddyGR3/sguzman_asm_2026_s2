@@ -34,8 +34,8 @@ class PruebasPanel(unittest.TestCase):
         s=Simulacion(FIRMWARE)
         self.addCleanup(s.cerrar)
         self.assertEqual(s.lib.convertir(0),45)
-        self.assertEqual(s.lib.convertir(1),15)
-        self.assertEqual(s.lib.convertir(.5),30)
+        self.assertEqual(s.lib.convertir(1),25)
+        self.assertEqual(s.lib.convertir(.5),35)
         s.comando('preparar')
         for _ in range(100): s.paso()
         self.assertGreater(s.rpm,1100)
@@ -97,7 +97,7 @@ class PruebasPanel(unittest.TestCase):
         self.assertEqual(evaluar_referencia(1200,6,3,'lineal'),600)
         self.assertAlmostEqual(evaluar_referencia(1200,6,3,'coseno'),600)
         self.assertAlmostEqual(evaluar_referencia(1200,6,3,'exponencial'),
-                               1200*(math.exp(-1.5)-math.exp(-3))/(1-math.exp(-3)))
+                               1200*(math.exp(-1)-math.exp(-2))/(1-math.exp(-2)))
         for args in [(1200,0,1,'lineal'),(-1,6,1,'lineal'),(1200,6,1,'otra'),
                      (float('nan'),6,1,'coseno'),(1200,6,float('nan'),'lineal')]:
             with self.assertRaises(ValueError): evaluar_referencia(*args)
@@ -216,9 +216,9 @@ class PruebasPanel(unittest.TestCase):
         finally:sim.cerrar()
 
     def test_validacion(self):
-        for c in ('preparar','pid','cancelar','auto_preparar','auto_pid','auto_fijo15','auto_fijo30','auto_fijo45','fijo15','fijo30','fijo45','tiempo6000','g90','curva_coseno'):
+        for c in ('preparar','pid','cancelar','auto_preparar','auto_pid','auto_fijo25','auto_fijo30','auto_fijo45','fijo25','fijo30','fijo45','tiempo6000','g90','curva_coseno'):
             self.assertEqual(validar_comando(c),c)
-        for c in ('pid\ncancelar','g91','auto_fijo14','auto_fijo46','auto_fijo30x','fijo14','fijo46','fijo90','tiempo30001',None,'__import__','curva_otra'):
+        for c in ('pid\ncancelar','g91','auto_fijo24','auto_fijo46','auto_fijo30x','fijo24','fijo46','fijo90','tiempo30001',None,'__import__','curva_otra'):
             with self.assertRaises(ValueError): validar_comando(c)
         for parametros in ({'rpm':float('nan')},{'kp':-1},{'rpm':10000},{'curva':'otra'}):
             with self.assertRaises(ValueError): Simulacion(FIRMWARE,**parametros)
@@ -283,7 +283,7 @@ class PruebasPanel(unittest.TestCase):
             def close(self): self.cerrado=True
         p=Puerto()
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaisesRegex(ValueError,'solo admite referencia lineal'):
+            with self.assertRaisesRegex(ValueError,'coseno sigue solo en simulacion'):
                 Banco(tmp).iniciar({'fuente':'ESP32','curva':'coseno','puerto':'no_abrir'})
         with tempfile.TemporaryDirectory() as tmp:
             banco=Banco(tmp)
@@ -295,12 +295,18 @@ class PruebasPanel(unittest.TestCase):
                 self.assertEqual(banco.ultimo['rpm_validada'],1200)
                 banco.enviar('cancelar'); esperar(lambda:bool(p.ordenes))
                 self.assertEqual(p.ordenes,[b'cancelar\n'])
+                self.assertIsNone(banco.estado_actual()['curva'])
+                banco.enviar('curva_exponencial')
+                esperar(lambda:len(p.ordenes)==2)
+                self.assertEqual(p.ordenes[-1],b'curva_exponencial\n')
+                banco.fila('eventos',['101','REFERENCIA_TIPO','1'])
+                self.assertEqual(banco.estado_actual()['curva'],'exponencial')
                 with self.assertRaises(ValueError): banco.enviar('pico_simulado')
                 with self.assertRaises(ValueError): banco.enviar('curva_coseno')
             finally: banco.desconectar()
             self.assertTrue(p.cerrado)
             # El cierre de captura no introduce comandos adicionales al dispositivo.
-            self.assertEqual(p.ordenes,[b'cancelar\n'])
+            self.assertEqual(p.ordenes,[b'cancelar\n',b'curva_exponencial\n'])
             with self.assertRaises(ValueError): banco.enviar('pid')
 
 

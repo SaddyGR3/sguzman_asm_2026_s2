@@ -51,7 +51,7 @@ def validar_comando(comando):
     patron = re.fullmatch(r'(g|p|fijo|auto_fijo|tiempo)(\d+)',comando)
     if patron:
         tipo,numero=patron[1],int(patron[2])
-        limites={'g':(0,90),'p':(1,10),'fijo':(15,45),'auto_fijo':(15,45),'tiempo':(100,30000)}
+        limites={'g':(0,90),'p':(1,10),'fijo':(25,45),'auto_fijo':(25,45),'tiempo':(100,30000)}
         if limites[tipo][0]<=numero<=limites[tipo][1]: return comando
     raise ValueError('Comando o valor fuera del rango permitido')
 
@@ -109,7 +109,7 @@ class Banco:
         with self.lock:
             self.recibido=time.monotonic()
             if tipo=='eventos':
-                if fila[1]=='REFERENCIA_TIPO' and self.fuente=='SIMULACION':
+                if fila[1]=='REFERENCIA_TIPO':
                     self.curva=next((c for c,v in CURVAS.items() if str(v)==fila[2]),self.curva)
                 self.evento(' · '.join(fila)); return
             if tipo=='datos':
@@ -179,8 +179,8 @@ class Banco:
             curva=opciones.get('curva','lineal')
             if not isinstance(curva,str) or curva not in CURVAS:
                 raise ValueError('Figura de referencia desconocida')
-            if fuente=='ESP32' and curva!='lineal':
-                raise ValueError('El firmware actual de la ESP32 solo admite referencia lineal')
+            if fuente=='ESP32' and curva not in ('lineal','exponencial'):
+                raise ValueError('La ESP32 admite lineal y exponencial; coseno sigue solo en simulacion')
             simulador=None; puerto=None
             if fuente=='SIMULACION':
                 valores={k:float(opciones.get(k,v)) for k,v in dict(rpm=1500,duracion=6,kp=.005,ki=0,kd=0).items()}
@@ -193,7 +193,7 @@ class Banco:
             try:
                 carpeta=self.salida/('simuladas' if simulador else 'reales')/ahora().strftime('%Y%m%d_%H%M%S_%f')
                 carpeta.mkdir(parents=True,exist_ok=False)
-                meta=dict(fuente=fuente,interfaz=opciones.get('interfaz','panel'),curva_inicial=curva,codigos_referencia=CURVAS,fecha=ahora().isoformat(),
+                meta=dict(fuente=fuente,interfaz=opciones.get('interfaz','panel'),curva_inicial=curva if simulador else None,codigos_referencia=CURVAS,fecha=ahora().isoformat(),
                     puerto=opciones.get('puerto') if puerto else None,
                     parametros=simulador.parametros if simulador else None,
                     modelo='dRPM/dt = -0.05*RPM - 300*u; retardo servo 0.12 s' if simulador else None,
@@ -204,7 +204,7 @@ class Banco:
                 if simulador: simulador.cerrar()
                 raise
             with self.lock:
-                self.fuente=fuente; self.curva=curva; self.estado='CONECTADO'; self.error=''; self.carpeta=str(carpeta)
+                self.fuente=fuente; self.curva=curva if simulador else None; self.estado='CONECTADO'; self.error=''; self.carpeta=str(carpeta)
                 self.historia.clear(); self.ultimo={}; self.angulo=None; self.recibido=None
                 self.sensor=dict(activo=False,nivel=None,perdidos=0,cambios=deque(maxlen=12))
                 self.diagnosticado=None; self.rpm_csv=None
@@ -268,8 +268,8 @@ class Banco:
             if not self.hilo or not self.hilo.is_alive() or self.detener.is_set(): raise ValueError('No hay fuente conectada')
             if isinstance(comando,str) and comando.startswith('curva_'):
                 validar_comando(comando)
-                if self.fuente!='SIMULACION':
-                    raise ValueError('La seleccion de figura esta disponible solo en simulacion')
+                if self.fuente=='ESP32' and comando not in ('curva_lineal','curva_exponencial'):
+                    raise ValueError('El coseno sigue disponible solo en simulacion')
             if comando in ('sensor_on','sensor_off') and self.fuente!='ESP32':
                 raise ValueError('El diagnóstico GPIO34 requiere la ESP32 física')
             if comando=='pico_simulado':

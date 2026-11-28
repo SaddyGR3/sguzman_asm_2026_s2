@@ -32,6 +32,7 @@ class Controlador {
   Controlador();
   bool configurar(const Parametros &parametros);
   void reiniciar();
+  bool precargarIntegral(float accion);
   bool actualizar(float referenciaRpm, const Muestra &muestra, uint32_t ahoraUs);
   const Resultado &leer() const;
  private:

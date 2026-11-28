@@ -22,6 +22,7 @@ void iniciarFijo(int angulo);
 void iniciarPID();
 void fallarControl(const char *motivo);
 void configurarDuracion(int duracionMs);
+void configurarReferencia(int tipo);
 void cancelar();
 void actualizar();
 void informarEstado();

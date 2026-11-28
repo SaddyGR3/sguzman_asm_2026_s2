@@ -63,7 +63,7 @@ $$
 \frac{d\omega}{dt}=-0.05\omega-300u_a.
 $$
 
-La acción mecánica ficticia tiene un retardo de primer orden de 0,12 s. El ángulo ordenado se convierte mediante el código real de `freno.cpp`, entre 45 y 15 grados. El controlador compila directamente `pid.cpp` y usa su integral, derivada filtrada y límites. Las pequeñas cabeceras nativas sustituyen únicamente las llamadas físicas necesarias para ejecutarlo en la PC.
+La acción mecánica ficticia tiene un retardo de primer orden de 0,12 s. El ángulo ordenado se convierte mediante el código real de `freno.cpp`, entre 45 y 25 grados. El controlador compila directamente `pid.cpp` y usa su integral, derivada filtrada y límites. Las pequeñas cabeceras nativas sustituyen únicamente las llamadas físicas necesarias para ejecutarlo en la PC.
 
 La preparación representa una aceleración ficticia hacia la RPM elegida. Durante el ensayo el motor virtual se apaga. La medición de velocidad es ideal y continua a 50 Hz, con publicación nominal a 10 Hz. Los contadores de pulsos son sintéticos. No se emulan interrupciones del sensor, la cola de pulsos, todos los estados del firmware, ruido aleatorio ni el circuito eléctrico. El final de baja velocidad usa umbrales provisionales similares al firmware y puede fallar si la medición llega a cero antes de confirmar el criterio. El silencio no demuestra una parada física.
 
@@ -85,7 +85,7 @@ Cierra PlatformIO Serial Monitor y cualquier programa que tenga abierto el puert
 
 Los comandos se escriben en el puerto y el firmware conserva la decisión final sobre si los acepta. Un mensaje de orden enviada no es confirmación de movimiento. Revisa los eventos y el modo informado. Si la actuación PID o el motor siguen deshabilitados en el firmware, la interfaz mostrará los rechazos correspondientes.
 
-Los controles manuales conservan el recorrido histórico de 0 a 90 grados. Ese rango no garantiza un recorrido mecánico seguro. Los ensayos fijos de la interfaz usan 15 a 45 grados. El límite físico necesita calibración.
+Los controles manuales conservan el recorrido histórico de 0 a 90 grados. Ese rango no garantiza un recorrido mecánico seguro. Los ensayos fijos de la interfaz usan 25 a 45 grados. El límite físico necesita calibración.
 
 Cerrar el navegador o desconectar no envía cancelación a la placa. Usa Cancelar y comprueba su evento y estado antes de desconectar. Si falla el enlace, la interfaz no puede asegurar que la orden de cancelación llegue. El firmware mantiene su lógica local de ensayo y fallos.
 
@@ -123,8 +123,13 @@ El mismo programa tiene un modo de terminal con datos, eventos, comandos y minig
 
 ### Calibración provisional vigente
 
-El rango automático es de 45 grados liberado a 15 grados de freno máximo provisional. El disco queda libre a 40 grados y se eligen 45 para dejar margen. Las observaciones manuales son contacto leve a 35, roce a 33, frenado a 30 y frenado fuerte a 25. El ensayo fijo inicia con un valor sugerido de 30 grados. No se interpreta esta relación como torque medido. La calibración manual sigue permitiendo órdenes de 0 a 90 grados. Hay que validar el rango en funcionamiento antes de ajustar el PID.
+El rango automático es de 45 grados liberado a 25 grados de frenado fuerte. El disco queda libre a 40 grados y se eligen 45 para dejar margen. Las observaciones manuales son contacto leve a 35, roce a 33, frenado a 30 y frenado fuerte a 25. El ensayo fijo inicia con un valor sugerido de 30 grados. No se interpreta esta relación como torque medido. La calibración manual sigue permitiendo órdenes de 0 a 90 grados. Hay que validar el rango en funcionamiento antes de ajustar el PID.
 
 ### Cero estimado sin pulsos
 
 Tras un segundo sin nuevas marcas, el estado SIN_SENAL se representa como cero estimado en la tarjeta y en la gráfica. Se identifica explícitamente como estimación. El último valor crudo deja de prolongarse al caducar. Las mediciones originales, los CSV y el PID mantienen la velocidad inválida, sin sustituirla por cero. La falta de comunicación con la ESP32 o el desbordamiento de la cola no generan por sí solos una estimación de parada.
+
+
+### Figuras en ESP32
+
+El panel puede aplicar Lineal o Exponencial normalizada entre ensayos con el firmware actualizado. Pulsar Aplicar figura y esperar la confirmacion de figura activa. El coseno queda solo para simulacion. La exponencial ahora tiene forma dos y llega a cero en la duracion elegida, en coincidencia con C++. La primera prueba fisica preparada usa seis segundos y precarga 0,70. Ver PRUEBAS_FISICAS.md para el procedimiento.

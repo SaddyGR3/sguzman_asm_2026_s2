@@ -1,5 +1,7 @@
-"""Referencias de la simulacion. No configura curvas en el firmware de la ESP32."""
+"""Referencias del simulador. Lineal y exponencial coinciden con el firmware."""
 import math
+
+FORMA_EXPONENCIAL = 2.0
 
 CURVAS = {'lineal': 0, 'exponencial': 1, 'coseno': 2}
 
@@ -7,7 +9,7 @@ CURVAS = {'lineal': 0, 'exponencial': 1, 'coseno': 2}
 def evaluar_referencia(rpm_inicial, duracion_s, transcurrido_s, curva='lineal'):
     """Devuelve RPM deseadas y conserva los extremos antes y despues del ensayo.
 
-    La exponencial usa factor de forma 3, igual al dibujo elegido. Se normaliza
+    La exponencial usa factor de forma 2, igual al dibujo elegido. Se normaliza
     para llegar a cero en T. Estas formas requieren validar alcanzabilidad fisica.
     """
     if not isinstance(curva, str) or curva not in CURVAS:
@@ -24,7 +26,7 @@ def evaluar_referencia(rpm_inicial, duracion_s, transcurrido_s, curva='lineal'):
     if curva == 'lineal':
         fraccion = 1 - x
     elif curva == 'exponencial':
-        fraccion = (math.exp(-3*x) - math.exp(-3)) / (1-math.exp(-3))
+        fraccion = (math.exp(-FORMA_EXPONENCIAL*x) - math.exp(-FORMA_EXPONENCIAL)) / (1-math.exp(-FORMA_EXPONENCIAL))
     else:
         fraccion = (1 + math.cos(math.pi*x)) / 2
     return rpm_inicial * min(1.0, max(0.0, fraccion))

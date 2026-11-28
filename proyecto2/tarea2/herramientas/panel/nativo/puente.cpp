@@ -20,7 +20,8 @@ struct Salida {
 bool configurar(float kp, float ki, float kd) {
  reloj = 0;
  Freno::fijarAngulo(Configuracion::anguloLiberado);
- return controlador.configurar({kp,ki,kd,0.1f,20000,100000});
+ return controlador.configurar({kp,ki,kd,Configuracion::pidTauDerivadaS,
+     Configuracion::periodoPidUs,Configuracion::intervaloMaximoPidUs});
 }
 void reiniciar() { controlador.reiniciar(); }
 Salida calcular(float referencia, float rpm, uint32_t ahora, bool valida) {
@@ -34,4 +35,13 @@ float inicioAutomatico() { return Configuracion::rpmInicioAutomatico; }
 uint32_t limitePreparacion() { return Configuracion::tiempoMaximoPreparacionMs; }
 uint32_t limiteDescenso() { return Configuracion::tiempoMaximoDescensoMs; }
 int convertir(float accion) { return Freno::anguloParaAccion(accion); }
+}
+
+// Permite conservar la fecha real de una medida entre dos pulsos.
+extern "C" Salida calcularMuestra(float referencia, float rpm, uint32_t ahora,
+                                  uint32_t instanteMuestra, bool valida) {
+ reloj = ahora;
+ controlador.actualizar(referencia,{rpm,instanteMuestra,valida},ahora);
+ const auto &r = controlador.leer();
+ return {r.error,r.p,r.i,r.d,r.solicitada,r.limitada,r.dtUs,r.omitidos,r.disponible};
 }

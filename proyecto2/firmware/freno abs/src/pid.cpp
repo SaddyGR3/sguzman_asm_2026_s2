@@ -16,6 +16,12 @@ void Controlador::reiniciar() {
   omitidos_ = 0;
   invalidar(configurado_ ? Estado::Inactivo : Estado::SinConfigurar);
 }
+bool Controlador::precargarIntegral(float accion) {
+  // Solo antes del primer calculo. No reajustar la memoria durante el ensayo.
+  if (!configurado_ || temporizado_ || !isfinite(accion) || accion < 0 || accion > 1) return false;
+  integral_ = accion;
+  return true;
+}
 const Resultado &Controlador::leer() const { return resultado_; }
 
 bool Controlador::configurar(const Parametros &p) {
@@ -68,7 +74,11 @@ bool Controlador::actualizar(float referencia, const Muestra &m, uint32_t ahora)
   }
 
   const bool liberar = error < 0;
-  if (liberar) integral_ = 0;
+  if (liberar) {
+    // Liberar el freno no borra lo aprendido. El error negativo descarga I.
+    // Se permite descargar aun si P + I + D queda bajo el limite inferior.
+    integral_ = limitar(candidata);
+  }
   else if (!((peticionCandidata > 1 && incremento > 0) ||
              (peticionCandidata < 0 && incremento < 0))) {
     // La integral se expresa en unidades de accion y queda acotada.

@@ -43,21 +43,21 @@ int main(int argc,char **argv){
    assert(Ensayos::leerEstado()==E::Preparacion);
    assert(Serial.salida.find("PID_GANANCIAS_NO_CONFIGURADAS")!=std::string::npos);
  }else if(caso=="conversion"){
-   assert(Freno::anguloParaAccion(0)==45 && Freno::anguloParaAccion(1)==15);
-   assert(Freno::anguloParaAccion(-1)==45 && Freno::anguloParaAccion(2)==15);
-   assert(Freno::anguloParaAccion(.5f)==30);
+   assert(Freno::anguloParaAccion(0)==45 && Freno::anguloParaAccion(1)==25);
+   assert(Freno::anguloParaAccion(-1)==45 && Freno::anguloParaAccion(2)==25);
+   assert(Freno::anguloParaAccion(.5f)==35);
    const auto n=posiciones.size();
    assert(!Freno::aplicarAccion(NAN) && posiciones.size()==n);
-   assert(Freno::aplicarAccion(1) && Freno::leerAngulo()==15);
+   assert(Freno::aplicarAccion(1) && Freno::leerAngulo()==25);
    assert(Freno::leerAccionAplicada()==1);
    const auto m=posiciones.size();
    assert(Freno::aplicarAccion(1) && posiciones.size()==m);
    assert(Freno::aplicarAccion(.5f));
-   assert(std::fabs(Freno::leerAccionAplicada()-15.0f/30)<0.001f);
+   assert(std::fabs(Freno::leerAccionAplicada()-10.0f/20)<0.001f);
  }else if(caso=="normal" || caso=="reloj" || caso=="telemetria"){
    comando("pid");assert(Ensayos::leerEstado()==E::Reposo);
    iniciar();assert(Ensayos::leerEstado()==E::Pid && !Motor::estaEncendido());
-   for(int i=0;i<20;i++){pulso();assert(Freno::leerAngulo()>=15 && Freno::leerAngulo()<=45);}
+   for(int i=0;i<20;i++){pulso();assert(Freno::leerAngulo()>=25 && Freno::leerAngulo()<=45);}
    assert(Freno::leerAngulo()<45 && Freno::leerAccionAplicada()>0);
    comando("g90");comando("r");comando("motor_on");comando("fijo30");
    assert(Ensayos::leerEstado()==E::Pid && !Motor::estaEncendido());

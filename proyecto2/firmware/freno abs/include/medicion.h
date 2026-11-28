@@ -7,7 +7,7 @@ struct Lectura {
   float rpm;  // NaN cuando no es utilizable. Nunca inventa un cero de control.
   float rpmUltimaValida;
   float rpmCruda;
-  uint32_t periodoUs;
+  uint32_t periodoUs;  // Duracion de la vuelta usada para RPM, no del ultimo sector.
   uint32_t antiguedadUs;
   uint32_t instanteUs;
   uint32_t pulsosAceptados;

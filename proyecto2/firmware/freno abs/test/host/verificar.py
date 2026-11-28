@@ -34,6 +34,12 @@ with tempfile.TemporaryDirectory(prefix="freno_ensayos_") as temporal:
         if variante != "deshabilitado":
             texto = re.sub(r"nivelMotorEncendido = (HIGH|LOW)",
                            f"nivelMotorEncendido = {variante}", texto)
+        # Los casos historicos conservan una marca. Las variantes prueban 1, 2 y 6.
+        texto = re.sub(r"marcasPorVuelta = \d+", "marcasPorVuelta = 1", texto)
+        # Los casos de bloqueo y observacion son fixtures independientes del ajuste fisico.
+        texto = re.sub(r"actuacionPIDHabilitada = (true|false)", "actuacionPIDHabilitada = false", texto)
+        for ganancia in ("Kp", "Ki", "Kd"):
+            texto = re.sub(r"pid" + ganancia + r" = [^;]+", "pid" + ganancia + " = 0.0f", texto)
         config.write_text(texto)
         ejecutable = copia / "prueba"
         subprocess.run([
@@ -57,8 +63,32 @@ with tempfile.TemporaryDirectory(prefix="freno_ensayos_") as temporal:
         str(pruebas / "medicion_test.cpp"), "-o", str(ejecutable),
     ], check=True)
     for caso in ["sensor", "inicial", "una_marca_timeout", "una_marca_wrap", "cortos", "salto", "sostenido", "desaceleracion",
-                 "antiguedad", "cola", "silencio_wrap", "fallo", "reinicio", "referencia_cancelacion"]:
+                 "antiguedad", "cola", "silencio_wrap", "fallo", "reinicio", "referencia_cancelacion",
+                 "arranque_marca_larga", "parada_fijo", "perdida_baja_sin_descenso", "recupera_fijo", "pico_antes_parada"]:
         subprocess.run([str(ejecutable), caso], check=True)
+    for marcas in (1, 2, 6):
+        variante_marcas = trabajo / ("marcas_" + str(marcas))
+        shutil.copytree(copia / "include", variante_marcas / "include")
+        config_marcas = variante_marcas / "include/configuracion.h"
+        config_marcas.write_text(re.sub(r"marcasPorVuelta = \d+", "marcasPorVuelta = " + str(marcas),
+                   config_marcas.read_text()))
+        prueba_marcas = variante_marcas / "prueba"
+        subprocess.run([
+            "g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+            "-I", str(pruebas), "-I", str(variante_marcas / "include"),
+            *map(str, sorted((copia / "src").glob("*.cpp"))),
+            str(pruebas / "marcas_config_test.cpp"), "-o", str(prueba_marcas),
+        ], check=True)
+        subprocess.run([str(prueba_marcas)], check=True)
+    prueba_actual = trabajo / "pid_config_actual"
+    subprocess.run([
+        "g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+        "-I", str(pruebas), "-I", str(proyecto / "include"),
+        *map(str, sorted((proyecto / "src").glob("*.cpp"))),
+        str(pruebas / "pid_config_actual_test.cpp"), "-o", str(prueba_actual),
+    ], check=True)
+    for caso in ("inicio_cancelacion", "liberar", "perdida", "sin_precarga", "exponencial"):
+        subprocess.run([str(prueba_actual), caso], check=True)
     prueba_detector = trabajo / "detector"
     subprocess.run([
         "g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
@@ -90,6 +120,13 @@ with tempfile.TemporaryDirectory(prefix="freno_ensayos_") as temporal:
         str(pruebas / "pid_test.cpp"), "-o", str(prueba_pid),
     ], check=True)
     subprocess.run([str(prueba_pid)], check=True)
+    prueba_exponencial = trabajo / "exponencial"
+    subprocess.run([
+        "g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-I", str(copia / "include"),
+        str(copia / "src/referencia.cpp"), str(pruebas / "referencia_exponencial_test.cpp"),
+        "-o", str(prueba_exponencial),
+    ], check=True)
+    subprocess.run([str(prueba_exponencial)], check=True)
     observacion = trabajo / "observacion"
     shutil.copytree(copia / "include", observacion / "include")
     shutil.copytree(copia / "src", observacion / "src")

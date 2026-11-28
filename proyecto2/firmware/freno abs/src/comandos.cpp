@@ -41,6 +41,12 @@ void procesarComando(const char *comando) {
     Ensayos::informarEstado();
     return;
   }
+  if (strncmp(comando, "curva_", 6) == 0) {
+    if (strcmp(comando, "curva_lineal") == 0) Ensayos::configurarReferencia(0);
+    else if (strcmp(comando, "curva_exponencial") == 0) Ensayos::configurarReferencia(1);
+    else Registro::emitirEvento("REFERENCIA_INVALIDA", 0, micros());
+    return;
+  }
   if (strcmp(comando, "sensor_on") == 0 || strcmp(comando, "sensor_off") == 0) {
     if (Ensayos::estaActivo() || Motor::estaEncendido()) {
       Registro::emitirEvento("SENSOR_REQUIERE_REPOSO", 0, micros());

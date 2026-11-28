@@ -17,7 +17,13 @@ volatile bool hayMarca = false;
 volatile uint32_t conteoPulsos = 0, conteoRechazados = 0, perdidos = 0;
 
 uint32_t periodoValidadoUs = 0, ultimaValidaUs = 0, ultimaValidaMs = 0;
+// Ventana deslizante de una vuelta. Fuera de la ISR para no alargarla.
+uint32_t periodosVuelta[marcasPorVuelta] = {};
+uint32_t indiceVuelta = 0, intervalosVuelta = 0, sumaVueltaUs = 0, periodoMedicionUs = 0;
 uint32_t inicioRpmUs = 0;
+void limpiarVentana() {
+  indiceVuelta = intervalosVuelta = sumaVueltaUs = 0;
+}
 bool inicioDisponible = false, hayValidacion = false, sospechosa = false;
 bool desbordamiento = false;
 uint32_t perdidosVistos = 0, saltos = 0, ultimoRechazadoUs = 0;
@@ -58,8 +64,11 @@ void IRAM_ATTR detectarMarca() {
     const bool corto = hayMarca && periodo <= tiempoMinimoPulsoUs;
     const uint32_t ahoraMs = millis();
     const bool silencio = hayMarca &&
-        ahoraMs - ultimaMarcaRecibidaMs > tiempoSinPulsoParaCeroUs / 1000U;
-    const uint8_t tipo = corto ? 1 : ((!hayMarca || silencio) ? 0 : 2);
+        (ahoraMs - ultimaMarcaRecibidaMs > tiempoSinPulsoParaCeroUs / 1000U ||
+         periodo > tiempoSinPulsoParaCeroUs);
+    // Una marca que empezo antes de la pausa no permite medir el nuevo arranque.
+    const bool marcaLarga = ahora - inicioMarca > tiempoSinPulsoParaCeroUs;
+    const uint8_t tipo = corto ? 1 : ((!hayMarca || silencio || marcaLarga) ? 0 : 2);
     if (corto) ++conteoRechazados;
     else {
       ultimaMarcaUs = inicioMarca;
@@ -94,6 +103,17 @@ bool extraer(Pulso &p) {
 
 void aceptar(const Pulso &p) {
   periodoValidadoUs = p.periodoUs;
+  if (intervalosVuelta == marcasPorVuelta) sumaVueltaUs -= periodosVuelta[indiceVuelta];
+  else ++intervalosVuelta;
+  periodosVuelta[indiceVuelta] = p.periodoUs;
+  sumaVueltaUs += p.periodoUs;
+  indiceVuelta = (indiceVuelta + 1) % marcasPorVuelta;
+  hayValidacion = intervalosVuelta == marcasPorVuelta;
+  sospechosa = false;
+  desbordamiento = false;
+  confirmaciones = 0;
+  if (!hayValidacion) return;
+  periodoMedicionUs = sumaVueltaUs;
   ultimaValidaUs = p.instanteUs;
   ultimaValidaMs = millis() - (micros() - p.instanteUs) / 1000U;
   hayValidacion = true;
@@ -167,10 +187,11 @@ void reiniciar() {
   conteoPulsos = conteoRechazados = perdidos = 0;
   detector.reiniciar(digitalRead(pinSensor) == nivelMarcaSensor, micros());
   interrupts();
-  periodoValidadoUs = ultimaValidaUs = ultimaValidaMs = inicioRpmUs = 0;
+  periodoValidadoUs = ultimaValidaUs = ultimaValidaMs = inicioRpmUs = periodoMedicionUs = 0;
   inicioDisponible = hayValidacion = sospechosa = desbordamiento = false;
   perdidosVistos = saltos = ultimoRechazadoUs = periodoCrudoUs = 0;
   periodoPendienteUs = confirmaciones = 0;
+  limpiarVentana();
 }
 
 void actualizar() {
@@ -181,6 +202,7 @@ void actualizar() {
     // No reconstruir una velocidad confiable con una secuencia incompleta.
     perdidosVistos = descartados;
     desbordamiento = true;
+    limpiarVentana();
     hayValidacion = false;
     confirmaciones = 0;
     noInterrupts();
@@ -191,20 +213,23 @@ void actualizar() {
   }
   Pulso p;
   while (extraer(p)) {
-    if (p.periodoUs != 0) periodoCrudoUs = p.periodoUs;
-    if (p.tipo == 1) { ultimoRechazadoUs = p.periodoUs; continue; }
+    if (p.tipo == 1) { periodoCrudoUs = p.periodoUs; ultimoRechazadoUs = p.periodoUs; continue; }
     if (p.tipo == 0) {
       // Primera marca o reanudacion tras silencio. Todavia no hay velocidad.
+      periodoCrudoUs = 0;
+      limpiarVentana();
       hayValidacion = false;
       sospechosa = false;
       confirmaciones = 0;
       continue;
     }
+    periodoCrudoUs = p.periodoUs;
     const uint32_t instanteMs = millis() - (micros() - p.instanteUs) / 1000U;
     if (hayValidacion && instanteMs - ultimaValidaMs > tiempoSinPulsoParaCeroUs / 1000U) {
       // El primer pulso despues de un silencio largo solo vuelve a anclar.
       // No inferir una vuelta completa a partir de un intervalo desconocido.
       hayValidacion = false;
+      limpiarVentana();
       sospechosa = false;
       confirmaciones = 0;
       continue;
@@ -222,7 +247,7 @@ void actualizar() {
           static_cast<uint64_t>(periodoPendienteUs) * toleranciaConfirmacionPorcentaje;
       confirmaciones = consistente ? confirmaciones + 1 : 1;
       periodoPendienteUs = p.periodoUs;
-      if (confirmaciones < confirmacionesSalto) { ++saltos; continue; }
+      if (confirmaciones < confirmacionesSalto) { limpiarVentana(); ++saltos; continue; }
       // Permite recuperar un cambio sostenido. No certifica su origen fisico.
     }
     aceptar(p);
@@ -255,10 +280,10 @@ Lectura leerLectura() {
   else if (sospechosa) estado = Estado::Sospechosa;
   else if (edad > limite) estado = Estado::Antigua;
   else estado = Estado::Reciente;
-  const float ultima = hayValidacion ? 60000000.0f / (static_cast<float>(periodoValidadoUs) * marcasPorVuelta) : NAN;
+  const float ultima = hayValidacion ? 60000000.0f / static_cast<float>(periodoMedicionUs) : NAN;
   const float cruda = periodoCrudoUs ? 60000000.0f / (static_cast<float>(periodoCrudoUs) * marcasPorVuelta) : NAN;
   const bool valida = estado == Estado::Reciente;
-  return {valida ? ultima : NAN, ultima, cruda, periodoValidadoUs, edad, ultimaValidaUs,
+  return {valida ? ultima : NAN, ultima, cruda, hayValidacion ? periodoMedicionUs : 0, edad, ultimaValidaUs,
           aceptados, rechazados, saltos, descartados, ultimoRechazadoUs,
           hayValidacion, valida, estado};
 }

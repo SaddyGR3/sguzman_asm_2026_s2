@@ -25,6 +25,9 @@ bool listoParaActuar() {
       (Configuracion::pidKp > 0 || Configuracion::pidKi > 0 || Configuracion::pidKd > 0);
 }
 void reiniciar() { controlador.reiniciar(); tiempoCalculoUs = 0; }
+bool precargarArranque(float accion) {
+  return listoParaActuar() && Configuracion::pidKi > 0 && controlador.precargarIntegral(accion);
+}
 const PID::Resultado &leer() { return controlador.leer(); }
 uint32_t leerTiempoCalculoUs() { return tiempoCalculoUs; }
 

@@ -13,6 +13,7 @@ Parametros base(float kp=0,float ki=0,float kd=0) {
 }
 int main() {
   Controlador c;
+  assert(!c.precargarIntegral(.55f));
   assert(!c.actualizar(1000,{1200,0,true},0));
   assert(c.leer().estado==Estado::SinConfigurar);
   assert(c.configurar(base(.002f)));
@@ -40,7 +41,29 @@ int main() {
   c.actualizar(1000,{1010,1020000,true},1020000);
   assert(cerca(c.leer().i,.02f) && cerca(c.leer().limitada,.12f));
   c.actualizar(1000,{999,1040000,true},1040000);
+  assert(c.leer().liberacion && c.leer().limitada==0 && cerca(c.leer().i,.018f));
+  // Una desviacion pequena libera sin borrar la integral acumulada.
+  c.actualizar(1000,{1000,1060000,true},1060000);
+  assert(cerca(c.leer().i,.018f));
+  c.actualizar(1000,{1001,1080000,true},1080000);
+  assert(cerca(c.leer().i,.020f) && cerca(c.leer().limitada,.030f));
+  // El error negativo puede descargar hasta cero, incluso con P + I negativo.
+  c.actualizar(1000,{900,1100000,true},1100000);
   assert(c.leer().liberacion && c.leer().limitada==0 && c.leer().i==0);
+  c.actualizar(1000,{900,1120000,true},1120000);
+  assert(c.leer().limitada==0 && c.leer().i==0);
+  // Cancelar o invalidar una medicion sigue borrando la memoria del controlador.
+  c.actualizar(1000,{1010,1140000,true},1140000);
+  assert(c.leer().i>0);
+  c.reiniciar();
+  assert(!c.leer().disponible);
+  c.actualizar(1000,{1000,1160000,true},1160000);
+  assert(c.leer().i==0);
+  c.actualizar(1000,{1010,1180000,true},1180000);
+  assert(c.leer().i>0);
+  assert(!c.actualizar(1000,{NAN,1200000,false},1200000));
+  c.actualizar(1000,{1000,1220000,true},1220000);
+  assert(c.leer().i==0);
 
   assert(c.configurar(base(0,0,.001f)));
   c.actualizar(1000,{1000,0,true},0);
@@ -89,6 +112,18 @@ int main() {
   p=base(std::numeric_limits<float>::max());assert(c.configurar(p));
   assert(!c.actualizar(0,{std::numeric_limits<float>::max(),0,true},0));
   assert(c.leer().estado==Estado::ErrorNumerico);
+
+  // El primer calculo puede arrancar con accion aprendida sin esperar al error.
+  assert(c.configurar(base(.005f,.004f)));
+  assert(!c.precargarIntegral(NAN) && !c.precargarIntegral(-.1f) && !c.precargarIntegral(1.1f));
+  assert(c.precargarIntegral(.55f));
+  assert(c.actualizar(1300,{1300,0,true},0));
+  assert(cerca(c.leer().i,.55f) && cerca(c.leer().limitada,.55f));
+  assert(!c.precargarIntegral(.8f));
+  c.actualizar(1300,{1290,20000,true},20000);
+  assert(c.leer().liberacion && c.leer().limitada==0 && c.leer().i<.55f);
+  c.reiniciar();c.actualizar(1300,{1300,40000,true},40000);
+  assert(c.leer().i==0 && c.leer().limitada==0);
 
   // Simulacion didactica de seguimiento para verificar el sentido de la accion.
   // No es el modelo de la maqueta ni produce ganancias finales.

@@ -13,6 +13,7 @@ namespace Ensayos {
 using namespace Configuracion;
 namespace {
 Estado estado = Estado::Reposo;
+Referencia::Tipo tipoReferencia = Referencia::Tipo::Lineal;
 uint32_t inicioPreparacionMs = 0;
 uint32_t inicioEnsayoMs = 0;
 uint32_t pulsosAlPreparar = 0;
@@ -21,6 +22,9 @@ uint32_t numeroEnsayo = 0;
 bool esperandoRecuperacion = false;
 uint32_t inicioInvalidaMs = 0;
 uint32_t tiempoEnsayoFinalMs = 0;
+float rpmInicialFijo = 0;
+uint32_t ultimaMuestraFijoUs = 0, muestrasFijo = 0;
+bool bajaVelocidadFijo = false, avisoPosibleParada = false;
 bool confirmandoFin = false;
 uint32_t inicioConfirmacionMs = 0;
 bool preparacionAutomatica = false, ensayoArmado = false;
@@ -81,11 +85,25 @@ void informarEstado() {
 
 void iniciar() {
   estado = Estado::Reposo;
+  tipoReferencia = Referencia::Tipo::Lineal;
   duracionMs = duracionEnsayoFijoMs;
   numeroEnsayo = 0;
   preparacionAutomatica = ensayoArmado = false;
   Referencia::reiniciar();
   informarEstado();
+}
+
+void configurarReferencia(int tipo) {
+  if (estaActivo()) {
+    Registro::emitirEvento("REFERENCIA_BLOQUEADA_ENSAYO", tipo, micros());
+    return;
+  }
+  if (tipo != 0 && tipo != 1) {
+    Registro::emitirEvento("REFERENCIA_INVALIDA", tipo, micros());
+    return;
+  }
+  tipoReferencia = static_cast<Referencia::Tipo>(tipo);
+  Registro::emitirEvento("REFERENCIA_TIPO", tipo, micros());
 }
 
 void configurarDuracion(int nuevaDuracionMs) {
@@ -172,19 +190,44 @@ void iniciarEnsayo(Estado modo, int angulo, bool automatico = false) {
   preparacionAutomatica = false;
   ++numeroEnsayo;
   inicioEnsayoMs = millis();
+  rpmInicialFijo = lectura.rpm;
+  ultimaMuestraFijoUs = lectura.instanteUs;
+  muestrasFijo = 0;
+  bajaVelocidadFijo = avisoPosibleParada = false;
   ControlPID::reiniciar();
-  if (!Referencia::iniciarLineal(lectura.rpm, duracionMs, inicioEnsayoMs)) {
+  if (!Referencia::iniciar(tipoReferencia, lectura.rpm, duracionMs, inicioEnsayoMs)) {
     terminar(Estado::Fallo, "FALLO_REFERENCIA");
     return;
   }
   esperandoRecuperacion = false;
   tiempoEnsayoFinalMs = 0;
+  float accionInicial = 0;
+  if (modo == Estado::Pid && duracionMs == pidDuracionPrecargaMs) {
+    const float precarga = tipoReferencia == Referencia::Tipo::Lineal
+        ? pidAccionInicial : pidAccionInicialExponencial;
+    if (ControlPID::precargarArranque(precarga)) accionInicial = precarga;
+  }
+  if (modo == Estado::Pid) {
+    Registro::emitirEvento("PID_PRECARGA_X1000000", static_cast<int>(accionInicial * 1000000.0f + 0.5f), micros());
+    Registro::emitirEvento("PID_KP_X1000000", static_cast<int>(pidKp * 1000000.0f + 0.5f), micros());
+    Registro::emitirEvento("PID_KI_X1000000", static_cast<int>(pidKi * 1000000.0f + 0.5f), micros());
+    Registro::emitirEvento("PID_KD_X1000000", static_cast<int>(pidKd * 1000000.0f + 0.5f), micros());
+    Registro::emitirEvento("PID_ANGULO_MINIMO", anguloMinimoEnsayo, micros());
+    Registro::emitirEvento("PID_ANGULO_LIBERADO", anguloLiberado, micros());
+  }
+  Registro::emitirEvento("REFERENCIA_TIPO", static_cast<int>(tipoReferencia), micros());
+  Registro::emitirEvento("REFERENCIA_FORMA_X1000", tipoReferencia == Referencia::Tipo::Exponencial
+      ? static_cast<int>(Referencia::formaExponencial * 1000) : 0, micros());
+  Registro::emitirEvento("MARCAS_POR_VUELTA", marcasPorVuelta, micros());
+  Registro::emitirEvento("MEDICION_INTERVALOS", marcasPorVuelta, micros());
+  Registro::emitirEvento("MEDICION_VUELTA_COMPLETA", 1, micros());
   Registro::emitirEvento(modo == Estado::Pid ? "ENSAYO_PID_INICIO" : "ENSAYO_FIJO_INICIO", static_cast<int>(numeroEnsayo), micros());
   Registro::emitirEvento("ENSAYO_DURACION_MS", static_cast<int>(duracionMs), micros());
   Registro::emitirEvento("RPM_INICIAL_X100", static_cast<int>(lectura.rpm * 100.0f + 0.5f), micros());
-  Registro::emitirEvento("REFERENCIA_LINEAL_MS", static_cast<int>(duracionMs), micros());
+  Registro::emitirEvento(tipoReferencia == Referencia::Tipo::Lineal
+      ? "REFERENCIA_LINEAL_MS" : "REFERENCIA_EXPONENCIAL_MS", static_cast<int>(duracionMs), micros());
   Freno::fijarAngulo(angulo);
-  if (modo == Estado::Pid) Freno::aplicarAccion(0);
+  if (modo == Estado::Pid) Freno::aplicarAccion(accionInicial);
   confirmandoFin = false;
   cambiarEstado(modo);
 }
@@ -260,8 +303,27 @@ void actualizar() {
   const uint32_t ahora = millis();
   if (estaActivo()) {
     const Medicion::Lectura l = Medicion::leerLectura();
-    const bool gracia = estado == Estado::Preparacion &&
-                        ahora - inicioPreparacionMs < graciaMedicionPreparacionMs;
+    if (estado == Estado::Fijo && l.valida && l.instanteUs != ultimaMuestraFijoUs) {
+      ultimaMuestraFijoUs = l.instanteUs;
+      ++muestrasFijo;
+      bajaVelocidadFijo = muestrasFijo >= muestrasMinimasParadaFijo &&
+          l.rpm <= rpmPosibleParadaFijo && l.rpm <= rpmInicialFijo * proporcionPosibleParadaFijo;
+      if (avisoPosibleParada)
+        Registro::emitirEvento("FIJO_SENAL_RECUPERADA", static_cast<int>(numeroEnsayo), micros());
+      avisoPosibleParada = false;
+    }
+    if (l.estado == Medicion::Estado::Sospechosa || l.estado == Medicion::Estado::Desbordamiento ||
+        l.estado == Medicion::Estado::UnaMarca)
+      bajaVelocidadFijo = false;
+    const bool posibleParada = estado == Estado::Fijo && !Motor::estaEncendido() &&
+        bajaVelocidadFijo && l.estado == Medicion::Estado::SinSenal;
+    if (posibleParada && !avisoPosibleParada) {
+      Registro::emitirEvento("FIJO_POSIBLE_PARADA_SIN_PULSOS", static_cast<int>(numeroEnsayo), micros());
+      avisoPosibleParada = true;
+    }
+    // Conserva la duracion de FIJO y sus NaN. No confirma parada ni autoriza al PID.
+    const bool gracia = posibleParada || (estado == Estado::Preparacion &&
+                        ahora - inicioPreparacionMs < graciaMedicionPreparacionMs);
     if (l.valida || gracia) esperandoRecuperacion = false;
     else if (!esperandoRecuperacion) {
       esperandoRecuperacion = true;
@@ -312,7 +374,8 @@ void actualizar() {
     terminar(Estado::Fallo, "FALLO_TIEMPO_PREPARACION");
   } else if (estado == Estado::Fijo && ahora - inicioEnsayoMs >= duracionMs) {
     // Es un final por tiempo. No certifica que el disco este detenido.
-    terminar(Estado::Finalizado, "ENSAYO_FIN_DURACION");
+    terminar(Estado::Finalizado, avisoPosibleParada ?
+        "ENSAYO_FIN_DURACION_SIN_SENAL" : "ENSAYO_FIN_DURACION");
   } else if (estado == Estado::Pid && ahora - inicioEnsayoMs >= duracionMs) {
     const Medicion::Lectura l = Medicion::leerLectura();
     if (l.valida && l.rpm <= rpmFinPid) {

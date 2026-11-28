@@ -33,13 +33,13 @@ La configuración está en `proyecto2/firmware/freno abs/include/configuracion.h
 | Marcas por vuelta | 1 | Es una suposición que se debe comprobar. |
 | Señal del motor | GPIO25 hacia IN1 | El equipo comunicó IN2 a tierra en el AD70178. |
 | Control del motor | `controlMotorHabilitado = false` | El firmware no configura ni escribe GPIO25. |
-| Actuación PID | `actuacionPIDHabilitada = false` | El comando `pid` no inicia control del servo. |
-| Ganancias PID | Kp, Ki y Kd en cero | No hay ganancias ajustadas para la maqueta. |
+| Actuacion PID | `actuacionPIDHabilitada = true` | Ensayo PI con Kp de 0,005, Ki de 0,004 y Kd en cero. |
+| Ganancias PID | Kp 0,005, Ki 0,004 y Kd 0 | Ajuste exploratorio pendiente de validar en la maqueta. |
 | Rango automático provisional | 15 a 45 grados | Hay que comprobar contacto, liberación y esfuerzo mecánico. |
 | Periodo PID provisional | 20 ms | Hay que comprobar su cumplimiento en la placa. |
 | Registro nominal | Cada 100 ms | Son unas diez publicaciones por segundo, sin garantizar diez mediciones nuevas. |
 
-El firmware de la ESP32 solo genera la referencia lineal. El panel permite elegir lineal, exponencial normalizada y coseno suave en la simulación. Estas dos últimas siguen pendientes de integración y validación en la placa. La selección en la PC no cambia la referencia del firmware físico.
+El firmware permite elegir referencia lineal o exponencial normalizada desde la app entre ensayos. Hay que pulsar Aplicar figura y comprobar la confirmacion de figura activa antes de iniciar. El coseno sigue disponible solo en simulacion. La exponencial fisica esta implementada, pero queda pendiente de validacion en la maqueta.
 
 Los campos de ganancias y velocidad objetivo de la simulación no ajustan el firmware físico. El motor real se enciende o apaga mediante un GPIO y no regula unas RPM objetivo por sí mismo.
 
@@ -149,7 +149,7 @@ Las órdenes tienen el sentido esperado y la liberación es real. Si el rango ú
 5. Enviar `v` y restar el contador inicial al final.
 6. Repetir la comprobación.
 
-Si existe una sola marca detectada por vuelta, se esperan diez pulsos adicionales. Si el resultado no corresponde, revisar marcas, alineación, contraste, vibración y conexión antes de aceptar las RPM. No cambiar `marcasPorVuelta` para ocultar pulsos falsos.
+Con la configuracion actual de dos marcas por vuelta se esperan veinte pulsos adicionales en diez vueltas. Las capturas anteriores con una marca esperaban diez. Si el resultado no corresponde, revisar marcas, alineación, contraste, vibración y conexión antes de aceptar las RPM. No cambiar `marcasPorVuelta` para ocultar pulsos falsos.
 
 A velocidad manual muy baja, la medición puede aparecer antigua o sin señal. Para esta primera comprobación se usan los contadores, no la validez continua de las RPM.
 
@@ -284,7 +284,7 @@ No avanzar a esta etapa únicamente porque la simulación se vea bien.
 - [ ] Referencia y duración compatibles con la capacidad del freno.
 - [ ] Ganancias iniciales justificadas para la planta real.
 
-Las ganancias se eligen mediante el modelo, análisis y ajuste experimental. El firmware actual no las sintoniza automáticamente. Los valores 0,005 o 1 usados en la planta ficticia no son una recomendación para la maqueta.
+Las ganancias se eligen mediante el modelo, análisis y ajuste experimental. El firmware actual no las sintoniza automáticamente. Los valores usados anteriormente solo en la planta ficticia no validan ganancias para la maqueta. El ajuste inicial actual se justifica por separado con la simulacion por pulsos y se documenta al final de esta guia.
 
 ### Preparar la configuración de prueba
 
@@ -413,7 +413,7 @@ El enunciado original está en `proyecto2/documentos/Proyectos_ASM_Proyecto_Grup
 
 ### Calibración provisional vigente
 
-El rango automático es de 45 grados liberado a 15 grados de freno máximo provisional. El disco queda libre a 40 grados y se eligen 45 para dejar margen. Las observaciones manuales son contacto leve a 35, roce a 33, frenado a 30 y frenado fuerte a 25. El ensayo fijo inicia con un valor sugerido de 30 grados. No se interpreta esta relación como torque medido. La calibración manual sigue permitiendo órdenes de 0 a 90 grados. Hay que validar el rango en funcionamiento antes de ajustar el PID.
+El rango automatico actual es de 45 grados liberado a 25 grados de frenado fuerte. El disco queda libre a 40 grados y se eligen 45 para dejar margen. Las observaciones y caracterizaciones se conservan en la bitacora. La zona de contacto puede variar entre ensayos. El ensayo fijo inicia con un valor sugerido de 30 grados. No se interpreta esta relación como torque medido. La calibración manual sigue permitiendo órdenes de 0 a 90 grados. Hay que validar el rango en funcionamiento antes de ajustar el PID.
 
 ## Secuencia automática por velocidad
 
@@ -425,8 +425,114 @@ El firmware prepara con servo a 45 grados y motor encendido. Al recibir una velo
 
 Los comandos anteriores `preparar`, `fijoN` y `pid` siguen disponibles para ensayos manuales. Un ensayo automático no admite iniciar por esos comandos manuales. `motor_on` y `motor_off` conservan el control manual fuera de ensayos.
 
-La preparación tiene un máximo de 60 segundos y el descenso libre uno de 15 segundos. Las mediciones inválidas no activan los umbrales. La pérdida persistente de medición, la cancelación y los tiempos máximos apagan el motor, liberan el freno y eliminan la prueba pendiente. El PID físico sigue deshabilitado hasta configurar ganancias y activarlo explícitamente. `auto_pid` respeta ese bloqueo antes de encender el motor.
+La preparación tiene un máximo de 60 segundos y el descenso libre uno de 15 segundos. Las mediciones inválidas no activan los umbrales. La pérdida persistente de medición, la cancelación y los tiempos máximos apagan el motor, liberan el freno y eliminan la prueba pendiente. El PID fisico queda habilitado desde el 28 de noviembre para el primer ensayo proporcional documentado al final de esta guia. `auto_pid` respeta ese bloqueo antes de encender el motor.
 
 Los eventos AUTO_CORTE_OBJETIVO_RPM y AUTO_INICIO_OBJETIVO_RPM guardan los umbrales. AUTO_FIJO_ARMADO guarda el ángulo. MOTOR_CMD y AUTO_MOTOR_OFF_RPM_X100 identifican el corte y su velocidad. AUTO_INICIO_RPM_X100 y ENSAYO_FIJO_INICIO identifican el inicio del freno. RPM_INICIAL_X100 y REFERENCIA_LINEAL_MS permiten reconstruir la referencia. Los campos X100 están expresados en RPM multiplicadas por cien. Los formatos de los CSV existentes se conservan.
 
 Los umbrales y tiempos están en configuracion.h. La simulación lee esos valores del código compilado y reproduce el ciclo con su planta ficticia. Esto no valida la respuesta física. Para completar el ciclo simulado, su objetivo de aceleración debe ser superior al umbral de apagado.
+
+## Actualizacion del arranque, marcas y final de FIJO
+
+Desde el 28 de noviembre la configuracion usa dos marcas por vuelta. Colocar las marcas aproximadamente opuestas, a media vuelta una de otra. Para un futuro disco de seis marcas igualmente espaciadas, cambiar unicamente marcasPorVuelta a seis en configuracion.h, compilar y cargar. El filtro de periodo se adapta automaticamente al limite provisional de 3000 RPM. Comprobar seis conteos por vuelta, marcas completas de al menos 100 microsegundos en cada nivel y RPM coherentes en todo el rango. No basta con que compile. El limite de un segundo sin pulsos se conserva y no permite medir giros arbitrariamente lentos.
+
+Para comprobar el arranque, detener el disco sobre la zona negra, esperar unos segundos y volver a girar. Debe reanclar sin calcular velocidad usando el tiempo detenido. Repetir con parada sobre zona libre. Confirmar ausencia de la lectura anomala cercana a cero seguida de un salto al arrancar. Al girar despacio pueden existir UNA_MARCA y SIN_SENAL sin RPM validas.
+
+En FIJO, si se observaron al menos tres muestras nuevas, la ultima no supera 400 RPM ni la mitad de la velocidad inicial y despues desaparecen las marcas, aparece FIJO_POSIBLE_PARADA_SIN_PULSOS. El programa conserva el angulo hasta completar la duracion y termina con ENSAYO_FIN_DURACION_SIN_SENAL. Confirmar visualmente si el disco estaba detenido y anotarlo. El evento solo describe evidencia compatible con una parada y tambien podria corresponder a una perdida del sensor. El cero en pantalla sigue siendo estimado y las RPM invalidas siguen siendo NaN en diagnostico.
+
+Comprobar que al finalizar libera a 45 grados. Si reaparece una velocidad valida se registra FIJO_SENAL_RECUPERADA. No se aplica este tratamiento a PID, a datos sospechosos, al desbordamiento de la cola ni a una perdida de señal sin desaceleracion observada. El PID fisico permanece bloqueado hasta diseñar y validar su ajuste.
+
+
+## Comprobacion del disco con dos marcas
+
+Despues de cargar el firmware, crear una captura nueva para distinguirla de las pruebas anteriores de una marca. Con el motor sin alimentacion, verificar veinte conteos nuevos en diez vueltas completas. A velocidad sostenida, observar si aparecen alternancias repetidas de RPM alta y baja. Una separacion desigual entre marcas puede producir esa alternancia porque el calculo supone media vuelta entre detecciones. No cambiar el numero de marcas para compensar ruido.
+
+Repetir primero una prueba conocida de giro libre y despues un frenado fijo con el mismo angulo de una captura anterior. Dos marcas dan mas oportunidades de actualizar la velocidad durante el frenado. No garantizan una lectura justo antes de la parada ni convierten la ausencia de pulsos en una medida exacta de cero. Se conserva el limite de un segundo sin pulsos, los criterios de validez y el criterio provisional de posible parada.
+
+El filtro de periodo pasa automaticamente de veinte a diez milisegundos, manteniendo el limite exclusivo de 3000 RPM. El periodo equivalente a 1500 RPM pasa de cuarenta a veinte milisegundos. Los registros por serial siguen cada cien milisegundos y no aumentan de frecuencia por este cambio.
+
+Las capturas nuevas deben identificarse como dos marcas por vuelta. Al analizarlas con caracterizar_angulos_freno se debe indicar marcasPorVuelta igual a dos en sus opciones. Los scripts que reconstruyen las capturas historicas conservan una marca y no deben aplicarse sin adaptar a los nuevos periodos. Registrar tambien si la colocacion es aproximada o medida.
+
+
+## Primer ensayo fisico proporcional del 28 de noviembre
+
+La diferencia pequena entre posiciones de marcas se conserva como limitacion conocida y no bloquea este ensayo exploratorio. Se habilita el PID con Kp de 0,005, Ki y Kd en cero, periodo nominal de 20 ms, dos marcas por vuelta y rango automatico de 45 a 25 grados. Por ahora actua solo la parte proporcional del controlador PID. No sintoniza sus ganancias automaticamente. Los campos K de la aplicacion siguen siendo solo para simulacion.
+
+La seleccion parte de simular_pid_dos_marcas.py. El estudio local representa marcas cada media vuelta y sectores ligeramente desiguales, conservando la fecha real de la ultima medicion entre actualizaciones del controlador. Con Kp de 0,005 los dieciocho escenarios supuestos cubren la banda comun de referencia de 1050 a 550 RPM. El peor MAE de velocidad verdadera simulada es de 103,30 RPM y el maximo salto de orden es de tres grados entre calculos. Ganancias mayores reducen error pero aumentan saltos de orden. Estos criterios justifican un comienzo conservador y no garantizan estabilidad fisica ni seguimiento exacto de toda la curva.
+
+1. Desconectar la fuente serial desde el panel para liberar el puerto y cargar el nuevo firmware con Upload de PlatformIO. Compilar no carga la ESP32.
+2. Reiniciar la aplicacion para que tome el rango actualizado y conectar de nuevo la ESP32. Iniciar una captura nueva.
+3. Elegir referencia lineal y duracion de seis segundos. Enviar duracion. No modificar varias condiciones a la vez.
+4. Pulsar Iniciar ciclo PID desde reposo. No hace falta pulsar Preparar antes. El ciclo enciende el motor, corta al alcanzar unas 1400 RPM y comienza el control al bajar a unas 1300 RPM.
+5. Verificar los eventos ENSAYO_PID_INICIO y los nuevos eventos de configuracion. PID_KP_X1000000 debe mostrar 5000, los de Ki y Kd deben mostrar cero y MARCAS_POR_VUELTA debe indicar dos. Los limites registrados son 25 y 45.
+6. Observar la orden del servo, la referencia y la velocidad. El error se define como medida menos referencia. Al quedar por debajo se ordena liberar. Se espera un error apreciable porque la ganancia inicial es moderada y no hay integral.
+7. Usar Cancelar y liberar freno si se necesita detener el ensayo. Esa orden apaga el motor y libera el contacto. No cerrar la ventana como metodo de cancelacion.
+8. Al terminar, desconectar la fuente desde la aplicacion y conservar la carpeta de captura. Revisar los datos antes de cambiar Kp o agregar Ki.
+
+El criterio final del PID conserva la confirmacion de baja velocidad con medicion valida y el tiempo extra existentes. Todavia puede aparecer PID_FIN_NO_CONFIRMADO o FALLO_MEDICION si el disco se detiene sin suficientes pulsos para confirmar baja velocidad. Se conserva ese diagnostico y no se convierte en una parada exacta ni se elimina aumentando umbrales. El registro del tramo de control anterior sigue siendo util para evaluar el primer ajuste. No se ha probado este ajuste fisicamente ni se ha cargado automaticamente.
+
+
+## Siguiente ensayo con integral pequena
+
+Se prepara Kp de 0,005, Ki de 0,0005 y Kd de cero a peticion del usuario. Sustituye la configuracion proporcional anterior. Mantener referencia lineal de seis segundos, dos marcas y rango de 25 a 45 grados para comparar. Los eventos deben registrar PID_KP_X1000000 con 5000, PID_KI_X1000000 con 500 y PID_KD_X1000000 con cero.
+
+Este Ki es un candidato exploratorio. No se ha validado con el estudio de pulsos ni mediante un ensayo fisico. La aplicacion no cambia las ganancias de la ESP32. Cargar el firmware actualizado antes de probar. Se conservan los criterios de liberacion, cancelacion y fallo de medicion.
+
+
+## Pendiente de comprobar con seis marcas precisas
+
+Las tres corridas PI con dos marcas muestran seguimiento semejante, pero el tramo final presenta mediciones antiguas, liberaciones temporales y FALLO_MEDICION por ausencia de pulsos. Por decision del usuario se continua el desarrollo con dos marcas y se pospone esta revision hasta disponer de seis marcas uniformemente espaciadas.
+
+Se espera que seis marcas precisas reduzcan el intervalo entre mediciones y el efecto de los sectores desiguales, mejorando la medicion a baja velocidad y reduciendo las interrupciones del control. Es una mejora esperada, pendiente de verificacion fisica. No garantiza confirmar la parada cuando dejan de llegar pulsos ni resolver por si sola todo FALLO_MEDICION.
+
+Al cambiar el disco a seis marcas, configurar marcasPorVuelta en seis y comprobar seis pulsos aceptados por vuelta. Repetir la referencia lineal de seis segundos y revisar antiguedad, liberaciones, error y final registrado antes de dar el pendiente por resuelto. De momento no se cambian el numero de marcas, las ganancias ni los criterios de finalizacion del firmware.
+
+
+## Siguiente comparacion con Ki de 0,001
+
+Se conserva Kp de 0,005 y Kd cero y se prepara Ki de 0,001. Este ajuste sustituye al Ki de 0,0005 del ensayo anterior. Mantener la referencia lineal de seis segundos, dos marcas y las mismas condiciones de arranque. Cargar el nuevo firmware con Upload y usar Iniciar ciclo PID. Verificar PID_KI_X1000000 con valor 1000. Conservar la captura aun si termina en FALLO_MEDICION.
+
+El candidato se comparo con Ki cero y 0,0005 en dieciocho escenarios locales por ajuste. Reduce el error simulado sin aumentar el salto maximo de orden de tres grados. El modelo solo cubre de 1100 a 500 RPM, con integral inicial cero y parametros de contacto y geometria supuestos. No predice la parada ni garantiza el comportamiento fisico completo. La revision del cierre con seis marcas precisas sigue pendiente y no se cambian sus criterios.
+
+
+## Prueba directa con Ki de 0,004
+
+Por peticion del usuario se prepara Ki de 0,004, manteniendo Kp de 0,005 y Kd cero. Sustituye el ajuste anterior de 0,001. Conservar referencia lineal de seis segundos, dos marcas y rango de 25 a 45 grados. Tras Upload, el evento PID_KI_X1000000 debe mostrar 4000. Este candidato no se ha validado en la simulacion comparativa ni fisicamente. Observar si la velocidad cae por debajo de la referencia y conservar la captura para comparar. No cambian los criterios de liberacion ni de fallo.
+
+
+## Comparacion de la descarga gradual de integral
+
+Se mantienen Kp 0,005, Ki 0,004, Kd cero, dos marcas y referencia lineal de seis segundos. Solo cambia la gestion de integral al estar por debajo de la referencia. Antes se borraba de golpe. Ahora el error negativo resta gradualmente Ki por error por intervalo, con integral acotada entre cero y uno. Durante ese tiempo la accion al freno sigue siendo cero. Cancelar, reiniciar o invalidar la medicion siguen borrando la integral.
+
+Cargar el firmware actualizado y repetir dos ciclos PID en las mismas condiciones. Revisar las liberaciones a 45 grados, la evolucion de pid_i y la vuelta al frenado, ademas del error de velocidad. No esperar que desaparezcan todos los saltos, pues se conserva la liberacion inmediata y la medicion con dos marcas. El estudio local previo tiene resultados mixtos y no establece mejora fisica. Conservar tambien las capturas que terminen en fallo.
+
+
+## Prueba de medicion por vuelta completa
+
+Se suman los dos intervalos entre marcas para calcular RPM validada. Con las dos marcas actuales hacen falta tres detecciones iniciales. Se mantiene una actualizacion por marca y la accion PID usa esta nueva medida. RPM cruda conserva el valor por sector, que puede oscilar por la separacion desigual. Desmarcar Cruda en la grafica para evaluar primero la medida validada, y volver a mostrarla para comparar.
+
+Cargar el firmware mediante Upload y conservar Kp 0,005, Ki 0,004, Kd cero y recta de seis segundos. Observar primero la aceleracion sin PID para comprobar si baja la alternancia que antes aparecia con el servo a 45 grados. Despues ejecutar dos ciclos PID en condiciones iguales y conservar capturas. Los eventos deben indicar MARCAS_POR_VUELTA 2, MEDICION_INTERVALOS 2 y MEDICION_VUELTA_COMPLETA 1.
+
+La medida representa el promedio sobre una vuelta y tiene mas demora durante cambios rapidos que la medida por sector. No agrega pulsos ni garantiza confirmar la parada. Se mantienen los criterios de dato antiguo, falta de señal y cancelacion. La utilidad fisica y el efecto sobre el seguimiento se comprueban con estas pruebas.
+
+
+## Prueba de accion inicial al entrar en PID
+
+Se mantiene recta de seis segundos, Kp 0,005, Ki 0,004 y Kd cero. Se agrega una precarga inicial de 0,55 de accion, aproximadamente 34 grados. Solo se aplica a PID con esa duracion. Para otras duraciones no se ha ajustado una accion inicial. La precarga es un candidato experimental cerca de 1300 RPM.
+
+Cargar firmware y ejecutar dos ciclos PID desde reposo. El motor corta a 1400 y el freno permanece liberado hasta iniciar el ensayo al bajar a 1300. Comprobar PID_PRECARGA_X1000000 con 550000. Observar especialmente el primer segundo y comparar la separacion inicial respecto a la referencia. La orden empieza cerca de 34 y el PID la ajusta enseguida. Tambien revisar si hay exceso de frenado o liberaciones frecuentes. Conservar las capturas completas. La accion inicial no implica que el servo alcance instantaneamente el angulo pedido.
+
+
+## Primera prueba fisica con referencia exponencial
+
+La exponencial normalizada usa n_ref(t) = n0 por [exp(-2t/T) menos exp(-2)] dividido entre [1 menos exp(-2)], durante cero a T. Comienza en n0 y llega a cero exactamente en T. Despues conserva cero. Se eligio forma dos para que la cola no pida una desaceleracion menor al rozamiento estimado durante esta prueba de seis segundos cerca de 1300 RPM. El modelo solo se valido en parte del rango, por lo que no es garantia de alcanzabilidad fisica completa.
+
+La forma dos sustituye a la forma tres que usaba antes la exponencial del simulador. Ahora firmware y simulacion coinciden. El coseno no se habilita para la ESP32.
+
+1. Desconectar la captura y hacer Upload del firmware. Reiniciar la app para cargar el selector actualizado.
+2. Conectar ESP32, elegir Exponencial normalizada y pulsar Aplicar figura. Esperar que el estado indique figura activa Exponencial normalizada.
+3. Establecer duracion de seis segundos. Conservar Kp 0,005, Ki 0,004 y Kd cero.
+4. Pulsar Iniciar ciclo PID. Se mantiene el corte de motor a 1400 y el comienzo del ensayo al bajar a 1300 RPM.
+5. Verificar REFERENCIA_TIPO con 1, REFERENCIA_FORMA_X1000 con 2000, REFERENCIA_EXPONENCIAL_MS con 6000 y PID_PRECARGA_X1000000 con 700000. La accion inicial es aproximadamente 31 grados, candidata para esta curva y duracion. No se reutilizan los 34 grados de la recta.
+6. Conservar dos capturas, incluso si terminan en fallo de medicion. Observar especialmente el inicio, los cruces bajo referencia y el tramo final. El cierre mantiene su pendiente previo y no se modifica en esta prueba.
+
+La referencia inicial pide unas 501 RPM por segundo y al final unas 68. Con el modelo libre actual, el aporte adicional orientativo del freno va de 425 a 29 RPM por segundo. La precarga 0,70 aproxima el inicio usando datos de angulo, sin compensacion continua del modelo. Otras duraciones no usan esta precarga experimental. Para volver a la recta, aplicar Lineal antes de armar el siguiente ensayo. No comparar directamente el MAE de bandas con diferente trayectoria como si fueran la misma condicion.

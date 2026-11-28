@@ -80,6 +80,55 @@ int main(int argc, char **argv) {
     assert(Medicion::leerLectura().estado==M::SinSenal);
     avanzar(static_cast<uint64_t>(UINT32_MAX)+1000);
     assert(Medicion::leerLectura().estado==M::SinSenal);
+  } else if(caso=="arranque_marca_larga") {
+    normal();
+    relojUs += 50000; nivelSensorPrueba()=LOW; interrupcion(); loop();
+    // El disco queda detenido sobre negro y sale de la marca cien segundos despues.
+    relojUs += 100000000; nivelSensorPrueba()=HIGH; interrupcion(); loop();
+    assert(!Medicion::leerLectura().valida);
+    pulso(200000);
+    auto l=Medicion::leerLectura();
+    assert(l.estado==M::UnaMarca && !l.valida && std::isnan(l.rpmCruda));
+    pulso(200000);
+    l=Medicion::leerLectura();
+    assert(l.valida && l.rpm==300 && l.rpmCruda==300);
+  } else if(caso=="parada_fijo" || caso=="perdida_baja_sin_descenso" || caso=="recupera_fijo" || caso=="pico_antes_parada") {
+    comando("tiempo6000");comando("preparar");normal();comando("fijo30");
+    if(caso=="perdida_baja_sin_descenso") {
+      // Una sola lectura baja no basta para inferir desaceleracion observada.
+      pulso(200000);
+      avanzar(601000);avanzar(1500000);
+      assert(Ensayos::leerEstado()==Ensayos::Estado::Fallo);
+    } else {
+      pulso(80000);pulso(120000);pulso(200000);pulso(250000);
+      if(caso=="pico_antes_parada") {
+        pulso(50000);
+        assert(Medicion::leerLectura().estado==M::Sospechosa);
+        avanzar(1001000);avanzar(600000);
+        assert(Ensayos::leerEstado()==Ensayos::Estado::Fallo);
+        assert(Serial.salida.find("FIJO_POSIBLE_PARADA_SIN_PULSOS")==std::string::npos);
+        return 0;
+      }
+      avanzar(1001000);
+      assert(Ensayos::leerEstado()==Ensayos::Estado::Fijo);
+      assert(Serial.salida.find("FIJO_POSIBLE_PARADA_SIN_PULSOS")!=std::string::npos);
+      assert(!Medicion::leerLectura().valida);
+      if(caso=="recupera_fijo" || caso=="pico_antes_parada") {
+        pulso(50000);pulso(50000);
+        assert(Medicion::leerLectura().valida);
+        assert(Serial.salida.find("FIJO_SENAL_RECUPERADA")!=std::string::npos);
+        avanzar(251000);avanzar(1500000);
+        assert(Ensayos::leerEstado()==Ensayos::Estado::Fallo);
+      } else {
+        avanzar(1500000);
+        assert(Ensayos::leerEstado()==Ensayos::Estado::Fijo);
+        avanzar(3000000);
+        assert(Ensayos::leerEstado()==Ensayos::Estado::Finalizado);
+        assert(!Motor::estaEncendido() && Freno::leerAngulo()==45);
+        assert(Serial.salida.find("ENSAYO_FIN_DURACION_SIN_SENAL")!=std::string::npos);
+        assert(Serial.salida.find("FALLO_MEDICION")==std::string::npos);
+      }
+    }
   } else if(caso=="cortos") {
     normal(); pulso(3000);
     auto l=Medicion::leerLectura();
